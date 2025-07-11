@@ -10,6 +10,10 @@ use Illuminate\Notifications\Notifiable;
 use App\Traits\HasRoles;
 use App\Traits\HasPermissions;
 
+/**
+ * @method bool hasRole(string|array $roleName)
+ * @method bool hasPermission(string $permissionName)
+ */
 class User extends Authenticatable
 {
     use HasFactory, Notifiable, HasRoles, HasPermissions;
@@ -70,4 +74,4 @@ class User extends Authenticatable
     {
         return $this->hasMany(UserActivityLog::class);
     }
-}   
+}
