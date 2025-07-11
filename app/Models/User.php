@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use App\Traits\HasRoles;
@@ -37,23 +39,35 @@ class User extends Authenticatable
         'is_active' => 'boolean',
     ];
 
-    public function createdBy()
+    /**
+     * User yang membuat user ini.
+     */
+    public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function transactions()
+    /**
+     * Transaksi yang dibuat oleh user ini.
+     */
+    public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class, 'created_by');
     }
 
-    public function sessions()
+    /**
+     * Sesi login user.
+     */
+    public function sessions(): HasMany
     {
         return $this->hasMany(UserSession::class);
     }
 
-    public function activityLogs()
+    /**
+     * Log aktivitas user.
+     */
+    public function activityLogs(): HasMany
     {
         return $this->hasMany(UserActivityLog::class);
     }
-}
+}   
