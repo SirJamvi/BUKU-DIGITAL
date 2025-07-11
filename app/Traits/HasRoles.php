@@ -3,7 +3,6 @@
 namespace App\Traits;
 
 use App\Models\Role;
-use App\Models\Permission;
 
 trait HasRoles
 {
@@ -12,21 +11,58 @@ trait HasRoles
         return $this->belongsToMany(Role::class, 'user_roles');
     }
 
-    public function hasRole($roleName)
+    /**
+     * Cek apakah user memiliki role tertentu
+     *
+     * @param string|array $roleName
+     * @return bool
+     */
+    public function hasRole($roleName): bool
     {
         if (is_string($roleName)) {
-            return $this->roles->contains('name', $roleName) || $this->role === $roleName;
+            // Cek dari field 'role' langsung
+            if ($this->role === $roleName) {
+                return true;
+            }
+            
+            // Cek dari relasi roles
+            return $this->roles()->where('name', $roleName)->exists();
         }
 
-        foreach ($roleName as $r) {
-            if ($this->hasRole($r)) {
-                return true;
+        // Jika array, cek salah satu
+        if (is_array($roleName)) {
+            foreach ($roleName as $r) {
+                if ($this->hasRole($r)) {
+                    return true;
+                }
             }
         }
 
         return false;
     }
 
+    /**
+     * Cek apakah user memiliki semua role yang diberikan
+     *
+     * @param array $roles
+     * @return bool
+     */
+    public function hasAllRoles(array $roles): bool
+    {
+        foreach ($roles as $role) {
+            if (!$this->hasRole($role)) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    /**
+     * Mendapatkan semua permission dari role yang dimiliki
+     *
+     * @return \Illuminate\Support\Collection
+     */
     protected function getPermissions()
     {
         // Mendapatkan izin dari peran
