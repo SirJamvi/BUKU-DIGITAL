@@ -3,29 +3,29 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use App\Models\Role;
 use Illuminate\Support\Facades\DB;
 
 class RoleSeeder extends Seeder
 {
+    /**
+     * Menjalankan seeder untuk peran (roles).
+     */
     public function run(): void
     {
-        $roles = [
-            [
-                'name' => 'admin',
-                'display_name' => 'Administrator',
-                'description' => 'Full access to all features and settings',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'kasir',
-                'display_name' => 'Kasir',
-                'description' => 'Limited access to POS and basic operations',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
-        ];
+        // Kosongkan tabel terlebih dahulu untuk menghindari duplikasi
+        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        Role::truncate();
+        DB::statement('SET FOREIGN_KEY_CHECKS=1;');
 
-        DB::table('roles')->insert($roles);
+        $roles = config('roles'); // Mengambil data dari config/roles.php
+
+        foreach ($roles as $roleName => $roleData) {
+            Role::create([
+                'name' => $roleName,
+                'display_name' => $roleData['display_name'],
+                'description' => $roleData['description'],
+            ]);
+        }
     }
 }
