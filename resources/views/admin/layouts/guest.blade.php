@@ -1,44 +1,51 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-
-    <title>@yield('title') - {{ config('app.name', 'Laravel') }}</title>
-    
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        .auth-wrapper {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        .auth-card {
-            max-width: 450px;
-            width: 100%;
-        }
-    </style>
-</head>
-<body>
-    <div class="auth-wrapper">
-        <div class="auth-card">
-            <div class="text-center mb-4">
-                <a href="{{ route('welcome') }}" class="text-decoration-none text-dark">
-                    <i class="fas fa-cogs fa-3x text-primary"></i>
-                    <h2 class="mt-2">{{ config('app.name', 'Business Dashboard') }}</h2>
-                </a>
-            </div>
-            @yield('content')
-        </div>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+{{-- ... kode sebelumnya tetap ... --}}
+<style>
+    body {
+        background-color: #1a2332; /* Deep Navy */
+    }
+    .auth-card {
+        max-width: 450px;
+        width: 100%;
+        background-color: #243247; /* Darker Navy */
+        border-radius: 10px;
+        padding: 2rem;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+    h2, h5, label, .text-muted, .form-check-label {
+        color: #fafafa !important; /* Warm White */
+    }
+    .btn-primary {
+        background-color: #d4af37; /* Luxury Gold */
+        border-color: #d4af37;
+        color: #1a2332 !important; /* Deep Navy Text */
+    }
+    .btn-primary:hover {
+        background-color: #c5a230; /* Slightly Darker Gold */
+        border-color: #c5a230;
+    }
+    a {
+        color: #d4af37 !important; /* Luxury Gold Links */
+    }
+    a:hover {
+        color: #c5a230 !important; /* Slightly Darker Gold */
+        text-decoration: underline;
+    }
+    .form-control {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+        color: #fafafa !important;
+    }
+    .form-control:focus {
+        border-color: #d4af37;
+        box-shadow: 0 0 0 0.25rem rgba(212, 175, 55, 0.25);
+    }
+    .alert {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+        color: #fafafa;
+    }
+    .text-center i {
+        color: #d4af37; /* Gold Icon */
+    }
+</style>
+{{-- ... kode setelahnya tetap ... --}}

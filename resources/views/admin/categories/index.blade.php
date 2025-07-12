@@ -1,88 +1,92 @@
+{{-- resources/views/admin/categories/index.blade.php --}}
 @extends('admin.layouts.app')
 
-@section('title', 'Manajemen Kategori Produk')
+@section('title', 'Manajemen Kategori')
 @section('breadcrumb')
     <li class="breadcrumb-item active">Kategori Produk</li>
 @endsection
 
 @section('content')
-    <div class="card">
-        <div class="card-header">
-            <div class="d-flex justify-content-between align-items-center">
-                <h5 class="card-title">Daftar Kategori Produk</h5>
-                @permission('categories.create')
-                    <a href="{{ route('admin.categories.create') }}" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Tambah Kategori
-                    </a>
-                @endpermission
-            </div>
-        </div>
-        <div class="card-body">
-            {{-- Pesan Sukses atau Error --}}
-            @include('admin.components.alert')
+    <x-card>
+        @slot('title')
+            Daftar Kategori Produk
+        @endslot
 
-            {{-- Fitur Pencarian --}}
-            <form action="{{ route('admin.categories.index') }}" method="GET" class="mb-3">
-                <div class="input-group">
-                    <input type="text" name="search" class="form-control" placeholder="Cari kategori..." value="{{ request('search') }}">
-                    <button class="btn btn-outline-secondary" type="submit">Cari</button>
-                </div>
-            </form>
+        @slot('headerActions')
+            @permission('categories.create')
+                <x-button href="{{ route('admin.categories.create') }}" variant="primary" style="background-color: var(--admin-accent); border-color: var(--admin-accent);">
+                    <i class="fas fa-plus me-2"></i> Tambah Kategori
+                </x-button>
+            @endpermission
+        @endslot
 
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover">
-                    <thead class="thead-light">
+        {{-- INI PERBAIKANNYA: Menggunakan path komponen yang benar --}}
+        @include('components.alert')
+
+        <div class="table-responsive">
+            <x-table>
+                @slot('thead')
+                    <tr>
+                        <th>#</th>
+                        <th>Nama Kategori</th>
+                        <th>Kategori Induk</th>
+                        <th>Jumlah Produk</th>
+                        <th>Status</th>
+                        <th class="text-center">Aksi</th>
+                    </tr>
+                @endslot
+                
+                <tbody>
+                    @forelse ($categories as $category)
                         <tr>
-                            <th>#</th>
-                            <th>Nama Kategori</th>
-                            <th>Kategori Induk</th>
-                            <th>Jumlah Produk</th>
-                            <th>Status</th>
-                            <th class="text-center">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($categories as $category)
-                            <tr>
-                                <td>{{ $loop->iteration + $categories->firstItem() - 1 }}</td>
-                                <td>{{ $category->name }}</td>
-                                <td>{{ $category->parent->name ?? 'Tidak ada' }}</td>
-                                <td>{{ $category->products_count }}</td>
-                                <td>
-                                    <span class="badge {{ $category->is_active ? 'bg-success' : 'bg-danger' }}">
-                                        {{ $category->is_active ? 'Aktif' : 'Non-Aktif' }}
-                                    </span>
-                                </td>
-                                <td class="text-center">
-                                    @permission('categories.update')
-                                        <a href="{{ route('admin.categories.edit', $category) }}" class="btn btn-sm btn-warning">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </a>
-                                    @endpermission
-                                    @permission('categories.delete')
-                                        <form action="{{ route('admin.categories.destroy', $category) }}" method="POST" class="d-inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus kategori ini?');">
+                            <td>{{ $loop->iteration + $categories->firstItem() - 1 }}</td>
+                            <td>{{ $category->name }}</td>
+                            <td>{{ $category->parent->name ?? '—' }}</td>
+                            <td>{{ $category->products_count ?? 0 }}</td>
+                            <td>
+                                <span class="badge {{ $category->is_active ? 'bg-success' : 'bg-secondary' }}">
+                                    {{ $category->is_active ? 'Aktif' : 'Non-Aktif' }}
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                @permission('categories.update')
+                                    <x-button href="{{ route('admin.categories.edit', $category) }}" variant="warning" class="btn-sm">
+                                        <i class="fas fa-edit"></i>
+                                    </x-button>
+                                @endpermission
+                                @permission('categories.delete')
+                                    <x-button type="button" variant="danger" class="btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ $category->id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </x-button>
+                                @endpermission
+
+                                {{-- Modal Konfirmasi Hapus --}}
+                                <x-modal id="deleteModal-{{ $category->id }}" title="Konfirmasi Hapus">
+                                    <p>Apakah Anda yakin ingin menghapus kategori <strong>{{ $category->name }}</strong>?</p>
+                                    @slot('footer')
+                                        <form action="{{ route('admin.categories.destroy', $category) }}" method="POST">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="btn btn-sm btn-danger">
-                                                <i class="fas fa-trash"></i> Hapus
-                                            </button>
+                                            <x-button type="button" variant="secondary" data-bs-dismiss="modal">Batal</x-button>
+                                            <x-button type="submit" variant="danger">Ya, Hapus</x-button>
                                         </form>
-                                    @endpermission
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="6" class="text-center">Tidak ada data kategori.</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-
-            {{-- Paginasi --}}
-            <div class="d-flex justify-content-center">
-                {{ $categories->links() }}
-            </div>
+                                    @endslot
+                                </x-modal>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="text-center">Tidak ada data kategori.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </x-table>
         </div>
-    </div>
+
+        @if ($categories->hasPages())
+            <div class="mt-3 d-flex justify-content-center">
+                {{ $categories->links('components.pagination') }}
+            </div>
+        @endif
+    </x-card>
 @endsection
