@@ -2,77 +2,150 @@
 
 namespace Database\Seeders;
 
+use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\Permission;
-use App\Models\Role;
-use Illuminate\Support\Facades\DB;
 
 class PermissionSeeder extends Seeder
 {
     /**
-     * Menjalankan seeder untuk izin (permissions) dan menautkannya ke peran.
+     * Run the database seeds.
      */
     public function run(): void
     {
-        // Kosongkan tabel permission dan tabel pivot
-        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-        Permission::truncate();
-        DB::table('role_permission')->truncate(); // Tabel pivot
-        DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+        $permissions = [
+            // User Management
+            [
+                'name' => 'create_user',
+                'display_name' => 'Buat User',
+                'description' => 'Dapat membuat user baru',
+                'module' => 'user_management',
+                'action' => 'create'
+            ],
+            [
+                'name' => 'read_user',
+                'display_name' => 'Lihat User',
+                'description' => 'Dapat melihat daftar user',
+                'module' => 'user_management'
+            ],
+            [
+                'name' => 'update_user',
+                'display_name' => 'Edit User',
+                'description' => 'Dapat mengedit user',
+                'module' => 'user_management'
+            ],
+            [
+                'name' => 'delete_user',
+                'display_name' => 'Hapus User',
+                'description' => 'Dapat menghapus user',
+                'module' => 'user_management'
+            ],
 
-        $this->command->info('Membuat semua izin...');
-        $permissions = $this->generatePermissions();
-        Permission::insert($permissions);
-        
-        $this->command->info('Menautkan izin ke peran...');
-        $this->assignPermissionsToRoles();
-    }
+            // Product Management
+            [
+                'name' => 'create_product',
+                'display_name' => 'Buat Produk',
+                'description' => 'Dapat membuat produk baru',
+                'module' => 'product_management'
+            ],
+            [
+                'name' => 'read_product',
+                'display_name' => 'Lihat Produk',
+                'description' => 'Dapat melihat daftar produk',
+                'module' => 'product_management'
+            ],
+            [
+                'name' => 'update_product',
+                'display_name' => 'Edit Produk',
+                'description' => 'Dapat mengedit produk',
+                'module' => 'product_management'
+            ],
+            [
+                'name' => 'delete_product',
+                'display_name' => 'Hapus Produk',
+                'description' => 'Dapat menghapus produk',
+                'module' => 'product_management'
+            ],
 
-    /**
-     * Menghasilkan array semua kemungkinan izin dari config.
-     */
-    private function generatePermissions(): array
-    {
-        $permissions = [];
-        $modules = config('permissions.modules', []);
-        $actions = config('permissions.actions', []);
-        $timestamp = now();
+            // Transaction Management
+            [
+                'name' => 'create_transaction',
+                'display_name' => 'Buat Transaksi',
+                'description' => 'Dapat membuat transaksi baru',
+                'module' => 'transaction_management'
+            ],
+            [
+                'name' => 'read_transaction',
+                'display_name' => 'Lihat Transaksi',
+                'description' => 'Dapat melihat daftar transaksi',
+                'module' => 'transaction_management'
+            ],
+            [
+                'name' => 'update_transaction',
+                'display_name' => 'Edit Transaksi',
+                'description' => 'Dapat mengedit transaksi',
+                'module' => 'transaction_management'
+            ],
+            [
+                'name' => 'delete_transaction',
+                'display_name' => 'Hapus Transaksi',
+                'description' => 'Dapat menghapus transaksi',
+                'module' => 'transaction_management'
+            ],
 
-        foreach ($modules as $module) {
-            foreach ($actions as $action) {
-                $permissions[] = [
-                    'name' => "{$module}.{$action}",
-                    'display_name' => ucfirst($action) . ' ' . ucfirst($module),
-                    'module' => $module,
-                    'action' => $action,
-                    'created_at' => $timestamp,
-                    'updated_at' => $timestamp,
-                ];
-            }
-        }
-        return $permissions;
-    }
+            // Inventory Management
+            [
+                'name' => 'manage_inventory',
+                'display_name' => 'Kelola Inventori',
+                'description' => 'Dapat mengelola inventori',
+                'module' => 'inventory_management'
+            ],
+            [
+                'name' => 'view_inventory',
+                'display_name' => 'Lihat Inventori',
+                'description' => 'Dapat melihat inventori',
+                'module' => 'inventory_management'
+            ],
 
-    /**
-     * Menautkan izin ke peran berdasarkan config/roles.php.
-     */
-    private function assignPermissionsToRoles(): void
-    {
-        $rolesConfig = config('roles');
-        $roles = Role::pluck('id', 'name');
-        $permissions = Permission::pluck('id', 'name');
+            // Report Management
+            [
+                'name' => 'view_reports',
+                'display_name' => 'Lihat Laporan',
+                'description' => 'Dapat melihat laporan',
+                'module' => 'report_management'
+            ],
+            [
+                'name' => 'export_reports',
+                'display_name' => 'Ekspor Laporan',
+                'description' => 'Dapat mengekspor laporan',
+                'module' => 'report_management'
+            ],
 
-        foreach ($rolesConfig as $roleName => $roleData) {
-            if (isset($roles[$roleName])) {
-                $role = Role::find($roles[$roleName]);
-                $permissionNames = $roleData['permissions'] ?? [];
-                
-                $permissionIds = collect($permissionNames)
-                    ->map(fn ($name) => $permissions->get($name))
-                    ->filter(); // Hapus nilai null jika ada izin yang tidak ditemukan
+            // Financial Management
+            [
+                'name' => 'manage_cash_flow',
+                'display_name' => 'Kelola Kas',
+                'description' => 'Dapat mengelola cash flow',
+                'module' => 'financial_management'
+            ],
+            [
+                'name' => 'view_profits',
+                'display_name' => 'Lihat Keuntungan',
+                'description' => 'Dapat melihat keuntungan',
+                'module' => 'financial_management'
+            ],
 
-                $role->permissions()->sync($permissionIds);
-            }
+            // Settings
+            [
+                'name' => 'manage_settings',
+                'display_name' => 'Kelola Pengaturan',
+                'description' => 'Dapat mengelola pengaturan sistem',
+                'module' => 'settings'
+            ],
+        ];
+
+        foreach ($permissions as $permission) {
+            Permission::create($permission);
         }
     }
 }
