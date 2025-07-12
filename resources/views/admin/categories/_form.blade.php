@@ -1,31 +1,44 @@
-{{-- Menampilkan error validasi --}}
-@include('admin.components.validation-error')
+{{-- resources/views/admin/categories/_form.blade.php --}}
 
-<div class="mb-3">
-    <label for="name" class="form-label">Nama Kategori</label>
-    <input type="text" class="form-control" id="name" name="name" value="{{ old('name', $category->name ?? '') }}" required>
-</div>
+{{-- Menampilkan semua error validasi di bagian atas form --}}
+@if ($errors->any())
+    <div class="alert alert-danger mb-4">
+        <h5 class="alert-heading">Terjadi Kesalahan Validasi</h5>
+        <ul class="mb-0">
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
+@endif
 
-<div class="mb-3">
-    <label for="parent_id" class="form-label">Kategori Induk (Opsional)</label>
-    <select class="form-select" id="parent_id" name="parent_id">
-        <option value="">-- Tidak Ada --</option>
-        @foreach ($parentCategories as $parent)
-            <option value="{{ $parent->id }}" {{ old('parent_id', $category->parent_id ?? '') == $parent->id ? 'selected' : '' }}>
-                {{ $parent->name }}
-            </option>
-        @endforeach
-    </select>
-</div>
+<x-input 
+    name="name" 
+    label="Nama Kategori" 
+    :value="old('name', $category->name ?? '')"
+    placeholder="Contoh: Makanan Utama"
+    required 
+/>
 
-<div class="mb-3">
-    <label for="description" class="form-label">Deskripsi (Opsional)</label>
-    <textarea class="form-control" id="description" name="description" rows="3">{{ old('description', $category->description ?? '') }}</textarea>
-</div>
+<x-select 
+    name="parent_id" 
+    label="Kategori Induk (Opsional)"
+    :options="$parentCategories->pluck('name', 'id')"
+    :selected="old('parent_id', $category->parent_id ?? '')"
+    placeholder="-- Tidak Ada --"
+/>
 
-<div class="form-check mb-3">
+<x-input 
+    type="textarea"
+    name="description"
+    label="Deskripsi (Opsional)"
+    :value="old('description', $category->description ?? '')"
+    placeholder="Penjelasan singkat mengenai kategori ini"
+/>
+
+<div class="form-check form-switch mb-3">
     <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1" {{ old('is_active', $category->is_active ?? true) ? 'checked' : '' }}>
     <label class="form-check-label" for="is_active">
         Aktifkan kategori ini
     </label>
-</div>
+</div>  

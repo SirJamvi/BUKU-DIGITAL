@@ -1,27 +1,25 @@
+{{-- resources/views/admin/categories/create.blade.php --}}
 @extends('admin.layouts.app')
 
-@section('title', 'Tambah Kategori Produk Baru')
+@section('title', 'Tambah Kategori Baru')
 @section('breadcrumb')
     <li class="breadcrumb-item"><a href="{{ route('admin.categories.index') }}">Kategori Produk</a></li>
     <li class="breadcrumb-item active">Tambah Baru</li>
 @endsection
 
 @section('content')
-    <div class="card">
-        <div class="card-header">
-            <h5 class="card-title">Form Tambah Kategori</h5>
-        </div>
-        <div class="card-body">
-            <form action="{{ route('admin.categories.store') }}" method="POST">
-                @csrf
-                {{-- Memanggil form parsial --}}
-                @include('admin.categories._form')
-                
-                <div class="text-end">
-                    <a href="{{ route('admin.categories.index') }}" class="btn btn-secondary">Batal</a>
-                    <button type="submit" class="btn btn-primary">Simpan</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <x-card title="Formulir Tambah Kategori">
+        <form action="{{ route('admin.categories.store') }}" method="POST">
+            @csrf
+            
+            @include('admin.categories._form')
+            
+            <div class="d-flex justify-content-end mt-4">
+                <x-button href="{{ route('admin.categories.index') }}" variant="secondary" class="me-2">Batal</x-button>
+                <x-button type="submit" variant="primary" style="background-color: var(--admin-accent); border-color: var(--admin-accent);">
+                    <i class="fas fa-save me-2"></i>Simpan
+                </x-button>
+            </div>
+        </form>
+    </x-card>
 @endsection

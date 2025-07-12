@@ -1,16 +1,18 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Admin\CategoryController;
-use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\ReportController;
+use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\CustomerController;
+use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FinancialController;
 use App\Http\Controllers\Admin\InventoryController;
-use App\Http\Controllers\Admin\ReportController;
-use App\Http\Controllers\Admin\SettingsController;
-use App\Http\Controllers\Admin\BusinessIntelligenceController;
+use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\FundAllocationController;
+use App\Http\Controllers\Admin\BusinessIntelligenceController;
 
 // TIDAK PERLU Route::middleware(...)->group(...) lagi di sini.
 // RouteServiceProvider sudah menanganinya.
@@ -60,10 +62,15 @@ Route::prefix('settings')->name('settings.')->group(function () {
 // Business Intelligence
 Route::get('/business-intelligence', [BusinessIntelligenceController::class, 'index'])->name('bi.index');
 
+// Transaction & Customer Management (Admin View)
+Route::resource('transactions', TransactionController::class)->only(['index', 'show']);
+Route::resource('customers', CustomerController::class)->only(['index', 'show']);
+
 // Fund Allocation
 Route::prefix('fund-allocation')->name('fund-allocation.')->group(function () {
     Route::get('/', [FundAllocationController::class, 'index'])->name('index');
     Route::get('/settings', [FundAllocationController::class, 'settings'])->name('settings');
     Route::put('/settings', [FundAllocationController::class, 'updateSettings'])->name('update-settings');
+    Route::put('/settings', [FundAllocationController::class, 'updateSettings'])->name('settings.update'); 
     Route::get('/history', [FundAllocationController::class, 'history'])->name('history');
 });

@@ -1,29 +1,24 @@
-@props([
-    'title' => '',
-    'headerActions' => null
-])
+{{-- resources/views/components/card.blade.php --}}
+@php
+    $classes = 'card ' . ($class ?? '');
+@endphp
 
-<div class="card">
-    @if ($title)
-        <div class="card-header">
-            <div class="d-flex justify-content-between align-items-center">
+<div {{ $attributes->merge(['class' => $classes]) }}>
+    @if(isset($title) || isset($headerActions))
+        <div class="card-header d-flex justify-content-between align-items-center">
+            @if(isset($title))
                 <h5 class="card-title mb-0">{{ $title }}</h5>
-                @if ($headerActions)
-                    <div>
-                        {{ $headerActions }}
-                    </div>
-                @endif
-            </div>
+            @endif
+            
+            @if(isset($headerActions))
+                <div class="card-actions">
+                    {{ $headerActions }}
+                </div>
+            @endif
         </div>
     @endif
     
     <div class="card-body">
         {{ $slot }}
     </div>
-</div>
-
-{{-- Cara pakai:
-<x-card title="Judul Kartu">
-    ...Konten di sini...
-</x-card>
---}}
+</div>  

@@ -2,57 +2,46 @@
 
 namespace App\Traits;
 
-use App\Models\Permission;
-
 trait HasPermissions
 {
-    public function permissions()
-    {
-        return $this->belongsToMany(Permission::class, 'user_permissions');
-    }
-
     /**
-     * Cek apakah user memiliki permission tertentu
+     * Cek apakah user memiliki permission tertentu.
      *
-     * @param string $permissionName
+     * @param string $permissionName (contoh: "products.read")
      * @return bool
      */
     public function hasPermission(string $permissionName): bool
     {
-        // Cek dari field 'role' (admin punya semua akses)
-        if ($this->role === 'admin') {
+        // 1. Admin selalu memiliki semua akses.
+        if ($this->hasRole('admin')) {
             return true;
         }
-        
-        // Cek dari permission yang terhubung langsung
-        if ($this->permissions()->where('name', $permissionName)->exists()) {
-            return true;
-        }
-        
-        // Cek dari permission yang didapat dari role
+
+        // 2. Cek izin dari role yang dimiliki user.
+        // Fungsi ini bergantung pada method `roles()` yang disediakan oleh trait `HasRoles`.
         if (method_exists($this, 'roles')) {
+            // Memecah nama izin menjadi modul dan aksi.
+            // contoh: "products.read" -> $module="products", $action="read"
+            @list($module, $action) = explode('.', $permissionName, 2);
+
+            if (!$module || !$action) {
+                return false; // Format permission tidak valid.
+            }
+
             foreach ($this->roles as $role) {
-                if ($role->permissions()->where('name', $permissionName)->exists()) {
+                $rolePermissions = $role->permissions ?? [];
+                // Cek apakah modul ada dan aksi diizinkan di dalam array modul tersebut.
+                if (isset($rolePermissions[$module]) && in_array($action, $rolePermissions[$module])) {
                     return true;
                 }
             }
         }
-
-        // Cek dari kolom JSON 'permissions' di tabel user
-        $userPermissions = json_decode($this->attributes['permissions'] ?? '[]', true);
         
-        if (is_array($userPermissions) && in_array($permissionName, $userPermissions)) {
-            return true;
-        }
-
         return false;
     }
 
     /**
-     * Cek apakah user memiliki salah satu dari beberapa permission
-     *
-     * @param array $permissions
-     * @return bool
+     * Cek apakah user memiliki salah satu dari beberapa permission.
      */
     public function hasAnyPermission(array $permissions): bool
     {
@@ -61,15 +50,11 @@ trait HasPermissions
                 return true;
             }
         }
-        
         return false;
     }
 
     /**
-     * Cek apakah user memiliki semua permission yang diberikan
-     *
-     * @param array $permissions
-     * @return bool
+     * Cek apakah user memiliki semua permission yang diberikan.
      */
     public function hasAllPermissions(array $permissions): bool
     {
@@ -78,7 +63,6 @@ trait HasPermissions
                 return false;
             }
         }
-        
         return true;
     }
 }

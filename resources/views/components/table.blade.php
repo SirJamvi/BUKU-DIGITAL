@@ -1,7 +1,12 @@
-<div class="table-responsive">
-    <table {{ $attributes->merge(['class' => 'table table-bordered table-hover']) }}>
-        @if (isset($thead))
-            <thead class="thead-light">
+{{-- resources/views/components/table.blade.php --}}
+@php
+    $classes = 'table-responsive ' . ($class ?? '');
+@endphp
+
+<div {{ $attributes->merge(['class' => $classes]) }}>
+    <table class="table table-striped table-hover">
+        @if(isset($thead))
+            <thead class="table-dark">
                 {{ $thead }}
             </thead>
         @endif
@@ -9,11 +14,5 @@
         <tbody>
             {{ $slot }}
         </tbody>
-
-        @if (isset($tfoot))
-            <tfoot>
-                {{ $tfoot }}
-            </tfoot>
-        @endif
     </table>
 </div>

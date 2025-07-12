@@ -1,3 +1,4 @@
+{{-- resources/views/admin/categories/edit.blade.php --}}
 @extends('admin.layouts.app')
 
 @section('title', 'Edit Kategori Produk')
@@ -7,22 +8,19 @@
 @endsection
 
 @section('content')
-    <div class="card">
-        <div class="card-header">
-            <h5 class="card-title">Form Edit Kategori</h5>
-        </div>
-        <div class="card-body">
-            <form action="{{ route('admin.categories.update', $category) }}" method="POST">
-                @csrf
-                @method('PUT')
-                {{-- Memanggil form parsial dengan data yang ada --}}
-                @include('admin.categories._form', ['category' => $category])
-                
-                <div class="text-end">
-                    <a href="{{ route('admin.categories.index') }}" class="btn btn-secondary">Batal</a>
-                    <button type="submit" class="btn btn-primary">Update</button>
-                </div>
-            </form>
-        </div>
-    </div>
-@endsection 
+    <x-card title="Formulir Edit Kategori">
+        <form action="{{ route('admin.categories.update', $category) }}" method="POST">
+            @csrf
+            @method('PUT')
+
+            @include('admin.categories._form', ['category' => $category])
+            
+            <div class="d-flex justify-content-end mt-4">
+                <x-button href="{{ route('admin.categories.index') }}" variant="secondary" class="me-2">Batal</x-button>
+                <x-button type="submit" variant="primary" style="background-color: var(--admin-accent); border-color: var(--admin-accent);">
+                    <i class="fas fa-save me-2"></i>Update
+                </x-button>
+            </div>
+        </form>
+    </x-card>
+@endsection

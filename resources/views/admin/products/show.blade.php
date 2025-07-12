@@ -79,4 +79,4 @@
              </x-card>
         </div>
     </div>
-@endsection 
+@endsection
