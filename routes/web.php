@@ -1,51 +1,51 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Kasir\DashboardController;
-use App\Http\Controllers\Kasir\PosController;
-use App\Http\Controllers\Kasir\TransactionController;
-use App\Http\Controllers\Kasir\CustomerController;
-use App\Http\Controllers\Kasir\ProductController;
-use App\Http\Controllers\Kasir\ReportController;
+use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\Auth\ResetPasswordController;
 
-// Rute untuk Kasir, dilindungi oleh middleware 'auth' dan 'kasir'
-Route::middleware(['auth', 'kasir'])->prefix('kasir')->name('kasir.')->group(function () {
-    
-    // Dashboard
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::get('/', [DashboardController::class, 'index'])->name('index');
-    
-    // Point of Sale (POS) System - Menggunakan PosController
-    Route::prefix('pos')->name('pos.')->group(function () {
-        Route::get('/', [PosController::class, 'index'])->name('index');
-        Route::post('/store', [PosController::class, 'store'])->name('store');
-    });
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+|
+| File ini HANYA untuk rute publik dan otentikasi.
+| Rute Admin ada di routes/admin.php
+| Rute Kasir ada di routes/kasir.php
+|
+*/
 
-    // Manajemen Transaksi
-    Route::prefix('transactions')->name('transactions.')->group(function () {
-        Route::get('/', [TransactionController::class, 'index'])->name('index');
-        Route::get('/{transaction}', [TransactionController::class, 'show'])->name('show');
-    });
+// 1. Rute Halaman Utama (Landing Page) untuk tamu
+Route::get('/', function () {
+    return view('welcome');
+})->middleware('guest')->name('welcome');
 
-    // Manajemen Pelanggan
-    Route::prefix('customers')->name('customers.')->group(function () {
-        Route::get('/', [CustomerController::class, 'index'])->name('index');
-        Route::get('/create', [CustomerController::class, 'create'])->name('create');
-        Route::post('/', [CustomerController::class, 'store'])->name('store');
-        Route::get('/{customer}', [CustomerController::class, 'show'])->name('show');
-    });
-    
-    // Pencarian Produk (Read-Only untuk Kasir)
-    Route::prefix('products')->name('products.')->group(function () {
-        Route::get('/', [ProductController::class, 'index'])->name('index');
-        Route::get('/search', [ProductController::class, 'search'])->name('search'); // Untuk AJAX search
-        Route::get('/{product}', [ProductController::class, 'show'])->name('show');
-    });
-    
-    // Laporan (Terbatas untuk Kasir)
-    Route::prefix('reports')->name('reports.')->group(function () {
-        Route::get('/', [ReportController::class, 'index'])->name('index');
-        Route::get('/sales', [ReportController::class, 'sales'])->name('sales');
-    });
-    
+// 2. Rute Otentikasi
+Route::get('login', [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest');
+Route::post('login', [LoginController::class, 'login']);
+Route::post('logout', [LoginController::class, 'logout'])->name('logout');
+
+Route::get('register', [RegisterController::class, 'showRegistrationForm'])->name('register')->middleware('guest');
+Route::post('register', [RegisterController::class, 'register']);
+
+Route::get('forgot-password', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('password.request')->middleware('guest');
+Route::post('forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email')->middleware('guest');
+Route::get('reset-password/{token}', [ResetPasswordController::class, 'showResetForm'])->name('password.reset')->middleware('guest');
+Route::post('reset-password', [ResetPasswordController::class, 'reset'])->name('password.update')->middleware('guest');
+
+
+// 3. Rute Redirect setelah login
+Route::middleware('auth')->group(function() {
+    Route::get('/redirect-dashboard', function() {
+        $user = Auth::user();
+        if ($user->role === 'admin') {
+            return redirect()->route('admin.dashboard');
+        }
+        return redirect()->route('kasir.dashboard');
+    })->name('redirect.dashboard');
 });
+
+// Grup rute Kasir yang sebelumnya ada di sini TELAH DIHAPUS karena sudah ditangani oleh routes/kasir.php

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->integer('current_stock')->default(0);
             $table->integer('min_stock')->default(0);
             $table->integer('max_stock')->default(0);
-            $table->timestamp('last_updated');
+            $table->timestamp('last_updated')->nullable();
             $table->foreignId('updated_by')->nullable()->constrained('users')->onDelete('set null');
             $table->timestamps();
         });

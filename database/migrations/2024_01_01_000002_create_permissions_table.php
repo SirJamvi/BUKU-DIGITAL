@@ -16,8 +16,8 @@ return new class extends Migration
             $table->string('name')->unique();
             $table->string('display_name');
             $table->text('description')->nullable();
-            $table->string('module');
-            $table->string('action');
+            $table->string('module')->default('general');
+            $table->string('action')->default('read');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
