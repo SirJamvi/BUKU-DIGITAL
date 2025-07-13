@@ -13,6 +13,9 @@ use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\FundAllocationController;
 use App\Http\Controllers\Admin\BusinessIntelligenceController;
+use App\Http\Controllers\Admin\SupplierController;
+use App\Http\Controllers\Admin\ExpenseCategoryController;
+use App\Http\Controllers\Admin\ExpenseController;
 
 // TIDAK PERLU Route::middleware(...)->group(...) lagi di sini.
 // RouteServiceProvider sudah menanganinya.
@@ -26,6 +29,12 @@ Route::resource('categories', CategoryController::class);
 Route::resource('products', ProductController::class);
 Route::resource('users', UserController::class);
 
+// Supplier Management
+Route::resource('suppliers', SupplierController::class)->except(['show']);
+
+// Expense Category Management
+Route::resource('expense_categories', ExpenseCategoryController::class)->only(['index', 'create', 'store']);
+
 // Financial Management
 Route::prefix('financial')->name('financial.')->group(function () {
     Route::get('/', [FinancialController::class, 'index'])->name('index');
@@ -34,9 +43,15 @@ Route::prefix('financial')->name('financial.')->group(function () {
     Route::get('/roi-analysis', [FinancialController::class, 'roiAnalysis'])->name('roi-analysis');
 });
 
+// Expense Management
+Route::get('financial/expenses/create', [ExpenseController::class, 'create'])->name('expenses.create');
+Route::post('financial/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+
 // Inventory Management
 Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/', [InventoryController::class, 'index'])->name('index');
+    Route::get('/add-stock', [InventoryController::class, 'addStock'])->name('add_stock');
+    Route::post('/add-stock', [InventoryController::class, 'storeStock'])->name('store_stock');
     Route::get('/stock-movements', [InventoryController::class, 'stockMovements'])->name('stock-movements');
     Route::get('/stock-opname', [InventoryController::class, 'stockOpname'])->name('stock-opname');
     Route::post('/stock-opname', [InventoryController::class, 'processStockOpname'])->name('process-stock-opname');
@@ -70,7 +85,6 @@ Route::resource('customers', CustomerController::class)->only(['index', 'show'])
 Route::prefix('fund-allocation')->name('fund-allocation.')->group(function () {
     Route::get('/', [FundAllocationController::class, 'index'])->name('index');
     Route::get('/settings', [FundAllocationController::class, 'settings'])->name('settings');
-    Route::put('/settings', [FundAllocationController::class, 'updateSettings'])->name('update-settings');
-    Route::put('/settings', [FundAllocationController::class, 'updateSettings'])->name('settings.update'); 
+    Route::put('/settings', [FundAllocationController::class, 'updateSettings'])->name('settings.update'); // Hanya gunakan satu nama ini
     Route::get('/history', [FundAllocationController::class, 'history'])->name('history');
 });

@@ -3,17 +3,14 @@
 namespace App\Http\Controllers\Kasir;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Kasir\StoreTransactionRequest;
 use App\Services\Kasir\PosService;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse; // <-- Tambahkan ini
+use Illuminate\View\View; // <-- Tambahkan ini
+use App\Http\Requests\Kasir\StoreTransactionRequest; // <-- Gunakan Form Request Anda
 
 class PosController extends Controller
 {
-    /**
-     * @var PosService
-     */
     protected $posService;
 
     public function __construct(PosService $posService)
@@ -23,48 +20,37 @@ class PosController extends Controller
 
     /**
      * Menampilkan antarmuka Point of Sale (POS).
-     * Memuat produk dan data yang diperlukan untuk transaksi.
-     *
-     * @return View
      */
     public function index(): View
     {
-        try {
-            $posData = $this->posService->getPosData();
-            return view('kasir.pos.index', $posData);
-        } catch (\Exception $e) {
-            logger()->error('Error loading POS interface: ' . $e->getMessage());
-            
-            // Kembalikan view dengan error message, bukan redirect
-            return view('kasir.pos.index', [
-                'error' => 'Gagal memuat antarmuka POS. Silakan coba lagi.',
-                'products' => [],
-                'categories' => []
-            ]);
-        }
+        $data = $this->posService->getPosData();
+        return view('kasir.pos.index', $data);
     }
 
     /**
-     * Menyimpan transaksi baru dari POS.
-     * Proses ini mencakup validasi, pembuatan transaksi, dan pembaruan inventaris.
-     *
-     * @param StoreTransactionRequest $request
-     * @return RedirectResponse
+     * Menyimpan transaksi baru dan mengarahkan ke halaman struk.
      */
     public function store(StoreTransactionRequest $request): RedirectResponse
     {
         try {
             $transaction = $this->posService->processTransaction($request->validated());
             
-            // Redirect ke halaman struk atau daftar transaksi dengan pesan sukses
+            // ==========================================================
+            // INI PERBAIKANNYA:
+            // Selalu redirect ke halaman detail transaksi (struk)
+            // setelah transaksi berhasil, bukan mengembalikan JSON.
+            // ==========================================================
             return redirect()
                 ->route('kasir.transactions.show', $transaction->id)
-                ->with('success', 'Transaksi berhasil disimpan.');
+                ->with('success', 'Transaksi berhasil disimpan. Struk siap dicetak.');
 
         } catch (\App\Exceptions\InsufficientStockException $e) {
+            // Jika stok tidak cukup, kembali ke halaman POS dengan pesan error
             logger()->warning('POS Transaction failed: ' . $e->getMessage());
             return back()->with('error', $e->getMessage())->withInput();
+        
         } catch (\Exception $e) {
+            // Jika ada error lain, kembali ke halaman POS dengan pesan error umum
             logger()->error('Error processing POS transaction: ' . $e->getMessage());
             return back()->with('error', 'Terjadi kesalahan saat memproses transaksi.')->withInput();
         }

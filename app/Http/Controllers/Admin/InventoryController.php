@@ -34,6 +34,35 @@ class InventoryController extends Controller
     {
         return view('admin.inventory.stock-opname');
     }
+
+    /**
+     * Menampilkan form untuk menambah stok.
+     */
+    public function addStock(): View
+    {
+        $products = $this->inventoryService->getActiveProducts();
+        return view('admin.inventory.add_stock', compact('products'));
+    }
+
+    /**
+     * Menyimpan data penambahan stok.
+     */
+    public function storeStock(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $this->inventoryService->addStock($request->all());
+            return redirect()->route('admin.inventory.index')->with('success', 'Stok berhasil ditambahkan.');
+        } catch (\Exception $e) {
+            logger()->error('Error adding stock: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menambahkan stok. Silakan coba lagi.');
+        }
+    }
     
     public function processStockOpname(Request $request): RedirectResponse
     {

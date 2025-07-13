@@ -6,19 +6,19 @@ use App\Models\Transaction;
 use App\Models\CashFlow;
 use App\Models\Inventory;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ReportService
 {
     /**
      * Menghasilkan laporan penjualan berdasarkan filter.
-     *
-     * @param array $filters
-     * @return array
      */
     public function getSalesReport(array $filters): array
     {
         $query = Transaction::with('customer', 'createdBy', 'details.product')
-            ->where('type', 'sale');
+            ->where('type', 'sale')
+            ->where('business_id', Auth::user()->business_id);
 
         $this->applyDateFilters($query, $filters);
 
@@ -35,39 +35,61 @@ class ReportService
     }
 
     /**
-     * Menghasilkan laporan keuangan berdasarkan filter.
-     *
-     * @param array $filters
-     * @return array
+     * Menghasilkan laporan keuangan komprehensif berdasarkan filter.
+     * INI ADALAH FUNGSI YANG DIPERBARUI.
      */
     public function getFinancialReport(array $filters): array
     {
-        $query = CashFlow::with('category');
-        $this->applyDateFilters($query, $filters, 'date');
+        $businessId = Auth::user()->business_id;
+
+        // 1. Ambil semua transaksi penjualan dalam rentang tanggal
+        $transactionsQuery = Transaction::where('type', 'sale')
+            ->where('business_id', $businessId)
+            ->with(['details.product', 'createdBy']);
         
-        $cashFlows = $query->get();
-        $income = $cashFlows->where('type', 'income')->sum('amount');
-        $expense = $cashFlows->where('type', 'expense')->sum('amount');
+        $this->applyDateFilters($transactionsQuery, $filters, 'transaction_date');
+        $transactions = $transactionsQuery->get();
+
+        // 2. Hitung Total Pemasukan dan Keuntungan Kotor dari transaksi
+        $totalIncome = $transactions->sum('total_amount');
+        $totalGrossProfit = 0;
+        
+        foreach ($transactions as $transaction) {
+            $transactionGrossProfit = 0;
+            foreach ($transaction->details as $detail) {
+                if ($detail->product) { // Pastikan produk masih ada
+                    $profitPerItem = ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
+                    $transactionGrossProfit += $profitPerItem;
+                }
+            }
+            $transaction->gross_profit = $transactionGrossProfit;
+            $totalGrossProfit += $transactionGrossProfit;
+        }
+
+        // 3. Hitung Total Pengeluaran dari Cash Flow
+        $expenseQuery = CashFlow::where('type', 'expense')->where('business_id', $businessId);
+        $this->applyDateFilters($expenseQuery, $filters, 'date');
+        $totalExpense = $expenseQuery->sum('amount');
+        
+        // 4. Hitung Keuntungan Bersih
+        $netProfit = $totalIncome - $totalExpense;
 
         return [
-            'cash_flows' => $cashFlows,
-            'total_income' => $income,
-            'total_expense' => $expense,
-            'net_profit' => $income - $expense,
+            'transactions' => $transactions, // Mengirim data transaksi yang sudah diperkaya
+            'total_income' => $totalIncome,
+            'total_expense' => $totalExpense,
+            'total_gross_profit' => $totalGrossProfit,
+            'net_profit' => $netProfit,
             'filters' => $filters,
         ];
     }
 
     /**
      * Menghasilkan laporan inventaris.
-     *
-     * @param array $filters
-     * @return array
      */
     public function getInventoryReport(array $filters): array
     {
-        $inventory = Inventory::with('product')->get();
-        // Logika tambahan untuk laporan inventaris bisa ditambahkan di sini
+        $inventory = Inventory::with('product')->where('business_id', Auth::user()->business_id)->get();
         
         return [
             'inventory' => $inventory,
@@ -77,18 +99,17 @@ class ReportService
     
     /**
      * Helper untuk menerapkan filter tanggal.
-     *
-     * @param \Illuminate\Database\Eloquent\Builder $query
-     * @param array $filters
-     * @param string $dateColumn
-     * @return void
      */
     private function applyDateFilters($query, array $filters, string $dateColumn = 'transaction_date'): void
     {
-        if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
-            $startDate = Carbon::parse($filters['start_date'])->startOfDay();
-            $endDate = Carbon::parse($filters['end_date'])->endOfDay();
-            $query->whereBetween($dateColumn, [$startDate, $endDate]);
+        $startDate = $filters['start_date'] ?? now()->startOfMonth()->toDateString();
+        $endDate = $filters['end_date'] ?? now()->endOfDay()->toDateString();
+        
+        if ($startDate && $endDate) {
+            $query->whereBetween($dateColumn, [
+                Carbon::parse($startDate)->startOfDay(),
+                Carbon::parse($endDate)->endOfDay()
+            ]);
         }
     }
 }

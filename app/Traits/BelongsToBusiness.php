@@ -3,6 +3,9 @@
 namespace App\Traits;
 
 use App\Models\Business;
+use App\Models\User;
+use App\Models\UserSession;
+use App\Models\TransactionDetail; // <-- TAMBAHKAN INI
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Auth;
@@ -11,13 +14,21 @@ trait BelongsToBusiness
 {
     /**
      * The "booted" method of the model.
-     * Ini akan secara otomatis menerapkan Global Scope.
+     * This will automatically apply the Global Scope.
      */
     protected static function booted(): void
     {
-        if (Auth::check() && Auth::user()->business_id) {
+        // Models that should NOT be scoped by business_id
+        $excludedModels = [
+            User::class,
+            UserSession::class,
+            TransactionDetail::class, // <-- TAMBAHKAN INI KE DAFTAR PENGECUALIAN
+            // Add other system-wide models here if needed in the future
+        ];
+
+        // Only apply the scope if the current model is not in the excluded list
+        if (Auth::check() && Auth::user()->business_id && !in_array(static::class, $excludedModels)) {
             static::addGlobalScope('business', function (Builder $builder) {
-                // INI PERBAIKANNYA: Mengambil nama tabel dari $builder, bukan dari self::
                 $tableName = $builder->getModel()->getTable();
                 $builder->where($tableName . '.business_id', Auth::user()->business_id);
             });
@@ -25,7 +36,7 @@ trait BelongsToBusiness
     }
 
     /**
-     * Definisikan relasi ke Business.
+     * Define the relationship to the Business.
      */
     public function business(): BelongsTo
     {

@@ -14,6 +14,9 @@
         @endslot
         @slot('headerActions')
             <div class="d-flex">
+                <x-button href="{{ route('admin.inventory.add_stock') }}" variant="primary" class="me-2">
+                    <i class="fas fa-plus me-2"></i>Tambah Stok
+                </x-button>
                 <x-button href="{{ route('admin.inventory.stock-movements') }}" variant="info" class="me-2">
                     <i class="fas fa-history me-2"></i>Riwayat Pergerakan
                 </x-button>
