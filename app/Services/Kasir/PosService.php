@@ -5,6 +5,7 @@ namespace App\Services\Kasir;
 use App\Models\Product;
 use App\Models\Customer;
 use App\Models\Transaction;
+use App\Models\CashFlow;
 use App\Exceptions\InsufficientStockException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -13,12 +14,11 @@ class PosService
 {
     /**
      * Mengambil data yang diperlukan untuk antarmuka POS.
-     *
-     * @return array
      */
     public function getPosData(): array
     {
-        // Hanya ambil produk yang aktif dan memiliki stok
+        // Global Scope sudah otomatis memfilter produk dan pelanggan
+        // berdasarkan business_id dari kasir yang login.
         $products = Product::where('is_active', true)
             ->whereHas('inventory', function ($query) {
                 $query->where('current_stock', '>', 0);
@@ -36,17 +36,14 @@ class PosService
 
     /**
      * Memproses dan menyimpan transaksi baru dari POS.
-     *
-     * @param array $data
-     * @return Transaction
-     * @throws InsufficientStockException|\Exception
      */
     public function processTransaction(array $data): Transaction
     {
         return DB::transaction(function () use ($data) {
             // 1. Validasi stok sebelum membuat transaksi
             foreach ($data['items'] as $item) {
-                $product = Product::with('inventory')->find($item['product_id']);
+                // Gunakan findOrFail untuk keamanan
+                $product = Product::findOrFail($item['product_id']);
                 if ($product->inventory->current_stock < $item['quantity']) {
                     throw new InsufficientStockException(
                         "Stok untuk produk '{$product->name}' tidak mencukupi."
@@ -56,11 +53,12 @@ class PosService
             
             // 2. Buat transaksi utama
             $transaction = Transaction::create([
+                'business_id' => Auth::user()->business_id, // <-- INI PERBAIKANNYA
                 'type' => 'sale',
                 'customer_id' => $data['customer_id'] ?? null,
                 'total_amount' => $data['total_amount'],
                 'payment_method' => $data['payment_method'],
-                'payment_status' => 'paid', // Asumsi langsung lunas
+                'payment_status' => 'paid',
                 'status' => 'completed',
                 'transaction_date' => now(),
                 'notes' => $data['notes'] ?? null,
@@ -78,11 +76,38 @@ class PosService
                     'total_price' => $item['total_price'],
                 ]);
                 
-                // Kurangi stok inventaris
                 $product->inventory->decrement('current_stock', $item['quantity']);
             }
 
+            // ====================================================================
+            // INI PERBAIKANNYA: Catat transaksi sebagai Pemasukan (Income)
+            // ====================================================================
+            CashFlow::create([
+                'business_id' => $transaction->business_id,
+                'type' => 'income',
+                'category_id' => 1, // Asumsi ID 1 adalah "Penjualan Produk" di expense_categories
+                'amount' => $transaction->total_amount,
+                'description' => 'Pendapatan dari penjualan #' . $transaction->id,
+                'date' => $transaction->transaction_date,
+                'reference_id' => $transaction->id,
+                'created_by' => Auth::id(),
+            ]);
+            // ====================================================================
+
             return $transaction;
         });
+    }
+
+    /**
+     * Get transaction with all related data for receipt.
+     */
+    public function getTransactionWithDetails(int $transactionId): Transaction
+    {
+        // findOrFail sudah otomatis di-scope oleh trait BelongsToBusiness
+        return Transaction::with([
+            'details.product',
+            'customer',
+            'createdBy'
+        ])->findOrFail($transactionId);
     }
 }

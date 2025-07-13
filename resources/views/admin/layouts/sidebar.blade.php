@@ -12,19 +12,42 @@
                 <span>Dashboard</span>
             </a>
 
-            @permission('products.read')
-            <a href="{{ route('admin.products.index') }}" class="sidebar-item {{ request()->routeIs('admin.products.*') ? 'active' : '' }}">
-                <i class="fas fa-box-open"></i>
-                <span>Produk</span>
-            </a>
-            @endpermission
+            {{-- Master Data Group --}}
+            <div class="sidebar-group">
+                <div class="sidebar-group-header">
+                    <i class="fas fa-database"></i>
+                    <span>Master Data</span>
+                </div>
+                
+                @permission('products.read')
+                <a href="{{ route('admin.products.index') }}" class="sidebar-item sub-item {{ request()->routeIs('admin.products.*') ? 'active' : '' }}">
+                    <i class="fas fa-box-open"></i>
+                    <span>Produk</span>
+                </a>
+                @endpermission
 
-            @permission('categories.read')
-            <a href="{{ route('admin.categories.index') }}" class="sidebar-item {{ request()->routeIs('admin.categories.*') ? 'active' : '' }}">
-                <i class="fas fa-tags"></i>
-                <span>Kategori</span>
-            </a>
-            @endpermission
+                @permission('categories.read')
+                <a href="{{ route('admin.categories.index') }}" class="sidebar-item sub-item {{ request()->routeIs('admin.categories.*') ? 'active' : '' }}">
+                    <i class="fas fa-tags"></i>
+                    <span>Kategori</span>
+                </a>
+                @endpermission
+
+                @permission('suppliers.read')
+                <a href="{{ route('admin.suppliers.index') }}" class="sidebar-item sub-item {{ request()->routeIs('admin.suppliers.*') ? 'active' : '' }}">
+                    <i class="fas fa-truck"></i>
+                    <span>Supplier</span>
+                </a>
+                @endpermission
+
+                @permission('expense_categories.read')
+                <a href="{{ route('admin.expense_categories.index') }}"
+                class="sidebar-item sub-item {{ request()->routeIs('admin.expense_categories.*') ? 'active' : '' }}">
+                    <i class="fas fa-list-ul"></i>
+                    <span>Kategori Biaya</span>
+                </a>
+                @endpermission
+            </div>
 
             @permission('inventory.read')
             <a href="{{ route('admin.inventory.index') }}" class="sidebar-item {{ request()->routeIs('admin.inventory.*') ? 'active' : '' }}">
@@ -54,25 +77,34 @@
             </a>
             @endpermission
 
-            @permission('reports.view_all')
-            <a href="{{ route('admin.reports.index') }}" class="sidebar-item {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}">
-                <i class="fas fa-chart-pie"></i>
-                <span>Laporan</span>
-            </a>
-            @endpermission
+            {{-- Analisis & Laporan Group --}}
+            <div class="sidebar-group">
+                <div class="sidebar-group-header">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Analisis & Laporan</span>
+                </div>
 
-            <!-- FITUR YANG HILANG - TAMBAHKAN DI SINI -->
+                @permission('reports.view_all')
+                <a href="{{ route('admin.reports.index') }}" class="sidebar-item sub-item {{ request()->routeIs('admin.reports.*') ? 'active' : '' }}">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Laporan</span>
+                </a>
+                @endpermission
+
+                @permission('business_intelligence.view')
+                <a href="{{ route('admin.bi.index') }}" class="sidebar-item sub-item {{ request()->routeIs('admin.bi.*') ? 'active' : '' }}">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Business Intelligence</span>
+                </a>
+                @endpermission
+
+                {{-- Tambahkan link untuk Owner Profit di sini jika controllernya sudah dibuat --}}
+            </div>
+
             @permission('fund_allocation.view')
             <a href="{{ route('admin.fund-allocation.index') }}" class="sidebar-item {{ request()->routeIs('admin.fund-allocation.*') ? 'active' : '' }}">
                 <i class="fas fa-money-bill-wave"></i>
                 <span>Alokasi Dana</span>
-            </a>
-            @endpermission
-
-            @permission('business_intelligence.view')
-            <a href="{{ route('admin.bi.index') }}" class="sidebar-item {{ request()->routeIs('admin.bi.*') ? 'active' : '' }}">
-                <i class="fas fa-chart-line"></i>
-                <span>Business Intelligence</span>
             </a>
             @endpermission
 
@@ -95,22 +127,7 @@
             <div class="sidebar-divider"></div>
 
             <!-- Quick Stats or Additional Info -->
-            <div class="sidebar-item" style="pointer-events: none; opacity: 0.7;">
-                <i class="fas fa-info-circle"></i>
-                <span>Info Sistem</span>
-            </div>
             
-            <div class="px-3 py-2">
-                <div class="small text-light opacity-75">
-                    <div class="d-flex justify-content-between mb-1">
-                        <span>Storage</span>
-                        <span>75%</span>
-                    </div>
-                    <div class="progress" style="height: 4px;">
-                        <div class="progress-bar" style="width: 75%; background: var(--gold-gradient);"></div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -148,5 +165,46 @@
         
         .sidebar-item:hover i {
             color: var(--luxury-gold);
+        }
+
+        .sidebar-group {
+            margin-bottom: 1rem;
+        }
+
+        .sidebar-group-header {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--luxury-gold);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar-group-header i {
+            margin-right: 0.5rem;
+            color: var(--luxury-gold);
+        }
+
+        .sidebar-item.sub-item {
+            padding-left: 3rem;
+            font-size: 0.9rem;
+        }
+
+        .sidebar-item.sub-item:before {
+            content: '';
+            position: absolute;
+            left: 2rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 4px;
+            background: rgba(255,255,255,0.5);
+            border-radius: 50%;
+        }
+
+        .sidebar-item.sub-item.active:before {
+            background: var(--luxury-gold);
         }
     </style>

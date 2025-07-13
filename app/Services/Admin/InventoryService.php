@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\Inventory;
+use App\Models\Product;
 use App\Models\StockMovement;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +31,37 @@ class InventoryService
     public function getStockMovementsWithPagination(int $perPage = 25): LengthAwarePaginator
     {
         return StockMovement::with('product', 'createdBy')->latest()->paginate($perPage);
+    }
+
+    /**
+     * Mengambil semua produk aktif untuk dropdown.
+     */
+    public function getActiveProducts()
+    {
+        return Product::where('is_active', true)->orderBy('name')->get();
+    }
+
+    /**
+     * Memproses penambahan stok baru.
+     */
+    public function addStock(array $data): void
+    {
+        DB::transaction(function () use ($data) {
+            $product = Product::with('inventory')->findOrFail($data['product_id']);
+            
+            // Tambah stok di inventory
+            $product->inventory->increment('current_stock', $data['quantity']);
+            
+            // Catat pergerakan stok sebagai 'in' (masuk)
+            StockMovement::create([
+                'business_id' => Auth::user()->business_id,
+                'product_id' => $data['product_id'],
+                'type' => 'in',
+                'quantity' => $data['quantity'],
+                'notes' => $data['notes'] ?? 'Stok masuk manual oleh admin.',
+                'created_by' => Auth::id(),
+            ]);
+        });
     }
 
     /**

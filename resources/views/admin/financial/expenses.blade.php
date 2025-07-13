@@ -11,6 +11,9 @@
 @section('content')
     <x-card title="Rincian Data Pengeluaran">
         @slot('headerActions')
+            <x-button href="{{ route('admin.expenses.create') }}" variant="primary">
+                <i class="fas fa-plus me-2"></i>Catat Pengeluaran Baru
+            </x-button>
             <x-button variant="secondary"><i class="fas fa-print me-2"></i>Ekspor PDF</x-button>
         @endslot
 

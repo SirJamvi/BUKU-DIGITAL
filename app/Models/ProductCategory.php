@@ -2,34 +2,47 @@
 
 namespace App\Models;
 
-use App\Traits\BelongsToBusiness;
+use App\Traits\BelongsToBusiness; // <-- TAMBAHKAN INI
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProductCategory extends Model
 {
-    use HasFactory, BelongsToBusiness;
+    use HasFactory, BelongsToBusiness; // <-- TAMBAHKAN TRAIT DI SINI
 
     protected $table = 'product_categories';
 
     protected $fillable = [
-        'business_id',
+        'business_id', // <-- TAMBAHKAN INI
         'name',
-        // ... sisa field-fillable yang ada ...
+        'description',
+        'parent_id',
+        'sort_order',
+        'is_active',
+        'created_by',
     ];
 
     protected $casts = [
-        'last_updated' => 'datetime',
+        'is_active' => 'boolean',
     ];
 
-    public function product(): BelongsTo
+    public function parent()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(ProductCategory::class, 'parent_id');
     }
 
-    public function updatedBy(): BelongsTo
+    public function children()
     {
-        return $this->belongsTo(User::class, 'updated_by');
+        return $this->hasMany(ProductCategory::class, 'parent_id');
+    }
+
+    public function products()
+    {
+        return $this->hasMany(Product::class, 'category_id');
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

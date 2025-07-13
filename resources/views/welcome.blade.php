@@ -406,7 +406,7 @@
     <header class="hero-section">
         <div class="container">
             <div class="hero-content loading">
-                <h1><span>Transformasi</span>Bisnis Anda dengan Buku Digital Premium</h1>
+                <h1><span>Transformasi</span>Bisnis Anda Dengan Buku Bisnis Digital Premium</h1>
                 <p>Satu platform eksklusif untuk mengelola penjualan, inventaris, keuangan, dan analisis bisnis secara komprehensif dan efisien.</p>
                 <a href="{{ route('login') }}" class="btn btn-primary btn-lg mt-3">
                     <i class="fas fa-gem me-2"></i>
@@ -482,7 +482,7 @@
                             <div class="feature-icon">
                                 <i class="fas fa-star"></i>
                             </div>
-                            <h5 class="card-title">Keanggotaan <span class="text-gold">Premium</span></h5>
+                            <h5 class="card-title">Fitur <span class="text-gold">Premium</span></h5>
                             <p class="card-text">Tingkatkan bisnis Anda dengan paket premium kami yang menawarkan:</p>
                             <ul class="list-unstyled">
                                 <li class="mb-2"><i class="fas fa-crown text-gold me-2"></i> Prioritas akses fitur baru</li>
@@ -491,7 +491,7 @@
                                 <li class="mb-2"><i class="fas fa-crown text-gold me-2"></i> Konsultasi bisnis premium</li>
                                 <li><i class="fas fa-crown text-gold me-2"></i> Laporan kinerja khusus</li>
                             </ul>
-                            <a href="#" class="btn btn-primary mt-3">Upgrade Sekarang</a>
+                            <a href="#" class="btn btn-primary mt-3">Yukk Cobain!!!</a>
                         </div>
                     </div>
                 </div>
