@@ -11,35 +11,42 @@
     <form action="{{ route('register') }}" method="POST">
         @csrf
 
-        <x-input 
-            name="name" 
-            label="Nama Lengkap" 
-            placeholder="Masukkan nama lengkap Anda" 
-            required 
+        <x-input
+            name="name"
+            label="Nama Lengkap"
+            placeholder="Masukkan nama lengkap Anda"
+            required
         />
-        
-        <x-input 
-            type="email" 
-            name="email" 
-            label="Alamat Email" 
-            placeholder="email@anda.com" 
-            required 
+
+        <x-input
+            type="email"
+            name="email"
+            label="Alamat Email"
+            placeholder="email@anda.com"
+            required
         />
-        
-        <x-input 
-            type="password" 
-            name="password" 
-            label="Kata Sandi" 
-            placeholder="Minimal 8 karakter" 
-            required 
+
+        <x-input
+            name="business_name"
+            label="Nama Bisnis / Toko"
+            placeholder="Contoh: Toko Naga Dingin"
+            required
         />
-        
-        <x-input 
-            type="password" 
-            name="password_confirmation" 
-            label="Konfirmasi Kata Sandi" 
-            placeholder="Ulangi kata sandi" 
-            required 
+
+        <x-input
+            type="password"
+            name="password"
+            label="Kata Sandi"
+            placeholder="Minimal 8 karakter"
+            required
+        />
+
+        <x-input
+            type="password"
+            name="password_confirmation"
+            label="Konfirmasi Kata Sandi"
+            placeholder="Ulangi kata sandi"
+            required
         />
 
         <div class="d-grid mb-3">
@@ -60,11 +67,10 @@
         </p>
     </div>
 
-    {{-- Terms & Privacy Notice --}}
     <div class="text-center mt-4">
         <p class="text-muted" style="font-size: 0.85rem;">
             Dengan mendaftar, Anda menyetujui 
-            <a href="#" class="text-decoration-underline">Syarat & Ketentuan</a> 
+            <a href="#" class="text-decoration-underline">Syarat & Ketentuan</a>
             dan 
             <a href="#" class="text-decoration-underline">Kebijakan Privasi</a> kami.
         </p>

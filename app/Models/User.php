@@ -19,6 +19,7 @@ class User extends Authenticatable
     use HasFactory, Notifiable, HasRoles, HasPermissions;
 
     protected $fillable = [
+        'business_id',
         'name',
         'email',
         'password',
@@ -42,6 +43,14 @@ class User extends Authenticatable
         'permissions' => 'json',
         'is_active' => 'boolean',
     ];
+
+    /**
+     * The business that this user belongs to.
+     */
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
 
     /**
      * User yang membuat user ini.

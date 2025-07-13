@@ -4,14 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness; 
 
 class UserActivityLog extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToBusiness;
 
     protected $table = 'user_activity_logs';
 
     protected $fillable = [
+        'business_id',
         'user_id',
         'action',
         'module',

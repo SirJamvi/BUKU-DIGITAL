@@ -54,9 +54,9 @@ Route::prefix('reports')->name('reports.')->group(function () {
 Route::prefix('settings')->name('settings.')->group(function () {
     Route::get('/', [SettingsController::class, 'index'])->name('index');
     Route::get('/profile', [SettingsController::class, 'profile'])->name('profile');
-    Route::put('/profile', [SettingsController::class, 'updateProfile'])->name('update-profile');
+    Route::put('/profile', [SettingsController::class, 'updateProfile'])->name('profile.update'); // <-- INI PERBAIKANNYA
     Route::get('/system', [SettingsController::class, 'system'])->name('system');
-    Route::put('/system', [SettingsController::class, 'updateSystem'])->name('update-system');
+    Route::put('/system', [SettingsController::class, 'updateSystem'])->name('system.update');
 });
 
 // Business Intelligence

@@ -16,7 +16,6 @@ class RegisterController extends Controller
     public function __construct(AuthService $authService)
     {
         $this->authService = $authService;
-        // Pemanggilan middleware dihapus dari sini
     }
 
     /**
@@ -28,17 +27,24 @@ class RegisterController extends Controller
     }
 
     /**
-     * Menangani permintaan registrasi pengguna baru.
+     * Menangani permintaan registrasi pengguna dan bisnis baru.
      */
     public function register(RegisterRequest $request): RedirectResponse
     {
         try {
-            $user = $this->authService->createUser($request->validated(), 'kasir');
+            // Pastikan validasi di RegisterRequest sudah menyertakan 'business_name'
+            $validatedData = $request->validated();
+            $validatedData['business_name'] = $request->input('business_name');
+
+            $user = $this->authService->createUserAndBusiness($validatedData);
             Auth::login($user);
-            return redirect()->route('kasir.dashboard');
+
+            return redirect()->route('admin.dashboard');
         } catch (\Exception $e) {
             logger()->error('Error during public registration: ' . $e->getMessage());
-            return back()->with('error', 'Gagal melakukan registrasi. Silakan coba lagi.')->withInput();
+            return back()
+                ->with('error', 'Gagal melakukan registrasi. Silakan coba lagi.')
+                ->withInput();
         }
     }
 }

@@ -3,9 +3,11 @@
 namespace App\Services\Auth;
 
 use App\Models\User;
+use App\Models\Business;
 use App\Models\UserSession;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class AuthService
 {
@@ -40,6 +42,36 @@ class AuthService
         }
 
         return null;
+    }
+
+    /**
+     * Membuat pengguna baru beserta bisnisnya (untuk admin).
+     *
+     * @param array $data
+     * @param string $defaultRole
+     * @return User
+     */
+    public function createUserAndBusiness(array $data): User
+    {
+        return DB::transaction(function () use ($data) {
+            // 1. Buat user baru sebagai owner
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
+                'role' => 'admin', // Registrasi publik sekarang selalu untuk admin
+                'is_active' => true,
+            ]);
+            // 2. Buat bisnis baru dengan user ini sebagai pemiliknya
+            $business = Business::create([
+                'name' => $data['business_name'], // Asumsi ada field 'business_name' di form registrasi
+                'owner_id' => $user->id,
+            ]);
+            // 3. Update user agar terikat dengan bisnis barunya
+            $user->business_id = $business->id;
+            $user->save();
+            return $user;
+        });
     }
 
     /**

@@ -4,14 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness;    
 
 class FundAllocationHistory extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToBusiness;
 
     protected $table = 'fund_allocation_history';
 
     protected $fillable = [
+        'business_id',
         'period_month',
         'period_year',
         'net_profit',

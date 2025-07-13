@@ -4,14 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness; 
 
 class FundAllocationSetting extends Model
 {
-    use HasFactory;
+   use HasFactory, BelongsToBusiness;
 
     protected $table = 'fund_allocation_settings';
 
     protected $fillable = [
+        'business_id',
         'allocation_name',
         'percentage',
         'is_active',
