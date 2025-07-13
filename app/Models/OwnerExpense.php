@@ -4,14 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness; 
 
 class OwnerExpense extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToBusiness;
 
     protected $table = 'owner_expenses';
 
     protected $fillable = [
+        'business_id',
         'type',
         'amount',
         'title',

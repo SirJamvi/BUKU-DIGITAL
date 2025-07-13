@@ -70,7 +70,7 @@
     <div class="receipt-container">
         <div class="header">
             <h3>{{ config('app.name', 'Toko Anda') }}</h3>
-            <p>Alamat Toko Anda di Sini<br>Telp: 08123456789</p>
+            <p>ES KRISTAL ADIN<br>Telp: 087811192774</p>
         </div>
 
         <div class="info">

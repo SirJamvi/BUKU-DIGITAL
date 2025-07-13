@@ -4,12 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness; 
 
 class Supplier extends Model
 {
-    use HasFactory;
-
+use HasFactory, BelongsToBusiness;
     protected $fillable = [
+        'business_id',
         'name',
         'contact_person',
         'phone',

@@ -4,14 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness; 
 
 class TransactionDetail extends Model
 {
-    use HasFactory;
-
+use HasFactory, BelongsToBusiness;
     protected $table = 'transaction_details';
 
     protected $fillable = [
+        'business_id',
         'transaction_id',
         'product_id',
         'quantity',

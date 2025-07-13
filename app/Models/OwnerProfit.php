@@ -2,16 +2,20 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class OwnerProfit extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToBusiness;
 
     protected $table = 'owner_profits';
 
     protected $fillable = [
+        'business_id',
+        'amount',
+        'recorded_at',
         'period_month',
         'period_year',
         'net_profit',
@@ -28,6 +32,7 @@ class OwnerProfit extends Model
     ];
 
     protected $casts = [
+        'recorded_at' => 'datetime',
         'allocation_settings' => 'json',
         'auto_allocated' => 'boolean',
         'manual_override' => 'boolean',
