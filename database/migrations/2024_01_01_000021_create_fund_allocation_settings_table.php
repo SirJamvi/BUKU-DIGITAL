@@ -45,7 +45,7 @@ return new class extends Migration
             $table->index('created_by');
             
             // Unique constraint untuk nama alokasi
-            $table->unique('allocation_name', 'unique_allocation_name');
+            // $table->unique('allocation_name', 'unique_allocation_name');
         });
     }
 

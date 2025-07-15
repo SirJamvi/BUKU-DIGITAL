@@ -10,30 +10,22 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ActivityLogger
 {
-    /**
-     * Mencatat aktivitas pengguna.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Closure  $next
-     * @return \Symfony\Component\HttpFoundation\Response
-     */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!Auth::check()) {
-            return $next($request);
-        }
-
         $response = $next($request);
 
-        // Hanya log request yang berhasil dan bukan GET
-        if ($response->isSuccessful() && $request->method() !== 'GET') {
-            UserActivityLog::create([
-                'user_id' => Auth::id(),
-                'action' => $request->route()->getActionName(),
-                'module' => explode('/', $request->path())[0] ?? 'general',
-                'details' => json_encode($request->except(['password', '_token'])),
-                'ip_address' => $request->ip(),
-            ]);
+        if (Auth::check() && $request->method() !== 'GET' && $response->isSuccessful()) {
+            $user = Auth::user();
+            if ($user->business_id) {
+                UserActivityLog::create([
+                    'business_id' => $user->business_id,
+                    'user_id'     => $user->id,
+                    'action'      => $request->route()->getActionName(),
+                    'module'      => explode('/', $request->path())[0] ?? 'general',
+                    'details'     => json_encode($request->except(['password', '_token', '_method'])),
+                    'ip_address'  => $request->ip(),
+                ]);
+            }
         }
 
         return $response;

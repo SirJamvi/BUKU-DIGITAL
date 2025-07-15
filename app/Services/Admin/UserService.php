@@ -30,10 +30,8 @@ class UserService
     {
         $data['password'] = Hash::make($data['password']);
         
-        // INI PERBAIKANNYA: Otomatis mengaitkan user baru dengan bisnis admin saat ini
+        // Secara otomatis mengaitkan user baru dengan bisnis admin saat ini
         $data['business_id'] = Auth::user()->business_id;
-        // Set user yang membuat (jika perlu untuk audit)
-        $data['created_by'] = Auth::id();
 
         return User::create($data);
     }
@@ -67,7 +65,7 @@ class UserService
             throw new \Exception("Anda tidak dapat menghapus akun Anda sendiri.");
         }
         
-        // Keamanan: Pastikan hanya bisa menghapus user dari bisnis yang sama
+        // Tambahan keamanan: pastikan hanya bisa menghapus user dari bisnis yang sama
         if ($user->business_id !== Auth::user()->business_id) {
             abort(403, 'AKSES DITOLAK.');
         }
