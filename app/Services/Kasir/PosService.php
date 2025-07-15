@@ -42,8 +42,7 @@ class PosService
         return DB::transaction(function () use ($data) {
             // 1. Validasi stok sebelum membuat transaksi
             foreach ($data['items'] as $item) {
-                // Gunakan findOrFail untuk keamanan
-                $product = Product::findOrFail($item['product_id']);
+                $product = Product::with('inventory')->find($item['product_id']);
                 if ($product->inventory->current_stock < $item['quantity']) {
                     throw new InsufficientStockException(
                         "Stok untuk produk '{$product->name}' tidak mencukupi."
@@ -53,7 +52,7 @@ class PosService
             
             // 2. Buat transaksi utama
             $transaction = Transaction::create([
-                'business_id' => Auth::user()->business_id, // <-- INI PERBAIKANNYA
+                'business_id' => Auth::user()->business_id,
                 'type' => 'sale',
                 'customer_id' => $data['customer_id'] ?? null,
                 'total_amount' => $data['total_amount'],
@@ -85,7 +84,7 @@ class PosService
             CashFlow::create([
                 'business_id' => $transaction->business_id,
                 'type' => 'income',
-                'category_id' => 1, // Asumsi ID 1 adalah "Penjualan Produk" di expense_categories
+                'category_id' => 1, // Ganti dengan ID kategori "Penjualan Produk" Anda
                 'amount' => $transaction->total_amount,
                 'description' => 'Pendapatan dari penjualan #' . $transaction->id,
                 'date' => $transaction->transaction_date,

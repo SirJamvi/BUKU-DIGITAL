@@ -8,10 +8,9 @@
 
 @section('content')
     <x-card title="Formulir Pencatatan Pengeluaran">
-        <form action="{{ route('admin.expenses.store') }}" method="POST">
+        <form action="{{ route('admin.financial.expenses.store') }}" method="POST">
             @csrf
             
-            {{-- INI BAGIAN YANG DIPERBARUI --}}
             <x-input 
                 name="category_name" 
                 label="Kategori Pengeluaran" 

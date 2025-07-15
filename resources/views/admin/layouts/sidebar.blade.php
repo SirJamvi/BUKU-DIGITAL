@@ -39,14 +39,6 @@
                     <span>Supplier</span>
                 </a>
                 @endpermission
-
-                @permission('expense_categories.read')
-                <a href="{{ route('admin.expense_categories.index') }}"
-                class="sidebar-item sub-item {{ request()->routeIs('admin.expense_categories.*') ? 'active' : '' }}">
-                    <i class="fas fa-list-ul"></i>
-                    <span>Kategori Biaya</span>
-                </a>
-                @endpermission
             </div>
 
             @permission('inventory.read')
@@ -67,6 +59,13 @@
             <a href="{{ route('admin.customers.index') }}" class="sidebar-item {{ request()->routeIs('admin.customers.*') ? 'active' : '' }}">
                 <i class="fas fa-users"></i>
                 <span>Pelanggan</span>
+            </a>
+            @endpermission
+
+            @permission('financial.view_all')
+            <a href="{{ route('admin.financial.expenses') }}" class="sidebar-item {{ request()->routeIs('admin.financial.expenses*') ? 'active' : '' }}">
+                <i class="fas fa-receipt"></i>
+                <span>Pengeluaran</span>
             </a>
             @endpermission
 
