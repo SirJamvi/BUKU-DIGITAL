@@ -14,17 +14,22 @@ class DashboardController extends Controller
     public function __construct(DashboardService $dashboardService)
     {
         $this->dashboardService = $dashboardService;
-        // Middleware sudah didaftarkan di route file
     }
 
     public function index(): View
     {
         try {
-            $data = $this->dashboardService->getDashboardData();
-            return view('admin.dashboard.index', $data);
+            // Cukup panggil satu fungsi ini untuk mendapatkan semua data
+            $dashboardData = $this->dashboardService->getDashboardData();
+            
+            return view('admin.dashboard.index', $dashboardData);
+            
         } catch (\Exception $e) {
             logger()->error('Error fetching dashboard data: ' . $e->getMessage());
-            return view('admin.errors.500', ['message' => 'Tidak dapat memuat data dashboard.']);
+            // Tampilkan halaman error jika terjadi masalah
+            return view('admin.dashboard.index', [
+                'error' => 'Tidak dapat memuat data dashboard. Silakan coba lagi nanti.'
+            ]);
         }
     }
 }

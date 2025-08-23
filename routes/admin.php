@@ -24,12 +24,16 @@ Route::resource('categories', CategoryController::class);
 Route::resource('products', ProductController::class);
 Route::resource('users', UserController::class);
 Route::resource('suppliers', SupplierController::class)->except(['show']);
-Route::resource('transactions', TransactionController::class)->only(['index', 'show']);
-Route::resource('customers', CustomerController::class)->only(['index', 'show']);
+Route::resource('transactions', TransactionController::class)->except(['create', 'store', 'destroy']);
+Route::resource('customers', CustomerController::class)->except(['create', 'store', 'destroy']);
 Route::resource('expense-categories', \App\Http\Controllers\Admin\ExpenseCategoryController::class);
 
 // Financial & Expenses - DIJADIKAN SATU
 Route::prefix('financial')->name('financial.')->group(function () {
+     Route::get('/capital', [FinancialController::class, 'capital'])->name('capital.index');
+    Route::post('/capital', [FinancialController::class, 'storeCapital'])->name('capital.store');
+    Route::post('/closing', [FinancialController::class, 'processClosing'])->name('closing.process');
+
     Route::get('/', [FinancialController::class, 'index'])->name('index');
     Route::get('/cash-flow', [FinancialController::class, 'cashFlow'])->name('cash-flow');
     Route::get('/expenses', [FinancialController::class, 'expenses'])->name('expenses');
@@ -38,9 +42,19 @@ Route::prefix('financial')->name('financial.')->group(function () {
     // Rute untuk menambah pengeluaran
     Route::get('/expenses/create', [FinancialController::class, 'createExpense'])->name('expenses.create');
     Route::post('/expenses', [FinancialController::class, 'storeExpense'])->name('expenses.store');
+    
+    // [BARU] Rute untuk edit, update, dan delete pengeluaran
+    Route::get('/expenses/{expense}/edit', [FinancialController::class, 'editExpense'])->name('expenses.edit');
+    Route::put('/expenses/{expense}', [FinancialController::class, 'updateExpense'])->name('expenses.update');
+    Route::delete('/expenses/{expense}', [FinancialController::class, 'destroyExpense'])->name('expenses.destroy');
 
     // Rute untuk mengelola kategori pengeluaran dari modal
     Route::post('/expense-categories', [FinancialController::class, 'storeExpenseCategory'])->name('expense_categories.store');
+
+    // [BARU] Rute untuk Modal & Tutup Buku
+    Route::get('/capital', [FinancialController::class, 'capital'])->name('capital.index');
+    Route::post('/capital', [FinancialController::class, 'storeCapital'])->name('capital.store');
+    Route::post('/closing', [FinancialController::class, 'processClosing'])->name('closing.process');
 
     // Rute baru untuk inisialisasi data finansial
     Route::post('/initialize-data', [FinancialController::class, 'initializeFinancialData'])->name('initialize-data');

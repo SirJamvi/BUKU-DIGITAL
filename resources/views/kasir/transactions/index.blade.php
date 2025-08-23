@@ -37,8 +37,15 @@
                         <td class="text-center"><span class="badge" style="background-color: var(--kasir-bg-secondary); color: var(--kasir-text);">{{ $transaction->payment_method }}</span></td>
                         <td class="text-center">
                             <x-button href="{{ route('kasir.transactions.show', $transaction->id) }}" variant="info" class="btn-sm">
-                                <i class="fas fa-eye"></i> Lihat Detail
+                                <i class="fas fa-eye"></i>
                             </x-button>
+                            
+                            {{-- TOMBOL EDIT BARU DENGAN OTORISASI --}}
+                            @can('update', $transaction)
+                                <x-button href="{{ route('kasir.transactions.edit', $transaction->id) }}" variant="warning" class="btn-sm">
+                                    <i class="fas fa-edit"></i>
+                                </x-button>
+                            @endcan
                         </td>
                     </tr>
                 @empty
@@ -55,4 +62,4 @@
             </div>
         @endif
     </x-card>
-@endsection 
+@endsection

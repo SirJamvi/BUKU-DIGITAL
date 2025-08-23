@@ -43,15 +43,18 @@
                                     <label for="initial_capital" class="form-label">Modal Awal Bisnis</label>
                                     <div class="input-group">
                                         <span class="input-group-text">Rp</span>
-                                        <input type="number" class="form-control @error('initial_capital') is-invalid @enderror" 
+                                        <input type="text" class="form-control @error('initial_capital') is-invalid @enderror" 
                                                id="initial_capital" name="initial_capital" 
-                                               value="{{ old('initial_capital', 10000000) }}" 
-                                               min="1000000" step="100000" required>
+                                               value="{{ old('initial_capital', '10000000') }}" 
+                                               placeholder="Contoh: 10000000"
+                                               pattern="[0-9,]*"
+                                               inputmode="numeric"
+                                               required>
                                         @error('initial_capital')
                                             <div class="invalid-feedback">{{ $message }}</div>
                                         @enderror
                                     </div>
-                                    <small class="form-text text-muted">Minimal Rp 1.000.000</small>
+                                    <small class="form-text text-muted">Minimal Rp 1.000.000 (input angka saja tanpa koma)</small>
                                 </div>
                                 <div class="col-md-6 d-flex align-items-end">
                                     <button type="submit" class="btn btn-warning">
@@ -195,16 +198,52 @@
 @push('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Auto-format input modal awal
         const initialCapitalInput = document.getElementById('initial_capital');
+        
         if (initialCapitalInput) {
+            // Function to format number with thousand separators
+            function formatNumber(num) {
+                return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            }
+            
+            // Function to remove formatting and get raw number
+            function getRawNumber(str) {
+                return str.replace(/[^\d]/g, ''); // Remove all non-digits
+            }
+            
+            // Handle input formatting
             initialCapitalInput.addEventListener('input', function(e) {
-                // Format angka dengan pemisah ribuan
-                let value = e.target.value.replace(/\D/g, '');
+                let value = getRawNumber(e.target.value);
+                
                 if (value) {
-                    e.target.value = value;
+                    // Format with thousand separators
+                    const formattedValue = formatNumber(value);
+                    e.target.value = formattedValue;
+                } else {
+                    e.target.value = '';
                 }
             });
+            
+            // Handle paste event
+            initialCapitalInput.addEventListener('paste', function(e) {
+                setTimeout(() => {
+                    let value = getRawNumber(e.target.value);
+                    if (value) {
+                        const formattedValue = formatNumber(value);
+                        e.target.value = formattedValue;
+                    }
+                }, 0);
+            });
+            
+            // Before form submission, convert formatted value back to raw number
+            const form = initialCapitalInput.closest('form');
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    // Convert formatted value back to raw number before sending
+                    const rawValue = getRawNumber(initialCapitalInput.value);
+                    initialCapitalInput.value = rawValue;
+                });
+            }
         }
     });
 </script>

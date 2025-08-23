@@ -24,6 +24,10 @@ Route::prefix('pos')->name('pos.')->group(function () {
 Route::prefix('transactions')->name('transactions.')->group(function () {
     Route::get('/', [TransactionController::class, 'index'])->name('index');
     Route::get('/{transaction}', [TransactionController::class, 'show'])->name('show');
+    
+    // RUTE BARU UNTUK EDIT
+    Route::get('/{transaction}/edit', [TransactionController::class, 'edit'])->name('edit');
+    Route::put('/{transaction}', [TransactionController::class, 'update'])->name('update');
 });
 
 // Customer Management

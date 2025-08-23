@@ -4,12 +4,18 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\Admin\FinancialService;
+use App\Models\CapitalTracking;
+use App\Models\CashFlow;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class FinancialController extends Controller
 {
+    use AuthorizesRequests;
+
     protected FinancialService $financialService;
 
     public function __construct(FinancialService $financialService)
@@ -17,24 +23,28 @@ class FinancialController extends Controller
         $this->financialService = $financialService;
     }
 
+    // Menampilkan halaman utama Finansial
     public function index(): View
     {
         $financialSummary = $this->financialService->getFinancialSummary();
         return view('admin.financial.index', compact('financialSummary'));
     }
 
+    // Menampilkan halaman Laporan Pengeluaran (Daftar)
     public function expenses(): View
     {
-        $expenses   = $this->financialService->getExpensesWithPagination();
+        $expenses = $this->financialService->getExpensesWithPagination();
         $categories = $this->financialService->getExpenseCategories();
         return view('admin.financial.expenses', compact('expenses', 'categories'));
     }
 
+    // Menampilkan halaman form untuk mencatat pengeluaran baru
     public function createExpense(): View
     {
         return view('admin.financial.create_expense');
     }
 
+    // Menyimpan data pengeluaran baru
     public function storeExpense(Request $request): RedirectResponse
     {
         $request->validate([
@@ -43,25 +53,18 @@ class FinancialController extends Controller
             'description'   => 'required|string|max:500',
             'date'          => 'required|date',
         ]);
-
         $this->financialService->createExpense($request->all());
-
-        return redirect()->route('admin.financial.expenses')
-            ->with('success', 'Data pengeluaran berhasil disimpan.');
+        return redirect()->route('admin.financial.expenses')->with('success', 'Data pengeluaran berhasil disimpan.');
     }
 
+    // Menyimpan kategori pengeluaran baru dari modal
     public function storeExpenseCategory(Request $request): RedirectResponse
     {
-        $request->validate([
-            'name' => 'required|string|max:191',
-            'type' => 'required|string',
-        ]);
-
+        $request->validate(['name' => 'required|string|max:191', 'type' => 'required|string']);
         $this->financialService->createExpenseCategory($request->all());
-
         return back()->with('success', 'Kategori pengeluaran baru berhasil ditambahkan.');
     }
-
+    
     public function cashFlow(): View
     {
         $cashFlows = $this->financialService->getCashFlowWithPagination();
@@ -71,51 +74,146 @@ class FinancialController extends Controller
     public function roiAnalysis(): View
     {
         $roiData = $this->financialService->getRoiAnalysis();
-
-        $debugInfo = [
-            'has_capital_data' => $roiData['has_capital_data'] ?? false,
-            'data_source'      => $roiData['data_source'] ?? 'unknown',
-            'warning_message'  => $roiData['warning_message'] ?? null,
-        ];
-
-        return view('admin.financial.roi-analysis', compact('roiData', 'debugInfo'));
+        return view('admin.financial.roi-analysis', compact('roiData'));
     }
 
-    public function initializeFinancialData(Request $request): RedirectResponse
+    /**
+     * Menampilkan halaman untuk mengatur modal.
+     */
+    public function capital(): View
     {
-        $request->validate([
-            'initial_capital' => 'required|numeric|min:1000000',
-        ]);
+        $capital = CapitalTracking::where('business_id', Auth::user()->business_id)->first();
+        return view('admin.financial.capital', compact('capital'));
+    }
 
+    /**
+     * Menyimpan data modal.
+     */
+    public function storeCapital(Request $request): RedirectResponse
+    {
+        $request->validate(['initial_capital' => 'required|numeric|min:0']);
+        $this->financialService->storeOrUpdateCapital($request->all());
+        return redirect()->route('admin.financial.index')->with('success', 'Modal berhasil disimpan.');
+    }
+
+    /**
+     * Memproses permintaan tutup buku bulanan.
+     */
+    public function processMonthlyClosing(Request $request): RedirectResponse
+    {
+        $request->validate(['period' => 'required|date_format:Y-m']);
+        
         try {
-            $result = $this->financialService->initializeBusinessFinancialData(
-                $request->initial_capital
-            );
-
-            return redirect()->route('admin.financial.roi-analysis')
-                ->with('success', $result['message']);
+            $this->financialService->processMonthlyClosing($request->input('period'));
+            return redirect()->route('admin.fund-allocation.index')->with('success', 'Proses tutup buku berhasil. Laba bersih siap dialokasikan.');
         } catch (\Exception $e) {
-            return redirect()->back()
-                ->with('error', 'Gagal menginisialisasi data: ' . $e->getMessage());
+            return back()->with('error', 'Gagal memproses tutup buku: ' . $e->getMessage());
         }
     }
 
-    public function processMonthlyClosing(Request $request): RedirectResponse
+    /**
+     * Memproses permintaan tutup buku (alias untuk processMonthlyClosing).
+     * Method ini ditambahkan untuk kompatibilitas dengan route yang sudah ada.
+     */
+    public function processClosing(Request $request): RedirectResponse
     {
-        // Validasi input, pastikan formatnya YYYY-MM
+        // Validasi input - bisa berupa period (Y-m) atau tanggal lengkap
         $request->validate([
-            'period' => 'required|date_format:Y-m',
+            'period' => 'sometimes|required|date_format:Y-m',
+            'closing_date' => 'sometimes|required|date',
         ]);
+        
         try {
-            // Panggil service untuk memproses tutup buku
-            $this->financialService->processMonthlyClosing($request->period);
-            // Redirect kembali ke halaman ROI dengan pesan sukses
-            return redirect()->route('admin.financial.roi-analysis')
-                ->with('success', 'Data profit bulanan berhasil disinkronkan dan diperbarui!');
+            // Jika ada parameter period, gunakan processMonthlyClosing
+            if ($request->has('period')) {
+                $this->financialService->processMonthlyClosing($request->input('period'));
+            } 
+            // Jika ada closing_date, konversi ke format Y-m
+            elseif ($request->has('closing_date')) {
+                $closingDate = \Carbon\Carbon::parse($request->input('closing_date'));
+                $period = $closingDate->format('Y-m');
+                $this->financialService->processMonthlyClosing($period);
+            }
+            // Jika tidak ada parameter, gunakan bulan saat ini
+            else {
+                $currentPeriod = now()->format('Y-m');
+                $this->financialService->processMonthlyClosing($currentPeriod);
+            }
+            
+            return redirect()->route('admin.fund-allocation.index')
+                ->with('success', 'Proses tutup buku berhasil. Laba bersih siap dialokasikan.');
         } catch (\Exception $e) {
-            // Jika terjadi error, kembali dengan pesan kesalahan
-            return redirect()->back()
-                ->with('error', 'Gagal melakukan sinkronisasi: ' . $e->getMessage());
+            return back()->with('error', 'Gagal memproses tutup buku: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Menampilkan form untuk mengedit data pengeluaran.
+     */
+    public function editExpense(CashFlow $expense): View
+    {
+        $this->authorize('update', $expense);
+        return view('admin.financial.edit_expense', compact('expense'));
+    }
+
+    /**
+     * Memproses pembaruan data pengeluaran.
+     */
+    public function updateExpense(Request $request, CashFlow $expense): RedirectResponse
+    {
+        $this->authorize('update', $expense);
+        
+        $request->validate([
+            'category_name' => 'required|string|max:191',
+            'amount'        => 'required|numeric|min:1',
+            'description'   => 'required|string|max:500',
+            'date'          => 'required|date',
+        ]);
+
+        $this->financialService->updateExpense($expense, $request->all());
+
+        return redirect()->route('admin.financial.expenses')->with('success', 'Data pengeluaran berhasil diperbarui.');
+    }
+
+    /**
+     * Menghapus data pengeluaran.
+     */
+    public function destroyExpense(CashFlow $expense): RedirectResponse
+    {
+        $this->authorize('delete', $expense);
+        
+        $this->financialService->deleteExpense($expense);
+        
+        return redirect()->route('admin.financial.expenses')->with('success', 'Data pengeluaran berhasil dihapus.');
+    }
+
+    /**
+     * Menampilkan halaman untuk proses tutup buku dengan form.
+     */
+    public function showClosingForm(): View
+    {
+        $availablePeriods = $this->financialService->getAvailablePeriodsForClosing();
+        return view('admin.financial.closing-form', compact('availablePeriods'));
+    }
+
+    /**
+     * Mendapatkan data summary untuk periode tertentu (AJAX).
+     */
+    public function getClosingSummary(Request $request)
+    {
+        $request->validate(['period' => 'required|date_format:Y-m']);
+        
+        try {
+            $summary = $this->financialService->getClosingSummaryForPeriod($request->input('period'));
+            return response()->json([
+                'success' => true,
+                'data' => $summary
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
         }
     }
 }

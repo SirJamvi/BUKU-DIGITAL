@@ -30,6 +30,9 @@
                         <x-button href="{{ route('admin.transactions.show', $transaction->id) }}" variant="info" class="btn-sm">
                             <i class="fas fa-eye"></i> Detail
                         </x-button>
+                         <x-button href="{{ route('admin.transactions.edit', $transaction->id) }}" variant="warning" class="btn-sm">
+                            <i class="fas fa-edit"></i>
+                        </x-button>
                     </td>
                 </tr>
             @empty
