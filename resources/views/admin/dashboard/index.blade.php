@@ -251,55 +251,60 @@
     {{-- Analytics & Activities Row --}}
     <div class="row g-4 mt-4">
         {{-- Comprehensive Analytics --}}
-        <div class="col-lg-8">
-            <div class="dashboard-card">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h4 class="card-title">
-                                <i class="fas fa-chart-line"></i>
-                                Analitik Performa
-                            </h4>
-                            <p class="card-subtitle">Tren penjualan dan keuntungan 6 bulan terakhir</p>
-                        </div>
-                        <div class="chart-controls">
-                            <div class="btn-group" role="group">
-                                <input type="radio" class="btn-check" name="chartPeriod" id="monthly" checked>
-                                <label class="btn btn-outline-primary btn-sm" for="monthly">Bulanan</label>
-                                
-                                <input type="radio" class="btn-check" name="chartPeriod" id="weekly">
-                                <label class="btn btn-outline-primary btn-sm" for="weekly">Mingguan</label>
-                            </div>
-                        </div>
-                    </div>
+<div class="col-lg-8">
+    <div class="dashboard-card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="card-title">
+                        <i class="fas fa-chart-line"></i>
+                        Analitik Performa
+                    </h4>
+                    <p class="card-subtitle">Tren penjualan dan keuntungan 6 bulan terakhir</p>
                 </div>
-                <div class="card-body">
-                    <div class="chart-wrapper">
-                        <canvas id="comprehensiveChart"></canvas>
+                <div class="chart-controls">
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="chartPeriod" id="monthly" checked>
+                        <label class="btn btn-outline-primary btn-sm" for="monthly">Bulanan</label>
+
+                        <input type="radio" class="btn-check" name="chartPeriod" id="weekly">
+                        <label class="btn btn-outline-primary btn-sm" for="weekly">Mingguan</label>
                     </div>
-                    <div class="chart-stats">
-                        <div class="stat-item">
-                            <div class="stat-label">Rata-rata Penjualan</div>
-                            <div class="stat-value text-primary">Rp 16.5 Jt</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Rata-rata Keuntungan</div>
-                            <div class="stat-value text-success">Rp 5.8 Jt</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Margin Keuntungan</div>
-                            <div class="stat-value text-info">35.2%</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-footer">
-                    <a href="{{ route('admin.reports.index') }}" class="btn btn-outline-primary">
-                        <i class="fas fa-chart-pie"></i> Lihat Laporan Lengkap
-                    </a>
                 </div>
             </div>
         </div>
-
+        <div class="card-body">
+            <div class="chart-wrapper">
+                <canvas id="comprehensiveChart"></canvas>
+            </div>
+            <div class="chart-stats">
+                <div class="stat-item">
+                    <div class="stat-label">Rata-rata Penjualan</div>
+                    <div class="stat-value text-primary">
+                        Rp {{ number_format($avgSales, 2, ',', '.') }} Jt
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Rata-rata Keuntungan</div>
+                    <div class="stat-value text-success">
+                        Rp {{ number_format($avgProfit, 2, ',', '.') }} Jt
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Margin Keuntungan</div>
+                    <div class="stat-value text-info">
+                        {{ $profitMargin }}%
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer">
+            <a href="{{ route('admin.reports.index') }}" class="btn btn-outline-primary">
+                <i class="fas fa-chart-pie"></i> Lihat Laporan Lengkap
+            </a>
+        </div>
+    </div>
+</div>
         {{-- Recent Activities --}}
         <div class="col-lg-4">
             <div class="dashboard-card">

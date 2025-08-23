@@ -28,6 +28,12 @@
                         <x-button href="{{ route('admin.customers.show', $customer->id) }}" variant="info" class="btn-sm">
                             <i class="fas fa-eye"></i> Detail
                         </x-button>
+
+
+                        {{-- TOMBOL EDIT BARU --}}
+                    <x-button href="{{ route('admin.customers.edit', $customer->id) }}" variant="warning" class="btn-sm">
+                        <i class="fas fa-edit"></i>
+                    </x-button>
                     </td>
                 </tr>
             @empty

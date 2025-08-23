@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use App\Models\CashFlow; // <-- Tambahkan ini
+use App\Policies\CashFlowPolicy; // <-- Tambahkan ini
 use App\Models\User;
 use App\Models\Product;
 use App\Models\Transaction;
@@ -25,6 +27,8 @@ class AuthServiceProvider extends ServiceProvider
         Product::class => ProductPolicy::class,
         Transaction::class => TransactionPolicy::class,
         Inventory::class => InventoryPolicy::class,
+        Transaction::class => TransactionPolicy::class,
+        CashFlow::class => CashFlowPolicy::class,
         // Report tidak terikat pada model, jadi kita akan menggunakan Gate
     ];
 

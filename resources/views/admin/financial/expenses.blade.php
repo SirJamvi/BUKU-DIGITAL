@@ -31,6 +31,7 @@
                     <th>Deskripsi</th>
                     <th class="text-end">Jumlah</th>
                     <th>Dicatat oleh</th>
+                    <th class="text-center">Aksi</th> {{-- KOLOM BARU --}}
                 </tr>
             @endslot
             @forelse ($expenses as $expense)
@@ -40,9 +41,31 @@
                     <td>{{ $expense->description }}</td>
                     <td class="text-end text-danger">Rp {{ number_format($expense->amount, 0, ',', '.') }}</td>
                     <td>{{ $expense->createdBy->name ?? 'Sistem' }}</td>
+                    {{-- TOMBOL BARU --}}
+                    <td class="text-center">
+                        <x-button href="{{ route('admin.financial.expenses.edit', $expense->id) }}" variant="warning" class="btn-sm"><i class="fas fa-edit"></i></x-button>
+                        <x-button type="button" variant="danger" class="btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ $expense->id }}"><i class="fas fa-trash"></i></x-button>
+                        
+                        {{-- Modal Delete untuk setiap item --}}
+                        <x-modal id="deleteModal-{{ $expense->id }}" title="Konfirmasi Hapus">
+                            <p>Apakah Anda yakin ingin menghapus pengeluaran ini?</p>
+                            <p><strong>Tanggal:</strong> {{ \Carbon\Carbon::parse($expense->date)->isoFormat('D MMM YYYY') }}</p>
+                            <p><strong>Deskripsi:</strong> {{ $expense->description }}</p>
+                            <p><strong>Jumlah:</strong> Rp {{ number_format($expense->amount, 0, ',', '.') }}</p>
+                            
+                            @slot('footer')
+                                <form action="{{ route('admin.financial.expenses.destroy', $expense->id) }}" method="POST">
+                                    @csrf
+                                    @method('DELETE')
+                                    <x-button type="button" variant="secondary" data-bs-dismiss="modal">Batal</x-button>
+                                    <x-button type="submit" variant="danger">Ya, Hapus</x-button>
+                                </form>
+                            @endslot
+                        </x-modal>
+                    </td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="text-center">Tidak ada data pengeluaran yang ditemukan.</td></tr>
+                <tr><td colspan="6" class="text-center">Tidak ada data pengeluaran yang ditemukan.</td></tr>
             @endforelse
         </x-table>
 

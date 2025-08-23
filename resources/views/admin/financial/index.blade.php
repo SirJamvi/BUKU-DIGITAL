@@ -10,6 +10,26 @@
 @section('content')
     <div class="container-fluid">
         <div class="row g-4 mb-4">
+
+           <div class="col-md-6">
+            <x-card title="Proses Tutup Buku Bulanan">
+                <form action="{{ route('admin.financial.closing.process') }}" method="POST">
+                    @csrf
+                    <p>Pilih bulan dan tahun untuk menghitung laba bersih dan menyiapkannya untuk alokasi dana.</p>
+                    <x-input type="month" name="period" :value="now()->format('Y-m')" required />
+                    <x-button type="submit" class="mt-2">Proses Tutup Buku</x-button>
+                </form>
+            </x-card>
+        </div>
+        {{-- Tombol Atur Modal --}}
+        <div class="col-md-6">
+            <x-card title="Pengaturan Modal">
+                <p>Atur jumlah modal investasi awal Anda untuk perhitungan ROI yang akurat.</p>
+                <a href="{{ route('admin.financial.capital.index') }}" class="btn btn-outline-primary">Atur Modal Awal</a>
+            </x-card>
+        </div>
+    </div>
+
             {{-- Total Pemasukan --}}
             <div class="col-md-4">
                 <div class="card text-white bg-success h-100">
