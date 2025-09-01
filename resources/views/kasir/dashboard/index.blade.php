@@ -53,19 +53,33 @@
             </div>
         </div>
 
-        {{-- Notifikasi Stok --}}
+        {{-- [BARU] Produk Terjual Hari Ini --}}
         <div class="col-lg-4 col-md-6">
             <div class="card h-100" style="background-color: var(--kasir-bg-dominant);">
-                 <div class="card-body d-flex align-items-center">
-                    <div class="flex-shrink-0 me-3">
-                        <div class="p-3 rounded-circle d-flex align-items-center justify-content-center" style="background-color: rgba(247, 86, 124, 0.1);">
-                            <i class="fas fa-exclamation-triangle fa-2x" style="color: var(--kasir-accent);"></i>
+                 <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="p-3 rounded-circle d-flex align-items-center justify-content-center" style="background-color: rgba(247, 86, 124, 0.1);">
+                                <i class="fas fa-box-open fa-2x" style="color: var(--kasir-accent);"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h6 class="text-muted mb-1">Produk Terjual Hari Ini</h6>
                         </div>
                     </div>
-                    <div class="flex-grow-1">
-                        <h6 class="text-muted mb-1">Produk Stok Menipis</h6>
-                        <h4 class="fw-bold mb-0">{{ number_format($lowStockItems ?? 0, 0, ',', '.') }} Item</h4>
+
+                    {{-- Daftar Produk --}}
+                    <div class="list-group list-group-flush">
+                        @forelse ($productsSoldToday as $product)
+                            <div class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0">
+                                <span>{{ $product->name }}</span>
+                                <span class="badge bg-secondary rounded-pill">{{ $product->total_quantity_sold }} Pcs</span>
+                            </div>
+                        @empty
+                            <p class="text-center text-muted mt-3">Belum ada produk yang terjual hari ini.</p>
+                        @endforelse
                     </div>
+
                 </div>
             </div>
         </div>

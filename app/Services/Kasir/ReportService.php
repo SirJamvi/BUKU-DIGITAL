@@ -1,5 +1,7 @@
 <?php
+
 namespace App\Services\Kasir;
+
 use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -12,29 +14,46 @@ class ReportService
      */
     public function getSalesReport(int $kasirId, array $filters): array
     {
-        $query = Transaction::where('created_by', $kasirId)->where('type', 'sale');
-            
-        // Terapkan filter tanggal
-        $this->applyDateFilters($query, $filters);
-        $transactions = $query->with('customer')->get();
+        // Query dasar untuk transaksi
+        $baseQuery = Transaction::where('transactions.created_by', $kasirId) // <-- [FIX] Ditambahkan prefix 'transactions.'
+                                ->where('type', 'sale');
+        
+        // Terapkan filter tanggal pada query dasar
+        $this->applyDateFilters($baseQuery, $filters);
+
+        // Klon query untuk kalkulasi yang berbeda agar tidak saling mempengaruhi
+        $transactionsQuery = clone $baseQuery;
+        $productsQuery = clone $baseQuery;
+
+        // Ambil data transaksi lengkap
+        $transactions = $transactionsQuery->with('customer')->get();
         $totalSales = $transactions->sum('total_amount');
         $totalTransactions = $transactions->count();
-        
-        // Hitung rincian berdasarkan metode pembayaran dari data yang sudah difilter
+
+        // Hitung rincian berdasarkan metode pembayaran
         $salesByPaymentMethod = $transactions->groupBy('payment_method')
-            ->map(function ($group) {
-                return $group->sum('total_amount');
-            });
+            ->map(fn($group) => $group->sum('total_amount'));
         
+        // Hitung produk terlaris
+        $topSoldProducts = $productsQuery
+            ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+            ->join('products', 'transaction_details.product_id', '=', 'products.id')
+            ->select('products.name', DB::raw('SUM(transaction_details.quantity) as total_quantity_sold'))
+            ->groupBy('products.name')
+            ->orderByDesc('total_quantity_sold')
+            ->limit(5)
+            ->get();
+
         return [
-            'transactions' => $transactions,
-            'total_sales' => $totalSales,
-            'total_transactions' => $totalTransactions,
+            'transactions'         => $transactions,
+            'total_sales'          => $totalSales,
+            'total_transactions'   => $totalTransactions,
             'salesByPaymentMethod' => $salesByPaymentMethod,
-            'filters' => $filters,
+            'topSoldProducts'      => $topSoldProducts,
+            'filters'              => $filters,
         ];
     }
-    
+
     /**
      * Helper untuk menerapkan filter tanggal pada query.
      */
@@ -42,7 +61,7 @@ class ReportService
     {
         $startDate = $filters['start_date'] ?? null;
         $endDate = $filters['end_date'] ?? null;
-        
+
         if ($startDate && $endDate) {
             $query->whereBetween($dateColumn, [
                 Carbon::parse($startDate)->startOfDay(),

@@ -65,6 +65,26 @@
                 </div>
             </div>
 
+            {{-- [BARU] Kartu Produk Terlaris --}}
+            <div class="mb-4">
+                <x-card title="Top 5 Produk Terlaris (Berdasarkan Filter)">
+                     @if(isset($topSoldProducts) && $topSoldProducts->isNotEmpty())
+                        <div class="list-group">
+                            @foreach($topSoldProducts as $product)
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold">{{ $product->name }}</span>
+                                    <span class="badge bg-secondary rounded-pill" style="font-size: 1rem;">
+                                        {{ $product->total_quantity_sold }} Pcs
+                                    </span>
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <p class="text-muted text-center">Tidak ada produk yang terjual pada periode ini.</p>
+                    @endif
+                </x-card>
+            </div>
+
             {{-- Kartu Rincian Metode Pembayaran --}}
             <div class="mb-4">
                 <x-card title="Rincian per Metode Pembayaran">
