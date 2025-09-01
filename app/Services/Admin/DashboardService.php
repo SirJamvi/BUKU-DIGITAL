@@ -21,30 +21,24 @@ class DashboardService
     {
         $businessId = Auth::user()->business_id;
         $today = Carbon::today();
+        $yesterday = Carbon::yesterday();
         $startOfMonth = Carbon::now()->startOfMonth();
         $endOfMonth = Carbon::now()->endOfMonth();
+        $startOfLastMonth = Carbon::now()->subMonth()->startOfMonth();
+        $endOfLastMonth = Carbon::now()->subMonth()->endOfMonth();
 
-        // 1. Metrik Penjualan Hari Ini
-        $salesToday = Transaction::where('business_id', $businessId)
-            ->whereDate('transaction_date', $today)
-            ->sum('total_amount');
+        // --- Metrik Utama ---
+        $salesToday = $this->getSalesForDate($businessId, $today);
+        $netProfitThisMonth = $this->getNetProfitForPeriod($businessId, $startOfMonth, $endOfMonth);
 
-        // 2. Metrik Laba Bersih Bulan Ini
-        $grossProfitThisMonth = DB::table('transactions')
-            ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
-            ->join('products', 'transaction_details.product_id', '=', 'products.id')
-            ->where('transactions.business_id', $businessId)
-            ->whereBetween('transactions.transaction_date', [$startOfMonth, $endOfMonth])
-            ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
+        // --- Perbandingan ---
+        $salesYesterday = $this->getSalesForDate($businessId, $yesterday);
+        $salesChangePercentage = $this->calculatePercentageChange($salesToday, $salesYesterday);
 
-        $expensesThisMonth = CashFlow::where('business_id', $businessId)
-            ->where('type', 'expense')
-            ->whereBetween('date', [$startOfMonth, $endOfMonth])
-            ->sum('amount');
+        $netProfitLastMonth = $this->getNetProfitForPeriod($businessId, $startOfLastMonth, $endOfLastMonth);
+        $profitChangePercentage = $this->calculatePercentageChange($netProfitThisMonth, $netProfitLastMonth);
 
-        $netProfitThisMonth = $grossProfitThisMonth - $expensesThisMonth;
-
-        // 3. Metrik Inventaris & User
+        // --- Metrik Lainnya ---
         $lowStockItems = Inventory::where('business_id', $businessId)
             ->whereColumn('current_stock', '<=', 'min_stock')
             ->count();
@@ -52,50 +46,108 @@ class DashboardService
         $totalUsers = User::where('business_id', $businessId)->count();
         $activeUsers = 1; // Placeholder; ganti jika ada tabel session
 
-        // 4. Aktivitas Terbaru
+        // --- Aktivitas Terbaru ---
         $recentActivities = UserActivityLog::with('user')
             ->where('business_id', $businessId)
             ->latest()
             ->limit(5)
             ->get();
 
-        // 5. Data Alokasi Dana
+        // --- Data Alokasi Dana ---
         $fundAllocationSettings = FundAllocationSetting::where('business_id', $businessId)
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->get();
 
-        // 6. Data Performa Bulanan (6 bulan terakhir)
+        // --- Data Performa Bulanan (6 bulan terakhir) ---
         $monthlyPerformance = $this->getMonthlyPerformanceData($businessId, 6);
 
-        // 7. Hitung Rata-rata & Margin
-        $salesArr  = $monthlyPerformance['sales'];   // sudah dalam jutaan
+        // --- Hitung Rata-rata & Margin ---
+        $salesArr = $monthlyPerformance['sales'];   // sudah dalam jutaan
         $profitArr = $monthlyPerformance['profits']; // sudah dalam jutaan
 
         $count = count($salesArr);
-        $avgSales  = $count ? round(array_sum($salesArr)  / $count, 2) : 0;
+        $avgSales = $count ? round(array_sum($salesArr) / $count, 2) : 0;
         $avgProfit = $count ? round(array_sum($profitArr) / $count, 2) : 0;
         $profitMargin = $avgSales > 0 
             ? round(($avgProfit / $avgSales) * 100, 2) 
             : 0;
 
         return [
-            'salesToday'            => $salesToday,
-            'netProfitThisMonth'    => $netProfitThisMonth,
-            'lowStockItems'         => $lowStockItems,
-            'activeUsers'           => $activeUsers,
-            'totalUsers'            => $totalUsers,
-            'recentActivities'      => $recentActivities,
-            'fundAllocationData'    => $fundAllocationSettings,
-            'monthlyPerformanceData'=> $monthlyPerformance,
-            'avgSales'              => $avgSales,
-            'avgProfit'             => $avgProfit,
-            'profitMargin'          => $profitMargin,
+            'salesToday' => $salesToday,
+            'salesChangePercentage' => $salesChangePercentage,
+            'netProfitThisMonth' => $netProfitThisMonth,
+            'profitChangePercentage' => $profitChangePercentage,
+            'lowStockItems' => $lowStockItems,
+            'activeUsers' => $activeUsers,
+            'totalUsers' => $totalUsers,
+            'recentActivities' => $recentActivities,
+            'fundAllocationData' => $fundAllocationSettings,
+            'monthlyPerformanceData' => $monthlyPerformance,
+            'avgSales' => $avgSales,
+            'avgProfit' => $avgProfit,
+            'profitMargin' => $profitMargin,
         ];
     }
 
     /**
-     * Helper untuk mengambil data performa bulanan.
+     * Mengambil total penjualan untuk tanggal tertentu.
+     */
+    private function getSalesForDate(int $businessId, Carbon $date): float
+    {
+        return Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->whereDate('transaction_date', $date)
+            ->sum('total_amount');
+    }
+
+    /**
+     * Mengambil total penjualan untuk rentang tanggal tertentu.
+     */
+    private function getSalesForDateRange(int $businessId, Carbon $startDate, Carbon $endDate): float
+    {
+        return Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->whereBetween('transaction_date', [$startDate, $endDate])
+            ->sum('total_amount');
+    }
+
+    /**
+     * Menghitung laba bersih untuk periode tertentu.
+     */
+    private function getNetProfitForPeriod(int $businessId, Carbon $startDate, Carbon $endDate): float
+    {
+        // Hitung gross profit
+        $grossProfit = DB::table('transactions')
+            ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+            ->join('products', 'transaction_details.product_id', '=', 'products.id')
+            ->where('transactions.business_id', $businessId)
+            ->where('transactions.type', 'sale')
+            ->whereBetween('transactions.transaction_date', [$startDate, $endDate])
+            ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
+
+        // Hitung total expenses
+        $expenses = CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->whereBetween('date', [$startDate, $endDate])
+            ->sum('amount');
+            
+        return $grossProfit - $expenses;
+    }
+
+    /**
+     * Menghitung persentase perubahan antara nilai sekarang dan sebelumnya.
+     */
+    private function calculatePercentageChange(float $current, float $previous): float
+    {
+        if ($previous == 0) {
+            return $current > 0 ? 100.0 : 0.0;
+        }
+        return round((($current - $previous) / $previous) * 100, 2);
+    }
+
+    /**
+     * Mengambil data performa bulanan untuk chart.
      */
     private function getMonthlyPerformanceData(int $businessId, int $months): array
     {
@@ -106,34 +158,21 @@ class DashboardService
         for ($i = $months - 1; $i >= 0; $i--) {
             $date = Carbon::now()->subMonths($i);
             $labels[] = $date->isoFormat('MMMM');
-            $start = $date->copy()->startOfMonth();
-            $end   = $date->copy()->endOfMonth();
+            $startOfMonth = $date->copy()->startOfMonth();
+            $endOfMonth = $date->copy()->endOfMonth();
 
-            // Penjualan bulan ini
-            $sales = Transaction::where('business_id', $businessId)
-                ->whereBetween('transaction_date', [$start, $end])
-                ->sum('total_amount');
-            $salesData[] = round($sales / 1000000, 2); // juta
+            // Penjualan bulan ini (dalam jutaan)
+            $sales = $this->getSalesForDateRange($businessId, $startOfMonth, $endOfMonth);
+            $salesData[] = round($sales / 1000000, 2);
 
-            // Laba bersih bulan ini
-            $gross = DB::table('transactions')
-                ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
-                ->join('products', 'transaction_details.product_id', '=', 'products.id')
-                ->where('transactions.business_id', $businessId)
-                ->whereBetween('transactions.transaction_date', [$start, $end])
-                ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
-
-            $expense = CashFlow::where('business_id', $businessId)
-                ->where('type', 'expense')
-                ->whereBetween('date', [$start, $end])
-                ->sum('amount');
-
-            $profitData[] = round(($gross - $expense) / 1000000, 2); // juta
+            // Laba bersih bulan ini (dalam jutaan)
+            $netProfit = $this->getNetProfitForPeriod($businessId, $startOfMonth, $endOfMonth);
+            $profitData[] = round($netProfit / 1000000, 2);
         }
 
         return [
-            'labels'  => $labels,
-            'sales'   => $salesData,
+            'labels' => $labels,
+            'sales' => $salesData,
             'profits' => $profitData,
         ];
     }

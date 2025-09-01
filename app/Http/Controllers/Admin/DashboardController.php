@@ -16,17 +16,22 @@ class DashboardController extends Controller
         $this->dashboardService = $dashboardService;
     }
 
+    /**
+     * Menampilkan halaman dashboard admin.
+     */
     public function index(): View
     {
         try {
-            // Cukup panggil satu fungsi ini untuk mendapatkan semua data
+            // Mengambil semua data dashboard dari service
             $dashboardData = $this->dashboardService->getDashboardData();
             
             return view('admin.dashboard.index', $dashboardData);
             
         } catch (\Exception $e) {
+            // Log error untuk debugging
             logger()->error('Error fetching dashboard data: ' . $e->getMessage());
-            // Tampilkan halaman error jika terjadi masalah
+            
+            // Tampilkan halaman dengan pesan error
             return view('admin.dashboard.index', [
                 'error' => 'Tidak dapat memuat data dashboard. Silakan coba lagi nanti.'
             ]);
