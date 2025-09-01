@@ -71,6 +71,28 @@
         </div>
     </div>
 
+    {{-- Kartu Rincian Metode Pembayaran --}}
+    <div class="row mt-4">
+        <div class="col-12">
+            <x-card title="Rincian Penjualan Hari Ini per Metode Pembayaran">
+                @if(isset($salesByPaymentMethod) && $salesByPaymentMethod->isNotEmpty())
+                    <div class="list-group">
+                        @foreach($salesByPaymentMethod as $method => $total)
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <span class="fw-bold">{{ ucfirst($method) }}</span>
+                                <span class="badge rounded-pill" style="background-color: var(--kasir-accent); font-size: 1rem;">
+                                    Rp {{ number_format($total, 0, ',', '.') }}
+                                </span>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="text-muted text-center">Belum ada penjualan hari ini.</p>
+                @endif
+            </x-card>
+        </div>
+    </div>
+
     {{-- Kartu Aksi Cepat --}}
     <div class="row mt-4">
         <div class="col-12">
