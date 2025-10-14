@@ -37,8 +37,11 @@
             Hasil Laporan Keuangan
         @endslot
         @slot('headerActions')
-            <x-button variant="secondary"><i class="fas fa-print me-2"></i>Ekspor PDF</x-button>
-        @endslot
+    {{-- request()->query() akan meneruskan parameter filter (start_date, end_date) ke URL ekspor --}}
+    <a href="{{ route('admin.reports.financial.export.pdf', request()->query()) }}" class="btn btn-secondary">
+        <i class="fas fa-print me-2"></i>Ekspor PDF
+    </a>
+@endslot
 
         {{-- Ringkasan Data --}}
         <div class="row text-center mb-4 g-3">

@@ -84,6 +84,7 @@ Route::prefix('reports')->name('reports.')->group(function () {
     Route::get('/sales', [ReportController::class, 'sales'])->name('sales');
     Route::get('/financial', [ReportController::class, 'financial'])->name('financial');
     Route::get('/inventory', [ReportController::class, 'inventory'])->name('inventory');
+    Route::get('/financial/export/pdf', [ReportController::class, 'exportFinancialPdf'])->name('financial.export.pdf');
 });
 
 // Settings
