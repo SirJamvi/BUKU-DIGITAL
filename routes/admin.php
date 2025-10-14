@@ -47,6 +47,11 @@ Route::prefix('financial')->name('financial.')->group(function () {
     Route::get('/expenses/{expense}/edit', [FinancialController::class, 'editExpense'])->name('expenses.edit');
     Route::put('/expenses/{expense}', [FinancialController::class, 'updateExpense'])->name('expenses.update');
     Route::delete('/expenses/{expense}', [FinancialController::class, 'destroyExpense'])->name('expenses.destroy');
+    Route::get('expenses/export/excel', [FinancialController::class, 'exportExcel'])->name('expenses.export.excel');
+    Route::get('expenses/export/pdf', [FinancialController::class, 'exportPdf'])->name('expenses.export.pdf');
+
+
+
 
     // Rute untuk mengelola kategori pengeluaran dari modal
     Route::post('/expense-categories', [FinancialController::class, 'storeExpenseCategory'])->name('expense_categories.store');

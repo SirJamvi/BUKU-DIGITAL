@@ -6,11 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Services\Admin\FinancialService;
 use App\Models\CapitalTracking;
 use App\Models\CashFlow;
+use App\Models\ExpenseCategory;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use App\Exports\ExpensesExport;
+use Maatwebsite\Excel\Facades\Excel;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class FinancialController extends Controller
 {
@@ -30,11 +34,24 @@ class FinancialController extends Controller
         return view('admin.financial.index', compact('financialSummary'));
     }
 
-    // Menampilkan halaman Laporan Pengeluaran (Daftar)
-    public function expenses(): View
+    // Menampilkan halaman Laporan Pengeluaran (Daftar) dengan filter
+    public function expenses(Request $request): View
     {
-        $expenses = $this->financialService->getExpensesWithPagination();
-        $categories = $this->financialService->getExpenseCategories();
+        // Query dasar untuk pengeluaran, pastikan relasi di-load dengan `with()`
+        $query = CashFlow::where('type', 'expense')->with('category', 'createdBy');
+        
+        // Terapkan filter tanggal jika ada input dari user
+        if ($request->filled('start_date')) {
+            $query->whereDate('date', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('date', '<=', $request->end_date);
+        }
+        
+        // Ambil data dengan paginasi
+        $expenses = $query->latest('date')->paginate(10);
+        $categories = ExpenseCategory::all();
+        
         return view('admin.financial.expenses', compact('expenses', 'categories'));
     }
 
@@ -63,6 +80,53 @@ class FinancialController extends Controller
         $request->validate(['name' => 'required|string|max:191', 'type' => 'required|string']);
         $this->financialService->createExpenseCategory($request->all());
         return back()->with('success', 'Kategori pengeluaran baru berhasil ditambahkan.');
+    }
+
+    /**
+     * Menangani ekspor data pengeluaran ke Excel.
+     */
+    public function exportExcel(Request $request)
+    {
+        $query = CashFlow::where('type', 'expense')->with('category', 'createdBy');
+        
+        // Terapkan filter yang sama dari request
+        if ($request->filled('start_date')) {
+            $query->whereDate('date', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('date', '<=', $request->end_date);
+        }
+        
+        // Ambil semua data yang cocok (tanpa paginasi)
+        $expenses = $query->latest('date')->get();
+        
+        $fileName = 'laporan-pengeluaran-' . now()->format('d-m-Y') . '.xlsx';
+        return Excel::download(new ExpensesExport($expenses), $fileName);
+    }
+
+    /**
+     * Menangani ekspor data pengeluaran ke PDF.
+     */
+    public function exportPdf(Request $request)
+    {
+        $query = CashFlow::where('type', 'expense')->with('category', 'createdBy');
+        
+        // Terapkan filter yang sama dari request
+        if ($request->filled('start_date')) {
+            $query->whereDate('date', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('date', '<=', $request->end_date);
+        }
+        
+        // Ambil semua data yang cocok (tanpa paginasi)
+        $expenses = $query->latest('date')->get();
+        
+        // Load view PDF dengan data
+        $pdf = Pdf::loadView('admin.financial.expenses_pdf', compact('expenses'));
+        
+        $fileName = 'laporan-pengeluaran-' . now()->format('d-m-Y') . '.pdf';
+        return $pdf->download($fileName);
     }
     
     public function cashFlow(): View
