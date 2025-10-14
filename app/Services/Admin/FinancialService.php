@@ -217,13 +217,137 @@ class FinancialService
                 'monthly_expense'   => $monthlyExpense,
                 'gross_profit'      => $monthlyGrossProfit,
                 'net_profit'        => $netProfit,
-                'status'            => 'pending', // Selalu set ke 'pending' agar siap dialokasikan
+                'status'            => 'pending',
                 'allocated_at'      => null,
                 'allocated_funds'   => 0,
                 'recorded_at'       => now(),
                 'updated_at'        => now()
             ]
         );
+    }
+
+    /**
+     * Mendapatkan daftar periode yang tersedia untuk tutup buku
+     * (bulan-bulan yang memiliki transaksi)
+     */
+    public function getAvailablePeriodsForClosing(): array
+    {
+        $businessId = Auth::user()->business_id;
+        
+        // Ambil semua periode dari transaksi dan pengeluaran yang ada
+        $transactionPeriods = DB::table('transactions')
+            ->select(DB::raw('YEAR(transaction_date) as year, MONTH(transaction_date) as month'))
+            ->where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', 'completed')
+            ->distinct()
+            ->get();
+
+        $expensePeriods = DB::table('cash_flows')
+            ->select(DB::raw('YEAR(date) as year, MONTH(date) as month'))
+            ->where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->distinct()
+            ->get();
+
+        // Gabungkan dan hapus duplikat
+        $periods = collect($transactionPeriods)->merge($expensePeriods)
+            ->unique(function ($item) {
+                return $item->year . '-' . str_pad($item->month, 2, '0', STR_PAD_LEFT);
+            })
+            ->sortByDesc(function ($item) {
+                return $item->year . '-' . str_pad($item->month, 2, '0', STR_PAD_LEFT);
+            });
+
+        $result = [];
+        foreach ($periods as $period) {
+            $yearMonth = $period->year . '-' . str_pad($period->month, 2, '0', STR_PAD_LEFT);
+            $monthName = Carbon::create($period->year, $period->month, 1)->format('F Y');
+            
+            // Cek apakah periode sudah di-close
+            $isClosed = OwnerProfit::where('business_id', $businessId)
+                ->where('period_year', $period->year)
+                ->where('period_month', $period->month)
+                ->exists();
+
+            $result[] = [
+                'period' => $yearMonth,
+                'label' => $monthName,
+                'is_closed' => $isClosed,
+                'year' => $period->year,
+                'month' => $period->month,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Mendapatkan ringkasan tutup buku untuk periode tertentu
+     * (data preview sebelum benar-benar disimpan)
+     */
+    public function getClosingSummaryForPeriod(string $period): array
+    {
+        $businessId = Auth::user()->business_id;
+        $date = Carbon::createFromFormat('Y-m', $period);
+        $month = $date->month;
+        $year = $date->year;
+
+        $startOfMonth = $date->copy()->startOfMonth();
+        $endOfMonth = $date->copy()->endOfMonth();
+        $monthName = $date->format('F Y');
+
+        // Hitung pendapatan bulan ini
+        $monthlyIncome = Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', 'completed')
+            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
+            ->sum('total_amount');
+
+        // Hitung laba kotor bulan ini
+        $monthlyGrossProfit = DB::table('transaction_details')
+            ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
+            ->join('products', 'transaction_details.product_id', '=', 'products.id')
+            ->where('transactions.business_id', $businessId)
+            ->where('transactions.type', 'sale')
+            ->where('transactions.status', 'completed')
+            ->whereBetween('transactions.transaction_date', [$startOfMonth, $endOfMonth])
+            ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
+
+        // Hitung pengeluaran bulan ini
+        $monthlyExpense = CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->whereBetween('date', [$startOfMonth, $endOfMonth])
+            ->sum('amount');
+
+        // Laba bersih
+        $netProfit = $monthlyGrossProfit - $monthlyExpense;
+
+        // Cek apakah sudah ada data closing untuk periode ini
+        $existingClosing = OwnerProfit::where('business_id', $businessId)
+            ->where('period_year', $year)
+            ->where('period_month', $month)
+            ->first();
+
+        return [
+            'period' => $period,
+            'month_name' => $monthName,
+            'monthly_income' => (float) $monthlyIncome,
+            'monthly_expense' => (float) $monthlyExpense,
+            'gross_profit' => (float) $monthlyGrossProfit,
+            'net_profit' => (float) $netProfit,
+            'is_already_closed' => $existingClosing ? true : false,
+            'closing_data' => $existingClosing,
+            'transactions_count' => Transaction::where('business_id', $businessId)
+                ->where('type', 'sale')
+                ->where('status', 'completed')
+                ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
+                ->count(),
+            'expenses_count' => CashFlow::where('business_id', $businessId)
+                ->where('type', 'expense')
+                ->whereBetween('date', [$startOfMonth, $endOfMonth])
+                ->count(),
+        ];
     }
 
     /**
