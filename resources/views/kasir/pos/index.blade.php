@@ -48,6 +48,47 @@
         background-color: #d64a6a;
         color: white;
     }
+    /* ============================================== */
+    /* STYLE BARU: Untuk search pelanggan yang mirip dengan produk */
+    /* ============================================== */
+    .customer-dropdown {
+        position: relative;
+    }
+    .customer-search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #ced4da;
+        border-top: none;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .customer-search-results.show {
+        display: block;
+    }
+    .customer-item {
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .customer-item:hover {
+        background-color: #f8f9fa;
+    }
+    .customer-item.selected {
+        background-color: #e7f3ff;
+        color: var(--kasir-accent);
+        font-weight: 600;
+    }
+    .no-results {
+        padding: 0.75rem;
+        text-align: center;
+        color: #6c757d;
+    }
 </style>
 @endpush
 
@@ -85,25 +126,49 @@
             <x-card class="pos-cart">
                 <h5 class="card-title">Keranjang</h5>
                 <hr>
+                
+                {{-- ============================================== --}}
+                {{-- PERUBAHAN BARU: Custom search untuk pelanggan --}}
+                {{-- ============================================== --}}
                 <div class="mb-3">
-                    <label for="customer_id" class="form-label">Pelanggan</label>
-                    <select name="customer_id" id="customer_id" class="form-select">
-                        <option value="">-- Pelanggan Umum --</option>
-                        @foreach ($customers as $customer)
-                            <option value="{{ $customer->id }}">{{ $customer->name }}</option>
-                        @endforeach
-                    </select>
+                    <label for="customer_search" class="form-label">Pelanggan</label>
+                    <div class="customer-dropdown">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-user"></i></span>
+                            <input type="text" 
+                                   id="customer_search" 
+                                   class="form-control" 
+                                   placeholder="Cari pelanggan berdasarkan nama..."
+                                   autocomplete="off">
+                            <button type="button" class="btn btn-outline-secondary" id="clear-customer">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <input type="hidden" name="customer_id" id="customer_id" value="">
+                        <div class="customer-search-results" id="customer-results">
+                            <div class="customer-item" data-id="" data-name="Pelanggan Umum">
+                                <strong>Pelanggan Umum</strong>
+                            </div>
+                            @foreach ($customers as $customer)
+                                <div class="customer-item" data-id="{{ $customer->id }}" data-name="{{ $customer->name }}">
+                                    {{ $customer->name }}
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                    <small class="text-muted">Pilih pelanggan atau kosongkan untuk umum</small>
                 </div>
+                {{-- ============================================== --}}
+                
                 <div class="cart-items mb-3 table-responsive">
                     <table class="table table-sm">
                         <tbody id="cart-items-body">
-                            {{-- Item di keranjang akan muncul di sini via JavaScript --}}
                         </tbody>
                     </table>
                 </div>
                 
                 <div class="mt-auto">
-                    <hr>
+                   <hr>
                     <div>
                         <div class="d-flex justify-content-between">
                             <h6 class="text-muted">Subtotal</h6>
@@ -144,6 +209,9 @@
 @push('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // ==============================================
+        // KERANJANG BELANJA
+        // ==============================================
         let cart = {};
 
         function addToCart(productId, name, price) {
@@ -215,6 +283,9 @@
             return new Intl.NumberFormat('id-ID').format(angka);
         }
 
+        // ==============================================
+        // EVENT LISTENER PRODUK (PERBAIKAN: menggunakan vanilla JS)
+        // ==============================================
         document.querySelectorAll('.product-card').forEach(card => {
             card.addEventListener('click', function() {
                 const id = this.dataset.id;
@@ -224,6 +295,9 @@
             });
         });
         
+        // ==============================================
+        // SEARCH PRODUK
+        // ==============================================
         document.getElementById('product-search').addEventListener('keyup', function() {
             const filter = this.value.toLowerCase();
             document.querySelectorAll('.product-card').forEach(card => {
@@ -235,8 +309,90 @@
                 }
             });
         });
-        
-        renderCart(); // Panggil sekali saat load untuk menampilkan "Keranjang kosong"
+
+        // ==============================================
+        // SEARCH PELANGGAN (BARU: Custom Implementation)
+        // ==============================================
+        const customerSearch = document.getElementById('customer_search');
+        const customerResults = document.getElementById('customer-results');
+        const customerIdInput = document.getElementById('customer_id');
+        const clearCustomerBtn = document.getElementById('clear-customer');
+
+        // Show results when input is focused or typed
+        customerSearch.addEventListener('focus', function() {
+            customerResults.classList.add('show');
+        });
+
+        customerSearch.addEventListener('input', function() {
+            const filter = this.value.toLowerCase();
+            const items = customerResults.querySelectorAll('.customer-item');
+            let hasResults = false;
+
+            items.forEach(item => {
+                const name = item.dataset.name.toLowerCase();
+                if (name.includes(filter)) {
+                    item.style.display = '';
+                    hasResults = true;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            customerResults.classList.add('show');
+        });
+
+        // Select customer
+        customerResults.addEventListener('click', function(e) {
+            const item = e.target.closest('.customer-item');
+            if (item) {
+                const customerId = item.dataset.id;
+                const customerName = item.dataset.name;
+                
+                customerSearch.value = customerName;
+                customerIdInput.value = customerId;
+                
+                // Remove previous selected
+                customerResults.querySelectorAll('.customer-item').forEach(i => {
+                    i.classList.remove('selected');
+                });
+                item.classList.add('selected');
+                
+                customerResults.classList.remove('show');
+            }
+        });
+
+        // Clear customer selection
+        clearCustomerBtn.addEventListener('click', function() {
+            customerSearch.value = '';
+            customerIdInput.value = '';
+            customerResults.querySelectorAll('.customer-item').forEach(item => {
+                item.classList.remove('selected');
+                item.style.display = '';
+            });
+            customerResults.classList.remove('show');
+            customerSearch.focus();
+        });
+
+        // Hide results when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.customer-dropdown')) {
+                customerResults.classList.remove('show');
+            }
+        });
+
+        // ==============================================
+        // INITIALIZE
+        // ==============================================
+        renderCart();
+    });
+
+    // ==============================================
+    // FIX: Reload page after back navigation
+    // ==============================================
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+            window.location.reload();
+        }
     });
 </script>
 @endpush

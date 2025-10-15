@@ -58,7 +58,17 @@ class FinancialController extends Controller
     // Menampilkan halaman form untuk mencatat pengeluaran baru
     public function createExpense(): View
     {
-        return view('admin.financial.create_expense');
+        // =======================================================
+        // PERUBAHAN DI SINI
+        // =======================================================
+        // 1. Ambil semua kategori pengeluaran yang ada
+        $categories = ExpenseCategory::where('business_id', Auth::user()->business_id)
+                                     ->orderBy('name')
+                                     ->get();
+        
+        // 2. Kirim data kategori ke view
+        return view('admin.financial.create_expense', compact('categories'));
+        // =======================================================
     }
 
     // Menyimpan data pengeluaran baru

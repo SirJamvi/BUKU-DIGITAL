@@ -4,10 +4,11 @@ namespace App\Http\Controllers\Kasir;
 
 use App\Http\Controllers\Controller;
 use App\Services\Kasir\PosService;
+use App\Models\Transaction;
 use Illuminate\Http\Request;
-use Illuminate\Http\RedirectResponse; // <-- Tambahkan ini
-use Illuminate\View\View; // <-- Tambahkan ini
-use App\Http\Requests\Kasir\StoreTransactionRequest; // <-- Gunakan Form Request Anda
+use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
+use App\Http\Requests\Kasir\StoreTransactionRequest;
 
 class PosController extends Controller
 {
@@ -36,13 +37,12 @@ class PosController extends Controller
             $transaction = $this->posService->processTransaction($request->validated());
             
             // ==========================================================
-            // INI PERBAIKANNYA:
-            // Selalu redirect ke halaman detail transaksi (struk)
-            // setelah transaksi berhasil, bukan mengembalikan JSON.
+            // PERBAIKAN: Redirect langsung ke halaman RECEIPT/STRUK
+            // untuk langsung print, bukan ke halaman detail transaksi
             // ==========================================================
             return redirect()
-                ->route('kasir.transactions.show', $transaction->id)
-                ->with('success', 'Transaksi berhasil disimpan. Struk siap dicetak.');
+                ->route('kasir.pos.receipt', $transaction->id)
+                ->with('success', 'Transaksi berhasil! Struk akan dicetak otomatis.');
 
         } catch (\App\Exceptions\InsufficientStockException $e) {
             // Jika stok tidak cukup, kembali ke halaman POS dengan pesan error
@@ -54,5 +54,16 @@ class PosController extends Controller
             logger()->error('Error processing POS transaction: ' . $e->getMessage());
             return back()->with('error', 'Terjadi kesalahan saat memproses transaksi.')->withInput();
         }
+    }
+
+    /**
+     * Menampilkan halaman struk/receipt untuk printing.
+     */
+    public function receipt(Transaction $transaction): View
+    {
+        // Ambil data transaksi lengkap dengan relasi
+        $transaction = $this->posService->getTransactionWithDetails($transaction->id);
+        
+        return view('kasir.pos.receipt', compact('transaction'));
     }
 }
