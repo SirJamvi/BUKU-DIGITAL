@@ -21,7 +21,11 @@ class CustomerController extends Controller
     public function index(): View
     {
         $customers = $this->customerService->getAllCustomersWithPagination();
-        return view('admin.customers.index', compact('customers'));
+        
+        // Ambil statistik pelanggan per bulan
+        $monthlyStats = $this->customerService->getMonthlyCustomerStats();
+        
+        return view('admin.customers.index', compact('customers', 'monthlyStats'));
     }
 
     public function show(Customer $customer): View
@@ -32,7 +36,7 @@ class CustomerController extends Controller
     }
 
     /**
-     * [BARU] Menampilkan form untuk mengedit data pelanggan.
+     * Menampilkan form untuk mengedit data pelanggan.
      */
     public function edit(Customer $customer): View
     {
@@ -40,7 +44,7 @@ class CustomerController extends Controller
     }
 
     /**
-     * [BARU] Memproses pembaruan data pelanggan.
+     * Memproses pembaruan data pelanggan.
      */
     public function update(Request $request, Customer $customer): RedirectResponse
     {

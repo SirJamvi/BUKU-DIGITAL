@@ -5,6 +5,8 @@ namespace App\Services\Admin;
 use App\Models\Customer;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class CustomerService
 {
@@ -25,7 +27,7 @@ class CustomerService
     }
 
     /**
-     * [BARU] Memperbarui data pelanggan yang sudah ada.
+     * Memperbarui data pelanggan yang sudah ada.
      */
     public function updateCustomer(Customer $customer, array $data): Customer
     {
@@ -39,5 +41,77 @@ class CustomerService
         $customer->update($data);
 
         return $customer;
+    }
+
+    /**
+     * [BARU] Mendapatkan statistik pelanggan baru per bulan (12 bulan terakhir).
+     */
+    public function getMonthlyCustomerStats(): array
+    {
+        $endDate = Carbon::now();
+        $startDate = Carbon::now()->subMonths(11)->startOfMonth();
+
+        $stats = Customer::select(
+                DB::raw('YEAR(join_date) as year'),
+                DB::raw('MONTH(join_date) as month'),
+                DB::raw('COUNT(*) as total')
+            )
+            ->whereBetween('join_date', [$startDate, $endDate])
+            ->groupBy('year', 'month')
+            ->orderBy('year', 'asc')
+            ->orderBy('month', 'asc')
+            ->get();
+
+        // Buat array untuk 12 bulan terakhir dengan nilai default 0
+        $monthlyData = [];
+        for ($i = 11; $i >= 0; $i--) {
+            $date = Carbon::now()->subMonths($i);
+            $key = $date->format('Y-m');
+            $monthlyData[$key] = [
+                'month_name' => $date->isoFormat('MMMM YYYY'),
+                'month_short' => $date->isoFormat('MMM'),
+                'year' => $date->year,
+                'month' => $date->month,
+                'total' => 0
+            ];
+        }
+
+        // Isi data aktual dari database
+        foreach ($stats as $stat) {
+            $key = sprintf('%d-%02d', $stat->year, $stat->month);
+            if (isset($monthlyData[$key])) {
+                $monthlyData[$key]['total'] = $stat->total;
+            }
+        }
+
+        return array_values($monthlyData);
+    }
+
+    /**
+     * [BARU] Mendapatkan total pelanggan baru bulan ini.
+     */
+    public function getCurrentMonthNewCustomers(): int
+    {
+        return Customer::whereYear('join_date', Carbon::now()->year)
+            ->whereMonth('join_date', Carbon::now()->month)
+            ->count();
+    }
+
+    /**
+     * [BARU] Mendapatkan persentase perubahan dibanding bulan lalu.
+     */
+    public function getMonthlyGrowthPercentage(): float
+    {
+        $currentMonth = $this->getCurrentMonthNewCustomers();
+        
+        $lastMonth = Customer::whereYear('join_date', Carbon::now()->subMonth()->year)
+            ->whereMonth('join_date', Carbon::now()->subMonth()->month)
+            ->count();
+
+        if ($lastMonth == 0) {
+            return $currentMonth > 0 ? 100 : 0;
+        }
+
+        return round((($currentMonth - $lastMonth) / $lastMonth) * 100, 1);
     }
 }

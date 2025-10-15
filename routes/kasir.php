@@ -18,6 +18,7 @@ Route::get('/', [KasirDashboardController::class, 'index'])->name('index');
 Route::prefix('pos')->name('pos.')->group(function () {
     Route::get('/', [PosController::class, 'index'])->name('index');
     Route::post('/store', [PosController::class, 'store'])->name('store');
+    Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt'); // ✅ BARU
 });
 
 // Transaction Management

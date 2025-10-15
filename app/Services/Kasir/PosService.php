@@ -26,7 +26,13 @@ class PosService
             ->with('category', 'inventory')
             ->get();
             
-        $customers = Customer::where('status', 'active')->get();
+        // =======================================================
+        // PERUBAHAN DI SINI: Tambahkan `orderBy`
+        // =======================================================
+        $customers = Customer::where('status', 'active')
+                             ->orderBy('name', 'asc') // Urutkan berdasarkan nama A-Z
+                             ->get();
+        // =======================================================
 
         return [
             'products' => $products,
