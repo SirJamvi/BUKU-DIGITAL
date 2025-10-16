@@ -513,10 +513,19 @@ class FinancialService
      */
     public function createExpenseCategory(array $data): void
     {
+        // =======================================================
+        // PERBAIKAN: Simpan nilai `is_cogs`
+        // =======================================================
         ExpenseCategory::firstOrCreate(
             ['business_id' => Auth::user()->business_id, 'name' => trim($data['name'])],
-            ['type' => trim($data['type']), 'is_active' => true, 'created_by' => Auth::id()]
+            [
+                'type' => $data['type'] ?? 'Operasional', // Gunakan type dari input atau default Operasional
+                'is_active' => true,
+                'created_by' => Auth::id(),
+                'is_cogs' => $data['is_cogs'] ?? false, // Simpan is_cogs, default false
+            ]
         );
+        // =======================================================
     }
 
     /**

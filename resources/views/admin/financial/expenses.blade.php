@@ -399,6 +399,9 @@
         @endif
     </x-card>
 
+    {{-- ======================================================= --}}
+    {{-- PERUBAHAN UTAMA ADA DI MODAL INI --}}
+    {{-- ======================================================= --}}
     {{-- Modal untuk Kelola Kategori --}}
     <x-modal id="categoriesModal" title="Kelola Kategori Pengeluaran" size="lg">
         <div class="mb-4">
@@ -407,15 +410,34 @@
             </h5>
             <form action="{{ route('admin.financial.expense_categories.store') }}" method="POST" id="categoryForm">
                 @csrf
-                <div class="input-group">
+                <div class="mb-3">
+                    <label for="category_name" class="form-label">Nama Kategori</label>
                     <input 
                         type="text" 
-                        name="name" 
+                        name="name"
+                        id="category_name"
                         class="form-control" 
-                        placeholder="Nama Kategori Baru" 
+                        placeholder="Contoh: Pembelian Es Batu, Gaji Karyawan" 
                         required
                         minlength="3"
                         maxlength="50">
+                </div>
+                
+                {{-- CHECKBOX BARU UNTUK HPP/COGS --}}
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" name="is_cogs" value="1" id="is_cogs_checkbox">
+                    <label class="form-check-label" for="is_cogs_checkbox">
+                        Tandai sebagai Harga Pokok Penjualan (HPP/COGS)
+                    </label>
+                    <small class="form-text text-muted d-block mt-1">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Aktifkan ini jika kategori adalah biaya langsung produk, contoh: Pembelian Refil Es Batu.
+                    </small>
+                </div>
+
+                <input type="hidden" name="type" value="Operasional">
+
+                <div class="d-flex justify-content-end">
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save me-1"></i> Simpan
                     </button>
@@ -435,6 +457,13 @@
                         <span>
                             <i class="fas fa-tag text-secondary me-2"></i>
                             {{ $category->name }}
+                            
+                            {{-- LABEL BARU UNTUK MENANDAKAN HPP/COGS --}}
+                            @if($category->is_cogs)
+                                <span class="badge bg-warning text-dark ms-2">
+                                    <i class="fas fa-box me-1"></i>HPP/COGS
+                                </span>
+                            @endif
                         </span>
                         <span class="badge bg-primary rounded-pill">
                             {{ $category->expenses_count ?? 0 }} pengeluaran
