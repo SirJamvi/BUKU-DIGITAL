@@ -50,7 +50,12 @@ class FinancialController extends Controller
         
         // Ambil data dengan paginasi
         $expenses = $query->latest('date')->paginate(10);
-        $categories = ExpenseCategory::all();
+        
+        // =======================================================
+        // PERBAIKAN: Gunakan `withCount` untuk efisiensi
+        // =======================================================
+        $categories = ExpenseCategory::withCount('cashFlows as expenses_count')->get();
+        // =======================================================
         
         return view('admin.financial.expenses', compact('expenses', 'categories'));
     }
@@ -87,8 +92,19 @@ class FinancialController extends Controller
     // Menyimpan kategori pengeluaran baru dari modal
     public function storeExpenseCategory(Request $request): RedirectResponse
     {
-        $request->validate(['name' => 'required|string|max:191', 'type' => 'required|string']);
-        $this->financialService->createExpenseCategory($request->all());
+        // =======================================================
+        // PERBAIKAN: Validasi dan proses input `is_cogs`
+        // =======================================================
+        $request->validate([
+            'name' => 'required|string|max:191',
+            'type' => 'required|string',
+            'is_cogs' => 'nullable|boolean' // Validasi is_cogs
+        ]);
+        
+        // Kirim data yang sudah divalidasi ke service
+        $this->financialService->createExpenseCategory($request->validated());
+        // =======================================================
+        
         return back()->with('success', 'Kategori pengeluaran baru berhasil ditambahkan.');
     }
 
