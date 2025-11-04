@@ -29,6 +29,9 @@ class OwnerProfit extends Model
         'notes',
         'status',
         'allocated_at',
+        'monthly_income',
+        'gross_profit',
+        'monthly_expense',
     ];
 
     protected $casts = [

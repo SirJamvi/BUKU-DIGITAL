@@ -106,4 +106,6 @@ Route::prefix('fund-allocation')->name('fund-allocation.')->group(function () {
     Route::put('/settings', [FundAllocationController::class, 'updateSettings'])->name('settings.update');
     Route::get('/history', [FundAllocationController::class, 'history'])->name('history');
     Route::post('/process', [FundAllocationController::class, 'processAllocation'])->name('process');
+    Route::post('/settings/store', [FundAllocationController::class, 'storeSetting'])->name('settings.store');
+    Route::delete('/settings/{setting}', [FundAllocationController::class, 'destroySetting'])->name('settings.destroy');
 });
