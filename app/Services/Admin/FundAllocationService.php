@@ -76,8 +76,8 @@ class FundAllocationService
         
         // Ambil SEMUA keuntungan yang belum dialokasikan (status pending)
         $pendingProfits = OwnerProfit::where('business_id', $businessId)
-                                     ->where('status', 'pending')
-                                     ->get();
+                                    ->where('status', 'pending')
+                                    ->get();
 
         // Jika ada profit yang belum dialokasikan, tampilkan form alokasi
         if ($pendingProfits->isNotEmpty()) {
@@ -91,8 +91,8 @@ class FundAllocationService
 
         // Jika tidak ada, tampilkan ringkasan alokasi terakhir
         $latestHistory = FundAllocationHistory::where('business_id', $businessId)
-                                              ->latest('allocated_at')
-                                              ->first();
+                                            ->latest('allocated_at')
+                                            ->first();
         if ($latestHistory) {
             return [
                 'view_type'             => 'summary',
@@ -107,15 +107,16 @@ class FundAllocationService
     
     /**
      * [FIX FINAL] Memproses alokasi dana untuk SEMUA profit yang tertunda.
+     * PERBAIKAN: Melakukan alokasi satu per satu untuk setiap periode profit.
      */
     public function processAllocation(array $ownerProfitIds): void
     {
         $businessId = Auth::user()->business_id;
         
         $profitsToProcess = OwnerProfit::where('business_id', $businessId)
-                                      ->whereIn('id', $ownerProfitIds)
-                                      ->where('status', 'pending')
-                                      ->get();
+                                        ->whereIn('id', $ownerProfitIds)
+                                        ->where('status', 'pending')
+                                        ->get();
 
         if ($profitsToProcess->isEmpty()) {
             throw new \Exception('Tidak ada data profit yang valid untuk diproses.');
@@ -126,34 +127,49 @@ class FundAllocationService
             throw new \Exception('Pengaturan alokasi dana belum dibuat.');
         }
         
-        $totalNetProfit = $profitsToProcess->sum('net_profit');
-
-        DB::transaction(function () use ($settings, $profitsToProcess, $businessId, $totalNetProfit) {
-            // Hanya buat history jika ada profit positif untuk dialokasikan
-            if ($totalNetProfit > 0) {
-                foreach ($settings as $setting) {
-                    $allocatedAmount = ($totalNetProfit * $setting->percentage) / 100;
-                    
-                    FundAllocationHistory::create([
-                        'business_id'         => $businessId,
-                        'owner_profit_id'     => $profitsToProcess->first()->id, // Pakai ID pertama sebagai referensi
-                        'net_profit'          => $totalNetProfit,
-                        'allocation_name'     => $setting->allocation_name,
-                        'allocation_category' => $setting->category,
-                        'allocation_percentage'=> $setting->percentage,
-                        'allocated_amount'    => $allocatedAmount,
-                        'is_manual'           => false,
-                        'allocated_at'        => now(),
-                        'created_by'          => Auth::id(),
-                    ]);
+        DB::transaction(function () use ($settings, $profitsToProcess, $businessId) {
+            
+            // =======================================================
+            // PERUBAHAN LOGIKA UTAMA
+            // Loop setiap profit bulanan yang pending
+            // =======================================================
+            foreach ($profitsToProcess as $profit) {
+                
+                $totalNetProfit = $profit->net_profit;
+                
+                // Hanya buat history jika ada profit positif untuk dialokasikan
+                if ($totalNetProfit > 0) {
+                    foreach ($settings as $setting) {
+                        $allocatedAmount = ($totalNetProfit * $setting->percentage) / 100;
+                        
+                        FundAllocationHistory::create([
+                            'business_id'           => $businessId,
+                            'owner_profit_id'       => $profit->id, // Referensi ke profit bulanan yang spesifik
+                            'net_profit'            => $totalNetProfit, // Total profit HANYA untuk bulan ini
+                            'allocation_name'       => $setting->allocation_name,
+                            'allocation_category'   => $setting->category,
+                            'allocation_percentage' => $setting->percentage,
+                            'allocated_amount'      => $allocatedAmount,
+                            'period_month'          => $profit->period_month, // Ambil dari data profit
+                            'period_year'           => $profit->period_year,  // Ambil dari data profit
+                            'is_manual'             => false,
+                            'allocated_at'          => now(),
+                            'created_by'            => Auth::id(),
+                        ]);
+                    }
                 }
+                
+                // Tandai profit bulanan INI sebagai 'completed'
+                $profit->update([
+                    'status' => 'completed',
+                    'allocated_at' => now(),
+                    // Kita simpan total alokasi berdasarkan profit bulan ini
+                    'allocated_funds' => $totalNetProfit > 0 ? $totalNetProfit : 0 
+                ]);
             }
-
-            // Tandai SEMUA profit yang diproses sebagai 'completed'
-            OwnerProfit::whereIn('id', $profitsToProcess->pluck('id'))->update([
-                'status' => 'completed',
-                'allocated_at' => now(),
-            ]);
+            // =======================================================
+            // AKHIR PERUBAHAN
+            // =======================================================
         });
     }
 
@@ -164,9 +180,9 @@ class FundAllocationService
     {
         $businessId = Auth::user()->business_id;
         $ownerProfit = OwnerProfit::where('business_id', $businessId)
-                                  ->where('id', $ownerProfitId)
-                                  ->where('status', 'pending')
-                                  ->first();
+                                ->where('id', $ownerProfitId)
+                                ->where('status', 'pending')
+                                ->first();
 
         if (!$ownerProfit) {
             throw new \Exception('Data profit tidak valid atau sudah diproses.');
@@ -248,8 +264,8 @@ class FundAllocationService
         
         // Cek total persentase existing
         $currentTotal = FundAllocationSetting::where('business_id', $businessId)
-                                             ->where('is_active', true)
-                                             ->sum('percentage');
+                                            ->where('is_active', true)
+                                            ->sum('percentage');
 
         if ($currentTotal + $data['percentage'] > 100) {
             throw new \Exception("Total persentase alokasi tidak boleh melebihi 100%.");
@@ -257,7 +273,7 @@ class FundAllocationService
 
         // Ambil sort_order terakhir
         $lastOrder = FundAllocationSetting::where('business_id', $businessId)
-                                          ->max('sort_order') ?? 0;
+                                        ->max('sort_order') ?? 0;
 
         FundAllocationSetting::create([
             'business_id' => $businessId,
@@ -362,19 +378,19 @@ class FundAllocationService
         
         // Total profit yang telah dialokasikan
         $totalAllocated = OwnerProfit::where('business_id', $businessId)
-                                     ->where('status', 'allocated')
-                                     ->sum('allocated_funds');
+                                    ->where('status', 'allocated')
+                                    ->sum('allocated_funds');
 
         // Total profit yang belum dialokasikan
         $totalPending = OwnerProfit::where('business_id', $businessId)
-                                   ->where('status', 'pending')
-                                   ->sum('net_profit');
+                                ->where('status', 'pending')
+                                ->sum('net_profit');
 
         // Riwayat alokasi terakhir
         $latestAllocations = FundAllocationHistory::where('business_id', $businessId)
-                                                  ->latest('allocated_at')
-                                                  ->limit(5)
-                                                  ->get();
+                                                ->latest('allocated_at')
+                                                ->limit(5)
+                                                ->get();
 
         // Breakdown alokasi berdasarkan kategori
         $allocationBreakdown = FundAllocationHistory::where('business_id', $businessId)

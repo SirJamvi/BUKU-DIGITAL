@@ -37,17 +37,20 @@ class ReportService
     /**
      * Menghasilkan laporan keuangan komprehensif berdasarkan filter.
      * VERSI PERBAIKAN DENGAN PEMISAHAN COGS DAN OPEX
+     * PERBAIKAN: HPP tidak dihitung dua kali
      */
     public function getFinancialReport(array $filters): array
     {
         $businessId = Auth::user()->business_id;
         
         // 1. Ambil total PENDAPATAN dari penjualan
-        $transactionsQuery = Transaction::where('type', 'sale')->where('business_id', $businessId);
+        $transactionsQuery = Transaction::where('type', 'sale')
+            ->where('business_id', $businessId)
+            ->where('status', 'completed');
         $this->applyDateFilters($transactionsQuery, $filters, 'transaction_date');
         $totalIncome = $transactionsQuery->sum('total_amount');
         
-        // Ambil data transaksi untuk ditampilkan di view (opsional, jika masih diperlukan)
+        // Ambil data transaksi untuk ditampilkan di view
         $transactions = $transactionsQuery->with('details.product')->get();
         
         // 2. Ambil semua data arus kas (termasuk COGS dan Opex)
@@ -59,24 +62,31 @@ class ReportService
         
         // Hitung HPP/COGS: hanya dari kategori yang ditandai is_cogs = true
         $totalCogs = $cashFlows->filter(function ($flow) {
-            return $flow->category && $flow->category->is_cogs;
+            return $flow->type === 'expense' && $flow->category && $flow->category->is_cogs;
         })->sum('amount');
         
-        // Hitung Beban Operasional: hanya dari kategori yang is_cogs = false
+        // ========================================================================
+        // PERBAIKAN KRITIS: Hitung HANYA Beban Operasional (TANPA HPP/COGS)
+        // ========================================================================
+        // Beban Operasional: hanya dari kategori yang is_cogs = false atau null
+        // INI MEMASTIKAN HPP TIDAK DIHITUNG DUA KALI!
         $totalExpense = $cashFlows->filter(function ($flow) {
-            return $flow->type === 'expense' && (!$flow->category || !$flow->category->is_cogs);
+            return $flow->type === 'expense' && (!$flow->category || $flow->category->is_cogs === false);
         })->sum('amount');
         
-        // 4. HITUNG SEMUA METRIK DENGAN BENAR
+        // 4. HITUNG SEMUA METRIK DENGAN BENAR (SESUAI STANDAR AKUNTANSI)
+        // Formula Multi-Step Income Statement:
+        // Gross Profit = Revenue - COGS
+        // Net Profit = Gross Profit - Operating Expenses
         $totalGrossProfit = $totalIncome - $totalCogs; // Laba Kotor = Pendapatan - HPP
-        $netProfit = $totalGrossProfit - $totalExpense; // Laba Bersih = Laba Kotor - Beban Operasional
+        $netProfit = $totalGrossProfit - $totalExpense; // Laba Bersih = Laba Kotor - Beban Operasional (TANPA HPP)
         
         return [
             'transactions'       => $transactions,
-            'cash_flows'         => $cashFlows, // Tetap kirim semua untuk rincian tabel
+            'cash_flows'         => $cashFlows, // Semua cash flows untuk detail tabel
             'total_income'       => $totalIncome,
-            'total_cogs'         => $totalCogs, // Kirim data HPP/COGS
-            'total_expense'      => $totalExpense, // Ini sekarang hanya Beban Operasional
+            'total_cogs'         => $totalCogs, // HPP/COGS (Cost of Goods Sold)
+            'total_expense'      => $totalExpense, // HANYA Beban Operasional (NO COGS!)
             'total_gross_profit' => $totalGrossProfit,
             'net_profit'         => $netProfit, // Hasil yang benar ✅
             'filters'            => $filters,

@@ -16,6 +16,7 @@ class FinancialService
 {
     /**
      * Laporan keuangan dengan perhitungan yang konsisten
+     * PERBAIKAN: HPP tidak dihitung dua kali
      */
     public function getFinancialReport(array $filters): array
     {
@@ -48,19 +49,38 @@ class FinancialService
             $totalIncome += $transaction->total_amount;
         }
 
-        // Ambil total pengeluaran
-        $expenseQuery = CashFlow::where('type', 'expense')->where('business_id', $businessId);
-        $this->applyDateFilters($expenseQuery, $filters, 'date');
-        $totalExpense = $expenseQuery->sum('amount');
+        // Ambil semua cash flows
+        $cashFlowQuery = CashFlow::where('business_id', Auth::user()->business_id)->with('category');
+        $this->applyDateFilters($cashFlowQuery, $filters, 'date');
+        $cashFlows = $cashFlowQuery->latest('date')->get();
 
+        // ========================================================================
+        // PERBAIKAN KRITIS: Pisahkan COGS dan Operating Expenses
+        // ========================================================================
+        
+        // Hitung HPP/COGS: hanya dari kategori yang ditandai is_cogs = true
+        $totalCogs = $cashFlows->filter(function ($flow) {
+            return $flow->type === 'expense' && $flow->category && $flow->category->is_cogs;
+        })->sum('amount');
+        
+        // Hitung HANYA Beban Operasional (TANPA HPP/COGS)
+        // INI MEMASTIKAN HPP TIDAK DIHITUNG DUA KALI!
+        $totalExpense = $cashFlows->filter(function ($flow) {
+            return $flow->type === 'expense' && (!$flow->category || $flow->category->is_cogs === false);
+        })->sum('amount');
+
+        // Hitung laba bersih dengan benar
+        // Net Profit = Gross Profit - Operating Expenses (NO COGS!)
         $netProfit = $totalGrossProfit - $totalExpense;
 
         return [
             'transactions'       => $transactions,
+            'cash_flows'         => $cashFlows,
             'total_income'       => $totalIncome,
-            'total_expense'      => $totalExpense,
+            'total_cogs'         => $totalCogs, // HPP/COGS
+            'total_expense'      => $totalExpense, // HANYA Operating Expenses
             'total_gross_profit' => $totalGrossProfit,
-            'net_profit'         => $netProfit,
+            'net_profit'         => $netProfit, // Hasil yang benar ✅
             'filters'            => $filters,
         ];
     }
@@ -167,7 +187,8 @@ class FinancialService
     }
 
     /**
-     * Logika "Tutup Buku" yang disempurnakan - Versi gabungan dari kedua file
+     * Logika "Tutup Buku" yang disempurnakan
+     * PERBAIKAN: Tidak memproses ulang periode yang sudah 'completed'
      */
     public function processMonthlyClosing(string $period): OwnerProfit
     {
@@ -176,17 +197,32 @@ class FinancialService
         $month = $date->month;
         $year = $date->year;
 
+        // =======================================================
+        // PENGECEKAN BARU: JANGAN PROSES JIKA SUDAH SELESAI
+        // =======================================================
+        $existingProfit = OwnerProfit::where('business_id', $businessId)
+            ->where('period_month', $month)
+            ->where('period_year', $year)
+            ->first();
+
+        // Jika data sudah ada DAN statusnya 'completed', jangan hitung ulang.
+        // Langsung kembalikan data yang ada.
+        if ($existingProfit && $existingProfit->status === 'completed') {
+            return $existingProfit;
+        }
+        // =======================================================
+
         $startOfMonth = $date->copy()->startOfMonth();
         $endOfMonth = $date->copy()->endOfMonth();
 
-        // Hitung pendapatan bulan ini dari transaksi penjualan
+        // 1. Hitung pendapatan bulan ini dari transaksi penjualan
         $monthlyIncome = Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('status', 'completed')
             ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
             ->sum('total_amount');
 
-        // Hitung laba kotor bulan ini (Total Penjualan - HPP)
+        // 2. Hitung laba kotor bulan ini (Total Penjualan - HPP dari Produk)
         $monthlyGrossProfit = DB::table('transaction_details')
             ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
             ->join('products', 'transaction_details.product_id', '=', 'products.id')
@@ -196,14 +232,24 @@ class FinancialService
             ->whereBetween('transactions.transaction_date', [$startOfMonth, $endOfMonth])
             ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
 
-        // Hitung pengeluaran bulan ini
-        $monthlyExpense = CashFlow::where('business_id', $businessId)
+        // ====================================================================
+        // PERBAIKAN LOGIKA: Pisahkan Beban Operasional (Opex) dari HPP
+        // ====================================================================
+        
+        // 3. Hitung Beban Operasional (HANYA Opex, BUKAN HPP)
+        $monthlyOpex = CashFlow::where('business_id', $businessId)
             ->where('type', 'expense')
             ->whereBetween('date', [$startOfMonth, $endOfMonth])
+            ->whereHas('category', function ($query) {
+                // Hanya ambil kategori yang BUKAN HPP
+                $query->where('is_cogs', false); 
+            })
             ->sum('amount');
-
-        // Laba bersih = Laba kotor - Pengeluaran
-        $netProfit = $monthlyGrossProfit - $monthlyExpense;
+        
+        // 4. Hitung Laba Bersih yang BENAR
+        $netProfit = $monthlyGrossProfit - $monthlyOpex; // Laba Kotor - Beban Operasional
+        
+        // ====================================================================
 
         // Simpan atau update data profit bulanan
         return OwnerProfit::updateOrCreate(
@@ -214,10 +260,10 @@ class FinancialService
             ],
             [
                 'monthly_income'    => $monthlyIncome,
-                'monthly_expense'   => $monthlyExpense,
+                'monthly_expense'   => $monthlyOpex, // Simpan Opex, bukan Total Expense
                 'gross_profit'      => $monthlyGrossProfit,
-                'net_profit'        => $netProfit,
-                'status'            => 'pending',
+                'net_profit'        => $netProfit, // Laba Bersih = Laba Kotor - Beban Operasional
+                'status'            => 'pending', // Selalu set ke 'pending' saat dihitung ulang
                 'allocated_at'      => null,
                 'allocated_funds'   => 0,
                 'recorded_at'       => now(),
@@ -314,14 +360,17 @@ class FinancialService
             ->whereBetween('transactions.transaction_date', [$startOfMonth, $endOfMonth])
             ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
 
-        // Hitung pengeluaran bulan ini
-        $monthlyExpense = CashFlow::where('business_id', $businessId)
+        // Hitung pengeluaran bulan ini (hanya Opex)
+        $monthlyOpex = CashFlow::where('business_id', $businessId)
             ->where('type', 'expense')
             ->whereBetween('date', [$startOfMonth, $endOfMonth])
+            ->whereHas('category', function ($query) {
+                $query->where('is_cogs', false);
+            })
             ->sum('amount');
 
         // Laba bersih
-        $netProfit = $monthlyGrossProfit - $monthlyExpense;
+        $netProfit = $monthlyGrossProfit - $monthlyOpex;
 
         // Cek apakah sudah ada data closing untuk periode ini
         $existingClosing = OwnerProfit::where('business_id', $businessId)
@@ -333,7 +382,7 @@ class FinancialService
             'period' => $period,
             'month_name' => $monthName,
             'monthly_income' => (float) $monthlyIncome,
-            'monthly_expense' => (float) $monthlyExpense,
+            'monthly_expense' => (float) $monthlyOpex,
             'gross_profit' => (float) $monthlyGrossProfit,
             'net_profit' => (float) $netProfit,
             'is_already_closed' => $existingClosing ? true : false,

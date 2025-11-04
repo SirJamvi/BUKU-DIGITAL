@@ -3,17 +3,30 @@
 namespace App\Services\Admin;
 
 use App\Models\Transaction;
-use App\Models\CashFlow;
 use App\Models\Inventory;
 use App\Models\User;
 use App\Models\UserActivityLog;
 use App\Models\FundAllocationSetting;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+// 1. IMPOR SERVICE YANG SUDAH MEMILIKI LOGIKA BENAR
+use App\Services\Admin\FinancialService;
 
 class DashboardService
 {
+    /**
+     * 2. TAMBAHKAN SERVICE BARU SEBAGAI PROPERTI
+     */
+    protected FinancialService $financialService;
+
+    /**
+     * 3. INJEKSI SERVICE KE DALAM CONSTRUCTOR
+     */
+    public function __construct(FinancialService $financialService)
+    {
+        $this->financialService = $financialService;
+    }
+
     /**
      * Mengambil semua data yang diperlukan untuk dashboard admin.
      */
@@ -29,13 +42,34 @@ class DashboardService
 
         // --- Metrik Utama ---
         $salesToday = $this->getSalesForDate($businessId, $today);
-        $netProfitThisMonth = $this->getNetProfitForPeriod($businessId, $startOfMonth, $endOfMonth);
+
+        // ====================================================================
+        // 4. PERBAIKAN PERHITUNGAN LABA BERSIH
+        // ====================================================================
+        
+        // Menggunakan FinancialService untuk menghitung Laba Bersih Bulan Ini
+        $thisMonthFilters = [
+            'start_date' => $startOfMonth->toDateString(), 
+            'end_date' => $endOfMonth->toDateString()
+        ];
+        $thisMonthReport = $this->financialService->getFinancialReport($thisMonthFilters);
+        $netProfitThisMonth = $thisMonthReport['net_profit'];
+
+        // Menggunakan FinancialService untuk menghitung Laba Bersih Bulan Lalu
+        $lastMonthFilters = [
+            'start_date' => $startOfLastMonth->toDateString(), 
+            'end_date' => $endOfLastMonth->toDateString()
+        ];
+        $lastMonthReport = $this->financialService->getFinancialReport($lastMonthFilters);
+        $netProfitLastMonth = $lastMonthReport['net_profit'];
+        
+        // ====================================================================
 
         // --- Perbandingan ---
         $salesYesterday = $this->getSalesForDate($businessId, $yesterday);
         $salesChangePercentage = $this->calculatePercentageChange($salesToday, $salesYesterday);
 
-        $netProfitLastMonth = $this->getNetProfitForPeriod($businessId, $startOfLastMonth, $endOfLastMonth);
+        // Perhitungan persentase profit sekarang sudah menggunakan data yang benar
         $profitChangePercentage = $this->calculatePercentageChange($netProfitThisMonth, $netProfitLastMonth);
 
         // --- Metrik Lainnya ---
@@ -113,27 +147,9 @@ class DashboardService
     }
 
     /**
-     * Menghitung laba bersih untuk periode tertentu.
+     * 5. HAPUS METODE LAMA INI KARENA SALAH DAN TIDAK DIGUNAKAN LAGI
+     * private function getNetProfitForPeriod(...) { ... }
      */
-    private function getNetProfitForPeriod(int $businessId, Carbon $startDate, Carbon $endDate): float
-    {
-        // Hitung gross profit
-        $grossProfit = DB::table('transactions')
-            ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
-            ->join('products', 'transaction_details.product_id', '=', 'products.id')
-            ->where('transactions.business_id', $businessId)
-            ->where('transactions.type', 'sale')
-            ->whereBetween('transactions.transaction_date', [$startDate, $endDate])
-            ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
-
-        // Hitung total expenses
-        $expenses = CashFlow::where('business_id', $businessId)
-            ->where('type', 'expense')
-            ->whereBetween('date', [$startDate, $endDate])
-            ->sum('amount');
-            
-        return $grossProfit - $expenses;
-    }
 
     /**
      * Menghitung persentase perubahan antara nilai sekarang dan sebelumnya.
@@ -165,9 +181,17 @@ class DashboardService
             $sales = $this->getSalesForDateRange($businessId, $startOfMonth, $endOfMonth);
             $salesData[] = round($sales / 1000000, 2);
 
-            // Laba bersih bulan ini (dalam jutaan)
-            $netProfit = $this->getNetProfitForPeriod($businessId, $startOfMonth, $endOfMonth);
+            // ====================================================================
+            // 6. PERBAIKAN PERHITUNGAN LABA BERSIH BULANAN
+            // ====================================================================
+            $monthFilters = [
+                'start_date' => $startOfMonth->toDateString(), 
+                'end_date' => $endOfMonth->toDateString()
+            ];
+            $monthReport = $this->financialService->getFinancialReport($monthFilters);
+            $netProfit = $monthReport['net_profit'];
             $profitData[] = round($netProfit / 1000000, 2);
+            // ====================================================================
         }
 
         return [

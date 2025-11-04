@@ -17,7 +17,14 @@
 </head>
 <body>
     <h1>Laporan Keuangan</h1>
-    <h4>Periode: {{ \Carbon\Carbon::parse($reportData['filters']['start_date'])->isoFormat('D MMM YYYY') }} - {{ \Carbon\Carbon::parse($reportData['filters']['end_date'])->isoFormat('D MMM YYYY') }}</h4>
+
+    {{-- ======================= BAGIAN YANG DIPERBAIKI ======================= --}}
+    @if (isset($reportData['filters']['start_date']) && !empty($reportData['filters']['start_date']))
+        <h4>Periode: {{ \Carbon\Carbon::parse($reportData['filters']['start_date'])->isoFormat('D MMM YYYY') }} - {{ \Carbon\Carbon::parse($reportData['filters']['end_date'])->isoFormat('D MMM YYYY') }}</h4>
+    @else
+        <h4>Periode: Semua Waktu</h4>
+    @endif
+    {{-- ====================================================================== --}}
 
     <div class="summary">
         <div class="summary-item">
