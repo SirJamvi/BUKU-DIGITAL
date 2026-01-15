@@ -5,7 +5,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\CategoryController;
-use App\Http\Controllers\Admin\CustomerController;
+use App\Http\Controllers\Admin\CustomerController; // Pastikan ini ada
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FinancialController;
@@ -24,12 +24,25 @@ Route::resource('categories', CategoryController::class);
 Route::resource('products', ProductController::class);
 Route::resource('users', UserController::class);
 Route::resource('suppliers', SupplierController::class)->except(['show']);
-Route::resource('transactions', TransactionController::class)->only(['index', 'show']);
-Route::resource('customers', CustomerController::class)->only(['index', 'show']);
+Route::resource('transactions', TransactionController::class)->except(['create', 'store', 'destroy']);
+
+// --- Update Bagian Customer ---
+// PENTING: Taruh rute kustom (toggle-status) SEBELUM Route::resource
+Route::patch('customers/{customer}/toggle-status', [CustomerController::class, 'toggleStatus'])
+    ->name('customers.toggle-status');
+
+Route::resource('customers', CustomerController::class)
+    ->except(['create', 'store', 'destroy']);
+// ------------------------------
+
 Route::resource('expense-categories', \App\Http\Controllers\Admin\ExpenseCategoryController::class);
 
 // Financial & Expenses - DIJADIKAN SATU
 Route::prefix('financial')->name('financial.')->group(function () {
+    Route::get('/capital', [FinancialController::class, 'capital'])->name('capital.index');
+    Route::post('/capital', [FinancialController::class, 'storeCapital'])->name('capital.store');
+    Route::post('/closing', [FinancialController::class, 'processClosing'])->name('closing.process');
+
     Route::get('/', [FinancialController::class, 'index'])->name('index');
     Route::get('/cash-flow', [FinancialController::class, 'cashFlow'])->name('cash-flow');
     Route::get('/expenses', [FinancialController::class, 'expenses'])->name('expenses');
@@ -38,6 +51,13 @@ Route::prefix('financial')->name('financial.')->group(function () {
     // Rute untuk menambah pengeluaran
     Route::get('/expenses/create', [FinancialController::class, 'createExpense'])->name('expenses.create');
     Route::post('/expenses', [FinancialController::class, 'storeExpense'])->name('expenses.store');
+    
+    // Rute untuk edit, update, dan delete pengeluaran
+    Route::get('/expenses/{expense}/edit', [FinancialController::class, 'editExpense'])->name('expenses.edit');
+    Route::put('/expenses/{expense}', [FinancialController::class, 'updateExpense'])->name('expenses.update');
+    Route::delete('/expenses/{expense}', [FinancialController::class, 'destroyExpense'])->name('expenses.destroy');
+    Route::get('expenses/export/excel', [FinancialController::class, 'exportExcel'])->name('expenses.export.excel');
+    Route::get('expenses/export/pdf', [FinancialController::class, 'exportPdf'])->name('expenses.export.pdf');
 
     // Rute untuk mengelola kategori pengeluaran dari modal
     Route::post('/expense-categories', [FinancialController::class, 'storeExpenseCategory'])->name('expense_categories.store');
@@ -65,6 +85,7 @@ Route::prefix('reports')->name('reports.')->group(function () {
     Route::get('/sales', [ReportController::class, 'sales'])->name('sales');
     Route::get('/financial', [ReportController::class, 'financial'])->name('financial');
     Route::get('/inventory', [ReportController::class, 'inventory'])->name('inventory');
+    Route::get('/financial/export/pdf', [ReportController::class, 'exportFinancialPdf'])->name('financial.export.pdf');
 });
 
 // Settings
@@ -86,4 +107,6 @@ Route::prefix('fund-allocation')->name('fund-allocation.')->group(function () {
     Route::put('/settings', [FundAllocationController::class, 'updateSettings'])->name('settings.update');
     Route::get('/history', [FundAllocationController::class, 'history'])->name('history');
     Route::post('/process', [FundAllocationController::class, 'processAllocation'])->name('process');
+    Route::post('/settings/store', [FundAllocationController::class, 'storeSetting'])->name('settings.store');
+    Route::delete('/settings/{setting}', [FundAllocationController::class, 'destroySetting'])->name('settings.destroy');
 });

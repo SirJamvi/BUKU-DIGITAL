@@ -26,7 +26,13 @@ class PosService
             ->with('category', 'inventory')
             ->get();
             
-        $customers = Customer::where('status', 'active')->get();
+        // =======================================================
+        // PERUBAHAN DI SINI: Tambahkan `orderBy`
+        // =======================================================
+        $customers = Customer::where('status', 'active')
+                             ->orderBy('name', 'asc') // Urutkan berdasarkan nama A-Z
+                             ->get();
+        // =======================================================
 
         return [
             'products' => $products,
@@ -78,9 +84,7 @@ class PosService
                 $product->inventory->decrement('current_stock', $item['quantity']);
             }
 
-            // ====================================================================
-            // INI PERBAIKANNYA: Catat transaksi sebagai Pemasukan (Income)
-            // ====================================================================
+            // 4. Catat transaksi sebagai Pemasukan (Income)
             CashFlow::create([
                 'business_id' => $transaction->business_id,
                 'type' => 'income',
@@ -91,6 +95,16 @@ class PosService
                 'reference_id' => $transaction->id,
                 'created_by' => Auth::id(),
             ]);
+
+            // ====================================================================
+            // PERBAIKAN BARU: Update total belanja pelanggan jika ada
+            // ====================================================================
+            if ($transaction->customer_id) {
+                $customer = Customer::find($transaction->customer_id);
+                if ($customer) {
+                    $customer->increment('total_purchases', $transaction->total_amount);
+                }
+            }
             // ====================================================================
 
             return $transaction;

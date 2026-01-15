@@ -4,17 +4,20 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\Admin\ReportService;
+use App\Services\Admin\FinancialService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ReportController extends Controller
 {
     protected ReportService $reportService;
+    protected FinancialService $financialService;
 
-    public function __construct(ReportService $reportService)
+    public function __construct(ReportService $reportService, FinancialService $financialService)
     {
         $this->reportService = $reportService;
-        // Middleware sudah didaftarkan di route file
+        $this->financialService = $financialService;
     }
 
     public function index(): View
@@ -30,7 +33,7 @@ class ReportController extends Controller
 
     public function financial(Request $request): View
     {
-        $reportData = $this->reportService->getFinancialReport($request->all());
+        $reportData = $this->financialService->getFinancialReport($request->all());
         return view('admin.reports.financial', compact('reportData'));
     }
 
@@ -38,5 +41,21 @@ class ReportController extends Controller
     {
         $reportData = $this->reportService->getInventoryReport($request->all());
         return view('admin.reports.inventory', compact('reportData'));
+    }
+
+    /**
+     * Menangani ekspor Laporan Keuangan ke PDF.
+     */
+    public function exportFinancialPdf(Request $request)
+    {
+        // Gunakan FinancialService untuk mendapatkan data yang sudah difilter
+        $reportData = $this->financialService->getFinancialReport($request->all());
+
+        // Load view khusus untuk PDF dengan data yang didapat
+        $pdf = Pdf::loadView('admin.reports.financial_pdf', compact('reportData'));
+
+        // Beri nama file dan kirim sebagai unduhan
+        $fileName = 'laporan-keuangan-' . now()->format('d-m-Y') . '.pdf';
+        return $pdf->download($fileName);
     }
 }
