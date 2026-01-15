@@ -74,25 +74,25 @@ class FinancialService
         $netProfit = $totalGrossProfit - $totalExpense;
 
         // ========== DEBUGGING CODE ==========
-        \Log::info('=== FINANCIAL REPORT DEBUG ===');
-        \Log::info('Business ID: ' . Auth::user()->business_id);
-        \Log::info('Total Cash Flows: ' . $cashFlows->count());
-        \Log::info('Cash Flows with expense type: ' . $cashFlows->where('type', 'expense')->count());
+        Log::info('=== FINANCIAL REPORT DEBUG ===');
+        Log::info('Business ID: ' . Auth::user()->business_id);
+        Log::info('Total Cash Flows: ' . $cashFlows->count());
+        Log::info('Cash Flows with expense type: ' . $cashFlows->where('type', 'expense')->count());
         
         // Debug kategori
         $expenseFlows = $cashFlows->where('type', 'expense');
         foreach ($expenseFlows as $flow) {
-            \Log::info('Flow ID: ' . $flow->id .
+            Log::info('Flow ID: ' . $flow->id .
                         ' | Amount: ' . $flow->amount .
                         ' | Category: ' . ($flow->category ? $flow->category->name : 'NULL') .
                         ' | is_cogs: ' . ($flow->category ? ($flow->category->is_cogs ? 'true' : 'false') : 'N/A'));
         }
         
-        \Log::info('Total COGS: ' . $totalCogs);
-        \Log::info('Total Expense: ' . $totalExpense);
-        \Log::info('Total Gross Profit: ' . $totalGrossProfit);
-        \Log::info('Net Profit: ' . $netProfit);
-        \Log::info('===========================');
+        Log::info('Total COGS: ' . $totalCogs);
+        Log::info('Total Expense: ' . $totalExpense);
+        Log::info('Total Gross Profit: ' . $totalGrossProfit);
+        Log::info('Net Profit: ' . $netProfit);
+        Log::info('===========================');
         // ====================================
 
         return [
@@ -291,35 +291,35 @@ class FinancialService
         // ========================================
         // 🔍 DEBUGGING CODE
         // ========================================
-        \Log::info('=== MONTHLY CLOSING DEBUG ===');
-        \Log::info('Period: ' . $period);
-        \Log::info('Business ID: ' . $businessId);
-        \Log::info('Date Range: ' . $startOfMonth . ' to ' . $endOfMonth);
-        \Log::info('Monthly Income: ' . $monthlyIncome);
-        \Log::info('Monthly Gross Profit (manual loop): ' . $monthlyGrossProfit);
-        \Log::info('Monthly Opex (is_cogs=0): ' . $monthlyOpex);
-        \Log::info('Calculated Net Profit: ' . $netProfit);
+        Log::info('=== MONTHLY CLOSING DEBUG ===');
+        Log::info('Period: ' . $period);
+        Log::info('Business ID: ' . $businessId);
+        Log::info('Date Range: ' . $startOfMonth . ' to ' . $endOfMonth);
+        Log::info('Monthly Income: ' . $monthlyIncome);
+        Log::info('Monthly Gross Profit (manual loop): ' . $monthlyGrossProfit);
+        Log::info('Monthly Opex (is_cogs=0): ' . $monthlyOpex);
+        Log::info('Calculated Net Profit: ' . $netProfit);
         
         // Debug detail transaksi
-        \Log::info('--- Transaction Details ---');
+        Log::info('--- Transaction Details ---');
         foreach ($transactions as $transaction) {
-            \Log::info('Transaction ID: ' . $transaction->id . ' | Total: ' . $transaction->total_amount);
+            Log::info('Transaction ID: ' . $transaction->id . ' | Total: ' . $transaction->total_amount);
             foreach ($transaction->details as $detail) {
                 if ($detail->product) {
                     $profit = ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
-                    \Log::info('  Product: ' . $detail->product->name . 
+                    Log::info('  Product: ' . $detail->product->name . 
                               ' | Base: ' . $detail->product->base_price . 
                               ' | Cost: ' . $detail->product->cost_price . 
                               ' | Qty: ' . $detail->quantity . 
                               ' | Profit: ' . $profit);
                 } else {
-                    \Log::warning('  Detail ID ' . $detail->id . ' - NO PRODUCT!');
+                    Log::warning('  Detail ID ' . $detail->id . ' - NO PRODUCT!');
                 }
             }
         }
         
         // Debug pengeluaran operasional
-        \Log::info('--- Operational Expenses ---');
+        Log::info('--- Operational Expenses ---');
         $opexItems = CashFlow::where('business_id', $businessId)
             ->where('type', 'expense')
             ->whereBetween('date', [$startOfMonth, $endOfMonth])
@@ -330,13 +330,13 @@ class FinancialService
             ->get();
             
         foreach ($opexItems as $item) {
-            \Log::info('Expense ID: ' . $item->id . 
+            Log::info('Expense ID: ' . $item->id . 
                       ' | Amount: ' . $item->amount . 
                       ' | Category: ' . ($item->category ? $item->category->name : 'NULL') .
                       ' | is_cogs: ' . ($item->category ? $item->category->is_cogs : 'N/A'));
         }
         
-        \Log::info('===========================');
+        Log::info('===========================');
         // ========================================
 
         // Simpan atau update data profit bulanan
@@ -692,7 +692,7 @@ class FinancialService
     /**
      * Statistik finansial bulanan
      */
-    public function getMonthlyFinancialStats(int $year = null): array
+    public function getMonthlyFinancialStats(?int $year = null): array
     {
         $businessId = Auth::user()->business_id;
         $year = $year ?? now()->year;

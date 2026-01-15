@@ -19,10 +19,12 @@ class ExpenseCategory extends Model
         'description',
         'is_active',
         'created_by',
+        'is_cogs', // <-- DITAMBAHKAN
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_cogs' => 'boolean', // <-- DITAMBAHKAN
     ];
 
     public function cashFlows()
