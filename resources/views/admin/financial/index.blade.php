@@ -11,25 +11,57 @@
     <div class="container-fluid">
         <div class="row g-4 mb-4">
 
-           <div class="col-md-6">
-            <x-card title="Proses Tutup Buku Bulanan">
-                <form action="{{ route('admin.financial.closing.process') }}" method="POST">
-                    @csrf
-                    <p>Pilih bulan dan tahun untuk menghitung laba bersih dan menyiapkannya untuk alokasi dana.</p>
-                    <x-input type="month" name="period" :value="now()->format('Y-m')" required />
-                    <x-button type="submit" class="mt-2">Proses Tutup Buku</x-button>
-                </form>
-            </x-card>
-        </div>
-        {{-- Tombol Atur Modal --}}
-        <div class="col-md-6">
-            <x-card title="Pengaturan Modal">
-                <p>Atur jumlah modal investasi awal Anda untuk perhitungan ROI yang akurat.</p>
-                <a href="{{ route('admin.financial.capital.index') }}" class="btn btn-outline-primary">Atur Modal Awal</a>
-            </x-card>
-        </div>
-    </div>
+            <div class="col-md-6">
+                <x-card title="Proses Tutup Buku Bulanan">
+                    <form action="{{ route('admin.financial.closing.process') }}" method="POST">
+                        @csrf
+                        <p>Pilih bulan dan tahun untuk menghitung laba bersih dan menyiapkannya untuk alokasi dana.</p>
+                        
+                        <div class="row">
+                            {{-- Dropdown Bulan --}}
+                            <div class="col-md-6 mb-3">
+                                <label for="month" class="form-label">Bulan</label>
+                                <select name="month" id="month" class="form-select" required>
+                                    @foreach($months as $value => $label)
+                                        <option value="{{ $value }}" {{ now()->format('m') == $value ? 'selected' : '' }}>
+                                            {{ $label }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
 
+                            {{-- Dropdown Tahun --}}
+                            <div class="col-md-6 mb-3">
+                                <label for="year" class="form-label">Tahun</label>
+                                <select name="year" id="year" class="form-select" required>
+                                    @foreach($years as $year)
+                                        <option value="{{ $year }}" {{ now()->year == $year ? 'selected' : '' }}>
+                                            {{ $year }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <x-button type="submit" class="mt-2 w-100">
+                            <i class="fas fa-calculator me-2"></i>Proses Tutup Buku
+                        </x-button>
+                    </form>
+                </x-card>
+            </div>
+
+            {{-- Tombol Atur Modal --}}
+            <div class="col-md-6">
+                <x-card title="Pengaturan Modal">
+                    <p>Atur jumlah modal investasi awal Anda untuk perhitungan ROI yang akurat.</p>
+                    <a href="{{ route('admin.financial.capital.index') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-cog me-2"></i>Atur Modal Awal
+                    </a>
+                </x-card>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
             {{-- Total Pemasukan --}}
             <div class="col-md-4">
                 <div class="card text-white bg-success h-100">
@@ -77,7 +109,7 @@
                     <i class="fas fa-chevron-right"></i>
                 </a>
                 <a href="{{ route('admin.financial.expenses') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                     <div>
+                    <div>
                         <i class="fas fa-receipt fa-fw me-2"></i>
                         <strong>Laporan Pengeluaran</strong>
                         <br>
@@ -86,7 +118,7 @@
                     <i class="fas fa-chevron-right"></i>
                 </a>
                 <a href="{{ route('admin.financial.roi-analysis') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                     <div>
+                    <div>
                         <i class="fas fa-percentage fa-fw me-2"></i>
                         <strong>Analisis ROI (Return on Investment)</strong>
                         <br>

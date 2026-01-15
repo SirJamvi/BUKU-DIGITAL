@@ -13,9 +13,12 @@ class TransactionPolicy
      */
     public function update(User $user, Transaction $transaction): bool
     {
-        // Izinkan jika:
-        // 1. Pengguna adalah pembuat transaksi.
-        // 2. Transaksi dibuat dalam 15 menit terakhir.
+        // PERBAIKAN: Jika pengguna adalah admin, selalu izinkan.
+        if ($user->role === 'admin') {
+            return true;
+        }
+
+        // Jika bukan admin (kasir), terapkan aturan lama.
         return $user->id === $transaction->created_by && 
                $transaction->created_at->gt(now()->subMinutes(15));
     }

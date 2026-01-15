@@ -11,12 +11,13 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class FinancialService
 {
     /**
      * Laporan keuangan dengan perhitungan yang konsisten
-     * PERBAIKAN: HPP tidak dihitung dua kali
+     * PERBAIKAN: HPP dan Beban Operasional dihitung dengan benar
      */
     public function getFinancialReport(array $filters): array
     {
@@ -55,32 +56,53 @@ class FinancialService
         $cashFlows = $cashFlowQuery->latest('date')->get();
 
         // ========================================================================
-        // PERBAIKAN KRITIS: Pisahkan COGS dan Operating Expenses
+        // ✅ PERBAIKAN KRITIS: Pisahkan COGS dan Operating Expenses dengan BENAR
         // ========================================================================
         
-        // Hitung HPP/COGS: hanya dari kategori yang ditandai is_cogs = true
+        // ✅ Hitung HPP/COGS: hanya dari kategori yang ditandai is_cogs = 1 (true)
         $totalCogs = $cashFlows->filter(function ($flow) {
-            return $flow->type === 'expense' && $flow->category && $flow->category->is_cogs;
+            return $flow->type === 'expense' && $flow->category && $flow->category->is_cogs == 1;
         })->sum('amount');
         
-        // Hitung HANYA Beban Operasional (TANPA HPP/COGS)
-        // INI MEMASTIKAN HPP TIDAK DIHITUNG DUA KALI!
+        // ✅ Hitung HANYA Beban Operasional (is_cogs == 0)
         $totalExpense = $cashFlows->filter(function ($flow) {
-            return $flow->type === 'expense' && (!$flow->category || $flow->category->is_cogs === false);
+            return $flow->type === 'expense' && $flow->category && $flow->category->is_cogs == 0;
         })->sum('amount');
 
         // Hitung laba bersih dengan benar
         // Net Profit = Gross Profit - Operating Expenses (NO COGS!)
         $netProfit = $totalGrossProfit - $totalExpense;
 
+        // ========== DEBUGGING CODE ==========
+        Log::info('=== FINANCIAL REPORT DEBUG ===');
+        Log::info('Business ID: ' . Auth::user()->business_id);
+        Log::info('Total Cash Flows: ' . $cashFlows->count());
+        Log::info('Cash Flows with expense type: ' . $cashFlows->where('type', 'expense')->count());
+        
+        // Debug kategori
+        $expenseFlows = $cashFlows->where('type', 'expense');
+        foreach ($expenseFlows as $flow) {
+            Log::info('Flow ID: ' . $flow->id .
+                        ' | Amount: ' . $flow->amount .
+                        ' | Category: ' . ($flow->category ? $flow->category->name : 'NULL') .
+                        ' | is_cogs: ' . ($flow->category ? ($flow->category->is_cogs ? 'true' : 'false') : 'N/A'));
+        }
+        
+        Log::info('Total COGS: ' . $totalCogs);
+        Log::info('Total Expense: ' . $totalExpense);
+        Log::info('Total Gross Profit: ' . $totalGrossProfit);
+        Log::info('Net Profit: ' . $netProfit);
+        Log::info('===========================');
+        // ====================================
+
         return [
             'transactions'       => $transactions,
             'cash_flows'         => $cashFlows,
             'total_income'       => $totalIncome,
-            'total_cogs'         => $totalCogs, // HPP/COGS
-            'total_expense'      => $totalExpense, // HANYA Operating Expenses
+            'total_cogs'         => $totalCogs,
+            'total_expense'      => $totalExpense,
             'total_gross_profit' => $totalGrossProfit,
-            'net_profit'         => $netProfit, // Hasil yang benar ✅
+            'net_profit'         => $netProfit,
             'filters'            => $filters,
         ];
     }
@@ -98,19 +120,29 @@ class FinancialService
             ->where('status', 'completed')
             ->sum('total_amount');
         
-        // Total pengeluaran
+        // Total pengeluaran (HANYA Operasional, bukan COGS)
         $totalExpense = CashFlow::where('type', 'expense')
             ->where('business_id', $businessId)
+            ->whereHas('category', function($q) {
+                $q->where('is_cogs', 0);
+            })
             ->sum('amount');
         
-        // Hitung laba kotor
-        $grossProfit = DB::table('transaction_details')
-            ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
-            ->join('products', 'transaction_details.product_id', '=', 'products.id')
-            ->where('transactions.business_id', $businessId)
-            ->where('transactions.type', 'sale')
-            ->where('transactions.status', 'completed')
-            ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
+        // Hitung laba kotor dengan loop untuk keamanan
+        $grossProfit = 0;
+        $transactions = Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', 'completed')
+            ->with('details.product')
+            ->get();
+            
+        foreach ($transactions as $transaction) {
+            foreach ($transaction->details as $detail) {
+                if ($detail->product && $detail->product->base_price && $detail->product->cost_price) {
+                    $grossProfit += ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
+                }
+            }
+        }
 
         $netProfit = $grossProfit - $totalExpense;
         $netCashFlow = $totalIncome - $totalExpense;
@@ -188,7 +220,7 @@ class FinancialService
 
     /**
      * Logika "Tutup Buku" yang disempurnakan
-     * PERBAIKAN: Tidak memproses ulang periode yang sudah 'completed'
+     * PERBAIKAN: Menggunakan perhitungan manual yang sama dengan laporan keuangan
      */
     public function processMonthlyClosing(string $period): OwnerProfit
     {
@@ -198,15 +230,13 @@ class FinancialService
         $year = $date->year;
 
         // =======================================================
-        // PENGECEKAN BARU: JANGAN PROSES JIKA SUDAH SELESAI
+        // PENGECEKAN: JANGAN PROSES JIKA SUDAH SELESAI
         // =======================================================
         $existingProfit = OwnerProfit::where('business_id', $businessId)
             ->where('period_month', $month)
             ->where('period_year', $year)
             ->first();
 
-        // Jika data sudah ada DAN statusnya 'completed', jangan hitung ulang.
-        // Langsung kembalikan data yang ada.
         if ($existingProfit && $existingProfit->status === 'completed') {
             return $existingProfit;
         }
@@ -222,48 +252,106 @@ class FinancialService
             ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
             ->sum('total_amount');
 
-        // 2. Hitung laba kotor bulan ini (Total Penjualan - HPP dari Produk)
-        $monthlyGrossProfit = DB::table('transaction_details')
-            ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
-            ->join('products', 'transaction_details.product_id', '=', 'products.id')
-            ->where('transactions.business_id', $businessId)
-            ->where('transactions.type', 'sale')
-            ->where('transactions.status', 'completed')
-            ->whereBetween('transactions.transaction_date', [$startOfMonth, $endOfMonth])
-            ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
+        // ====================================================================
+        // 2. Hitung laba kotor bulan ini DENGAN LOOP MANUAL (lebih aman)
+        // ====================================================================
+        $monthlyGrossProfit = 0;
+        $transactions = Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', 'completed')
+            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
+            ->with(['details.product'])
+            ->get();
+
+        foreach ($transactions as $transaction) {
+            if ($transaction->details) {
+                foreach ($transaction->details as $detail) {
+                    if ($detail->product && $detail->product->base_price && $detail->product->cost_price) {
+                        $profitPerItem = ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
+                        $monthlyGrossProfit += $profitPerItem;
+                    }
+                }
+            }
+        }
 
         // ====================================================================
-        // PERBAIKAN LOGIKA: Pisahkan Beban Operasional (Opex) dari HPP
-        // ====================================================================
-        
         // 3. Hitung Beban Operasional (HANYA Opex, BUKAN HPP)
+        // ====================================================================
         $monthlyOpex = CashFlow::where('business_id', $businessId)
             ->where('type', 'expense')
             ->whereBetween('date', [$startOfMonth, $endOfMonth])
             ->whereHas('category', function ($query) {
-                // Hanya ambil kategori yang BUKAN HPP
-                $query->where('is_cogs', false); 
+                $query->where('is_cogs', 0); // Hanya ambil kategori yang BUKAN HPP
             })
             ->sum('amount');
         
         // 4. Hitung Laba Bersih yang BENAR
         $netProfit = $monthlyGrossProfit - $monthlyOpex; // Laba Kotor - Beban Operasional
         
-        // ====================================================================
+        // ========================================
+        // 🔍 DEBUGGING CODE
+        // ========================================
+        Log::info('=== MONTHLY CLOSING DEBUG ===');
+        Log::info('Period: ' . $period);
+        Log::info('Business ID: ' . $businessId);
+        Log::info('Date Range: ' . $startOfMonth . ' to ' . $endOfMonth);
+        Log::info('Monthly Income: ' . $monthlyIncome);
+        Log::info('Monthly Gross Profit (manual loop): ' . $monthlyGrossProfit);
+        Log::info('Monthly Opex (is_cogs=0): ' . $monthlyOpex);
+        Log::info('Calculated Net Profit: ' . $netProfit);
+        
+        // Debug detail transaksi
+        Log::info('--- Transaction Details ---');
+        foreach ($transactions as $transaction) {
+            Log::info('Transaction ID: ' . $transaction->id . ' | Total: ' . $transaction->total_amount);
+            foreach ($transaction->details as $detail) {
+                if ($detail->product) {
+                    $profit = ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
+                    Log::info('  Product: ' . $detail->product->name . 
+                              ' | Base: ' . $detail->product->base_price . 
+                              ' | Cost: ' . $detail->product->cost_price . 
+                              ' | Qty: ' . $detail->quantity . 
+                              ' | Profit: ' . $profit);
+                } else {
+                    Log::warning('  Detail ID ' . $detail->id . ' - NO PRODUCT!');
+                }
+            }
+        }
+        
+        // Debug pengeluaran operasional
+        Log::info('--- Operational Expenses ---');
+        $opexItems = CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->whereBetween('date', [$startOfMonth, $endOfMonth])
+            ->whereHas('category', function ($query) {
+                $query->where('is_cogs', 0);
+            })
+            ->with('category')
+            ->get();
+            
+        foreach ($opexItems as $item) {
+            Log::info('Expense ID: ' . $item->id . 
+                      ' | Amount: ' . $item->amount . 
+                      ' | Category: ' . ($item->category ? $item->category->name : 'NULL') .
+                      ' | is_cogs: ' . ($item->category ? $item->category->is_cogs : 'N/A'));
+        }
+        
+        Log::info('===========================');
+        // ========================================
 
         // Simpan atau update data profit bulanan
         return OwnerProfit::updateOrCreate(
             [
-                'business_id'   => $businessId,
+                'business_id'  => $businessId,
                 'period_month'  => $month,
                 'period_year'   => $year
             ],
             [
                 'monthly_income'    => $monthlyIncome,
-                'monthly_expense'   => $monthlyOpex, // Simpan Opex, bukan Total Expense
+                'monthly_expense'   => $monthlyOpex,
                 'gross_profit'      => $monthlyGrossProfit,
-                'net_profit'        => $netProfit, // Laba Bersih = Laba Kotor - Beban Operasional
-                'status'            => 'pending', // Selalu set ke 'pending' saat dihitung ulang
+                'net_profit'        => $netProfit,
+                'status'            => 'pending',
                 'allocated_at'      => null,
                 'allocated_funds'   => 0,
                 'recorded_at'       => now(),
@@ -350,22 +438,29 @@ class FinancialService
             ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
             ->sum('total_amount');
 
-        // Hitung laba kotor bulan ini
-        $monthlyGrossProfit = DB::table('transaction_details')
-            ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
-            ->join('products', 'transaction_details.product_id', '=', 'products.id')
-            ->where('transactions.business_id', $businessId)
-            ->where('transactions.type', 'sale')
-            ->where('transactions.status', 'completed')
-            ->whereBetween('transactions.transaction_date', [$startOfMonth, $endOfMonth])
-            ->sum(DB::raw('transaction_details.quantity * (products.base_price - products.cost_price)'));
+        // Hitung laba kotor bulan ini (manual loop)
+        $monthlyGrossProfit = 0;
+        $transactions = Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', 'completed')
+            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
+            ->with(['details.product'])
+            ->get();
 
-        // Hitung pengeluaran bulan ini (hanya Opex)
+        foreach ($transactions as $transaction) {
+            foreach ($transaction->details as $detail) {
+                if ($detail->product && $detail->product->base_price && $detail->product->cost_price) {
+                    $monthlyGrossProfit += ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
+                }
+            }
+        }
+
+        // Hitung pengeluaran bulan ini (hanya Opex, is_cogs == 0)
         $monthlyOpex = CashFlow::where('business_id', $businessId)
             ->where('type', 'expense')
             ->whereBetween('date', [$startOfMonth, $endOfMonth])
             ->whereHas('category', function ($query) {
-                $query->where('is_cogs', false);
+                $query->where('is_cogs', 0);
             })
             ->sum('amount');
 
@@ -387,11 +482,7 @@ class FinancialService
             'net_profit' => (float) $netProfit,
             'is_already_closed' => $existingClosing ? true : false,
             'closing_data' => $existingClosing,
-            'transactions_count' => Transaction::where('business_id', $businessId)
-                ->where('type', 'sale')
-                ->where('status', 'completed')
-                ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
-                ->count(),
+            'transactions_count' => $transactions->count(),
             'expenses_count' => CashFlow::where('business_id', $businessId)
                 ->where('type', 'expense')
                 ->whereBetween('date', [$startOfMonth, $endOfMonth])
@@ -517,7 +608,7 @@ class FinancialService
     {
         $category = ExpenseCategory::firstOrCreate(
             ['business_id' => Auth::user()->business_id, 'name' => trim($data['category_name'])],
-            ['type' => 'Operasional', 'is_active' => true, 'created_by' => Auth::id()]
+            ['type' => 'Operasional', 'is_active' => true, 'created_by' => Auth::id(), 'is_cogs' => false]
         );
 
         CashFlow::create([
@@ -538,7 +629,12 @@ class FinancialService
     {
         $category = ExpenseCategory::firstOrCreate(
             ['business_id' => Auth::user()->business_id, 'name' => trim($data['category_name'])],
-            ['type' => 'Operasional', 'is_active' => true, 'created_by' => Auth::id()]
+            [
+                'type' => 'Operasional', 
+                'is_active' => true, 
+                'created_by' => Auth::id(),
+                'is_cogs' => false
+            ]
         );
 
         $expense->update([
@@ -562,19 +658,15 @@ class FinancialService
      */
     public function createExpenseCategory(array $data): void
     {
-        // =======================================================
-        // PERBAIKAN: Simpan nilai `is_cogs`
-        // =======================================================
         ExpenseCategory::firstOrCreate(
             ['business_id' => Auth::user()->business_id, 'name' => trim($data['name'])],
             [
-                'type' => $data['type'] ?? 'Operasional', // Gunakan type dari input atau default Operasional
+                'type' => $data['type'] ?? 'Operasional',
                 'is_active' => true,
                 'created_by' => Auth::id(),
-                'is_cogs' => $data['is_cogs'] ?? false, // Simpan is_cogs, default false
+                'is_cogs' => $data['is_cogs'] ?? false,
             ]
         );
-        // =======================================================
     }
 
     /**
@@ -600,7 +692,7 @@ class FinancialService
     /**
      * Statistik finansial bulanan
      */
-    public function getMonthlyFinancialStats(int $year = null): array
+    public function getMonthlyFinancialStats(?int $year = null): array
     {
         $businessId = Auth::user()->business_id;
         $year = $year ?? now()->year;

@@ -44,6 +44,24 @@ class CustomerService
     }
 
     /**
+     * [BARU] Mengubah status pelanggan secara instan (toggle).
+     */
+    public function toggleStatus(Customer $customer): bool
+    {
+        $user = Auth::user();
+        
+        // Keamanan: Pastikan customer milik business yang sama
+        if ($customer->business_id !== $user->business_id) {
+            abort(403, 'Akses ditolak.');
+        }
+
+        // Jika aktif jadi inactive, jika inactive jadi active
+        $newStatus = $customer->status === 'active' ? 'inactive' : 'active';
+        
+        return $customer->update(['status' => $newStatus]);
+    }
+
+    /**
      * [BARU] Mendapatkan statistik pelanggan baru per bulan (12 bulan terakhir).
      */
     public function getMonthlyCustomerStats(): array
@@ -113,5 +131,23 @@ class CustomerService
         }
 
         return round((($currentMonth - $lastMonth) / $lastMonth) * 100, 1);
+    }
+
+    /**
+     * [BARU] Mendapatkan total pelanggan berdasarkan status.
+     */
+    public function getCustomerStatusCounts(): array
+    {
+        // Menggunakan selectRaw agar lebih efisien (hanya 1 query)
+        $counts = Customer::selectRaw("
+                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
+                COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_count
+            ")
+            ->first();
+
+        return [
+            'active' => $counts->active_count ?? 0,
+            'inactive' => $counts->inactive_count ?? 0,
+        ];
     }
 }

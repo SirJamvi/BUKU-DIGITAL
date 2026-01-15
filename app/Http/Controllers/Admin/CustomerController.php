@@ -21,31 +21,25 @@ class CustomerController extends Controller
     public function index(): View
     {
         $customers = $this->customerService->getAllCustomersWithPagination();
-        
-        // Ambil statistik pelanggan per bulan
         $monthlyStats = $this->customerService->getMonthlyCustomerStats();
         
-        return view('admin.customers.index', compact('customers', 'monthlyStats'));
+        // [BARU] Ambil data statistik status
+        $statusCounts = $this->customerService->getCustomerStatusCounts();
+        
+        return view('admin.customers.index', compact('customers', 'monthlyStats', 'statusCounts'));
     }
 
     public function show(Customer $customer): View
     {
-        // Global scope sudah memastikan admin hanya bisa melihat pelanggan bisnisnya
         $transactions = $this->customerService->getCustomerTransactions($customer);
         return view('admin.customers.show', compact('customer', 'transactions'));
     }
 
-    /**
-     * Menampilkan form untuk mengedit data pelanggan.
-     */
     public function edit(Customer $customer): View
     {
         return view('admin.customers.edit', compact('customer'));
     }
 
-    /**
-     * Memproses pembaruan data pelanggan.
-     */
     public function update(Request $request, Customer $customer): RedirectResponse
     {
         $validatedData = $request->validate([
@@ -59,5 +53,17 @@ class CustomerController extends Controller
         $this->customerService->updateCustomer($customer, $validatedData);
 
         return redirect()->route('admin.customers.index')->with('success', 'Data pelanggan berhasil diperbarui.');
+    }
+
+    /**
+     * [BARU] Method untuk mengubah status dari halaman index
+     */
+    public function toggleStatus(Customer $customer): RedirectResponse
+    {
+        $this->customerService->toggleStatus($customer);
+        
+        $statusMsg = $customer->fresh()->status == 'active' ? 'diaktifkan' : 'dinonaktifkan';
+        
+        return redirect()->back()->with('success', "Pelanggan berhasil $statusMsg.");
     }
 }

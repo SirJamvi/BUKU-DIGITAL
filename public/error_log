@@ -1,0 +1,4 @@
+[30-Dec-2025 14:03:49 Asia/Jakarta] PHP Fatal error:  Maximum execution time of 30 seconds exceeded in /home/resdigaz/pb.resdigaza.my.id/vendor/dompdf/dompdf/src/FrameDecorator/AbstractFrameDecorator.php on line 560
+[30-Dec-2025 14:04:26 Asia/Jakarta] PHP Fatal error:  Maximum execution time of 30 seconds exceeded in /home/resdigaz/pb.resdigaza.my.id/vendor/dompdf/dompdf/src/Css/Style.php on line 950
+[30-Dec-2025 14:06:14 Asia/Jakarta] PHP Fatal error:  Maximum execution time of 30 seconds exceeded in /home/resdigaz/pb.resdigaza.my.id/vendor/dompdf/dompdf/src/Frame.php on line 376
+[31-Dec-2025 09:21:49 Asia/Jakarta] PHP Fatal error:  Maximum execution time of 30 seconds exceeded in /home/resdigaz/pb.resdigaza.my.id/vendor/dompdf/dompdf/src/Css/Style.php on line 2285

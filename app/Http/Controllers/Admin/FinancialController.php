@@ -31,7 +31,29 @@ class FinancialController extends Controller
     public function index(): View
     {
         $financialSummary = $this->financialService->getFinancialSummary();
-        return view('admin.financial.index', compact('financialSummary'));
+        
+        // Tambahan untuk dropdown tahun dinamis
+        $currentYear = now()->year;
+        $startYear = 2020; // Tahun awal bisnis atau bisa disesuaikan
+        $years = range($currentYear + 1, $startYear); // Dari tahun depan sampai tahun awal
+        
+        // Daftar bulan
+        $months = [
+            '01' => 'Januari',
+            '02' => 'Februari', 
+            '03' => 'Maret',
+            '04' => 'April',
+            '05' => 'Mei',
+            '06' => 'Juni',
+            '07' => 'Juli',
+            '08' => 'Agustus',
+            '09' => 'September',
+            '10' => 'Oktober',
+            '11' => 'November',
+            '12' => 'Desember'
+        ];
+        
+        return view('admin.financial.index', compact('financialSummary', 'years', 'months'));
     }
 
     // Menampilkan halaman Laporan Pengeluaran (Daftar) dengan filter
@@ -50,12 +72,7 @@ class FinancialController extends Controller
         
         // Ambil data dengan paginasi
         $expenses = $query->latest('date')->paginate(10);
-        
-        // =======================================================
-        // PERBAIKAN: Gunakan `withCount` untuk efisiensi
-        // =======================================================
-        $categories = ExpenseCategory::withCount('cashFlows as expenses_count')->get();
-        // =======================================================
+        $categories = ExpenseCategory::all();
         
         return view('admin.financial.expenses', compact('expenses', 'categories'));
     }
@@ -92,19 +109,8 @@ class FinancialController extends Controller
     // Menyimpan kategori pengeluaran baru dari modal
     public function storeExpenseCategory(Request $request): RedirectResponse
     {
-        // =======================================================
-        // PERBAIKAN: Validasi dan proses input `is_cogs`
-        // =======================================================
-        $request->validate([
-            'name' => 'required|string|max:191',
-            'type' => 'required|string',
-            'is_cogs' => 'nullable|boolean' // Validasi is_cogs
-        ]);
-        
-        // Kirim data yang sudah divalidasi ke service
-        $this->financialService->createExpenseCategory($request->validated());
-        // =======================================================
-        
+        $request->validate(['name' => 'required|string|max:191', 'type' => 'required|string']);
+        $this->financialService->createExpenseCategory($request->all());
         return back()->with('success', 'Kategori pengeluaran baru berhasil ditambahkan.');
     }
 
@@ -191,10 +197,22 @@ class FinancialController extends Controller
      */
     public function processMonthlyClosing(Request $request): RedirectResponse
     {
-        $request->validate(['period' => 'required|date_format:Y-m']);
+        // Validasi untuk menerima bulan dan tahun terpisah atau period langsung
+        $request->validate([
+            'period' => 'required_without_all:month,year|date_format:Y-m',
+            'month' => 'required_without:period|string|size:2',
+            'year' => 'required_without:period|integer|min:2020|max:' . (now()->year + 1),
+        ]);
         
         try {
-            $this->financialService->processMonthlyClosing($request->input('period'));
+            // Jika ada month dan year terpisah, gabungkan menjadi period
+            if ($request->has('month') && $request->has('year')) {
+                $period = $request->input('year') . '-' . $request->input('month');
+            } else {
+                $period = $request->input('period');
+            }
+            
+            $this->financialService->processMonthlyClosing($period);
             return redirect()->route('admin.fund-allocation.index')->with('success', 'Proses tutup buku berhasil. Laba bersih siap dialokasikan.');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal memproses tutup buku: ' . $e->getMessage());
@@ -207,15 +225,22 @@ class FinancialController extends Controller
      */
     public function processClosing(Request $request): RedirectResponse
     {
-        // Validasi input - bisa berupa period (Y-m) atau tanggal lengkap
+        // Validasi input - bisa berupa period (Y-m), month+year terpisah, atau tanggal lengkap
         $request->validate([
             'period' => 'sometimes|required|date_format:Y-m',
+            'month' => 'sometimes|required|string|size:2',
+            'year' => 'sometimes|required|integer|min:2020|max:' . (now()->year + 1),
             'closing_date' => 'sometimes|required|date',
         ]);
         
         try {
+            // Jika ada parameter month dan year terpisah
+            if ($request->has('month') && $request->has('year')) {
+                $period = $request->input('year') . '-' . $request->input('month');
+                $this->financialService->processMonthlyClosing($period);
+            }
             // Jika ada parameter period, gunakan processMonthlyClosing
-            if ($request->has('period')) {
+            elseif ($request->has('period')) {
                 $this->financialService->processMonthlyClosing($request->input('period'));
             } 
             // Jika ada closing_date, konversi ke format Y-m

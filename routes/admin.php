@@ -5,7 +5,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\CategoryController;
-use App\Http\Controllers\Admin\CustomerController;
+use App\Http\Controllers\Admin\CustomerController; // Pastikan ini ada
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FinancialController;
@@ -25,12 +25,21 @@ Route::resource('products', ProductController::class);
 Route::resource('users', UserController::class);
 Route::resource('suppliers', SupplierController::class)->except(['show']);
 Route::resource('transactions', TransactionController::class)->except(['create', 'store', 'destroy']);
-Route::resource('customers', CustomerController::class)->except(['create', 'store', 'destroy']);
+
+// --- Update Bagian Customer ---
+// PENTING: Taruh rute kustom (toggle-status) SEBELUM Route::resource
+Route::patch('customers/{customer}/toggle-status', [CustomerController::class, 'toggleStatus'])
+    ->name('customers.toggle-status');
+
+Route::resource('customers', CustomerController::class)
+    ->except(['create', 'store', 'destroy']);
+// ------------------------------
+
 Route::resource('expense-categories', \App\Http\Controllers\Admin\ExpenseCategoryController::class);
 
 // Financial & Expenses - DIJADIKAN SATU
 Route::prefix('financial')->name('financial.')->group(function () {
-     Route::get('/capital', [FinancialController::class, 'capital'])->name('capital.index');
+    Route::get('/capital', [FinancialController::class, 'capital'])->name('capital.index');
     Route::post('/capital', [FinancialController::class, 'storeCapital'])->name('capital.store');
     Route::post('/closing', [FinancialController::class, 'processClosing'])->name('closing.process');
 
@@ -43,23 +52,15 @@ Route::prefix('financial')->name('financial.')->group(function () {
     Route::get('/expenses/create', [FinancialController::class, 'createExpense'])->name('expenses.create');
     Route::post('/expenses', [FinancialController::class, 'storeExpense'])->name('expenses.store');
     
-    // [BARU] Rute untuk edit, update, dan delete pengeluaran
+    // Rute untuk edit, update, dan delete pengeluaran
     Route::get('/expenses/{expense}/edit', [FinancialController::class, 'editExpense'])->name('expenses.edit');
     Route::put('/expenses/{expense}', [FinancialController::class, 'updateExpense'])->name('expenses.update');
     Route::delete('/expenses/{expense}', [FinancialController::class, 'destroyExpense'])->name('expenses.destroy');
     Route::get('expenses/export/excel', [FinancialController::class, 'exportExcel'])->name('expenses.export.excel');
     Route::get('expenses/export/pdf', [FinancialController::class, 'exportPdf'])->name('expenses.export.pdf');
 
-
-
-
     // Rute untuk mengelola kategori pengeluaran dari modal
     Route::post('/expense-categories', [FinancialController::class, 'storeExpenseCategory'])->name('expense_categories.store');
-
-    // [BARU] Rute untuk Modal & Tutup Buku
-    Route::get('/capital', [FinancialController::class, 'capital'])->name('capital.index');
-    Route::post('/capital', [FinancialController::class, 'storeCapital'])->name('capital.store');
-    Route::post('/closing', [FinancialController::class, 'processClosing'])->name('closing.process');
 
     // Rute baru untuk inisialisasi data finansial
     Route::post('/initialize-data', [FinancialController::class, 'initializeFinancialData'])->name('initialize-data');

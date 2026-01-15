@@ -6,17 +6,44 @@
 @endsection
 
 @section('content')
-    {{-- Statistik Pelanggan Bulanan --}}
+    {{-- 1. Statistik Status Pelanggan (BARU) --}}
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <x-card>
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Pelanggan Aktif</h6>
+                        <h2 class="mb-0 text-success">{{ $statusCounts['active'] }}</h2>
+                    </div>
+                    <div class="text-success opacity-25">
+                        <i class="fas fa-user-check fa-3x"></i>
+                    </div>
+                </div>
+            </x-card>
+        </div>
+        <div class="col-md-6">
+            <x-card>
+                <div class="d-flex align-items-center">
+                    <div class="flex-grow-1">
+                        <h6 class="text-muted mb-1">Pelanggan Non-Aktif</h6>
+                        <h2 class="mb-0 text-secondary">{{ $statusCounts['inactive'] }}</h2>
+                    </div>
+                    <div class="text-secondary opacity-25">
+                        <i class="fas fa-user-times fa-3x"></i>
+                    </div>
+                </div>
+            </x-card>
+        </div>
+    </div>
+
+    {{-- Statistik Grafik Pelanggan Bulanan (Tetap Ada) --}}
     <div class="row mb-4">
         <div class="col-12">
             <x-card title="Statistik Pelanggan Baru per Bulan">
                 <div class="row">
-                    {{-- Grafik --}}
                     <div class="col-md-9">
                         <canvas id="monthlyCustomersChart" style="max-height: 300px;"></canvas>
                     </div>
-                    
-                    {{-- Summary Cards --}}
                     <div class="col-md-3">
                         <div class="card bg-primary text-white mb-3">
                             <div class="card-body">
@@ -47,6 +74,7 @@
                     <th>ID</th>
                     <th>Nama</th>
                     <th>Kontak</th>
+                    <th>Status</th> {{-- Kolom Status --}}
                     <th>Tanggal Bergabung</th>
                     <th class="text-center">Aksi</th>
                 </tr>
@@ -56,6 +84,31 @@
                     <td>{{ $customer->id }}</td>
                     <td>{{ $customer->name }}</td>
                     <td>{{ $customer->phone ?? $customer->email }}</td>
+                    
+                    {{-- [BARU] Tombol Toggle Status --}}
+                    <td>
+                        <form action="{{ route('admin.customers.toggle-status', $customer->id) }}" method="POST" class="d-inline">
+                            @csrf
+                            @method('PATCH')
+                            
+                            @if($customer->status === 'active')
+                                <button type="submit" 
+                                        class="btn btn-sm btn-outline-success rounded-pill px-3"
+                                        onclick="return confirm('Non-aktifkan pelanggan ini?')"
+                                        title="Klik untuk menonaktifkan">
+                                    <i class="fas fa-check-circle me-1"></i> Aktif
+                                </button>
+                            @else
+                                <button type="submit" 
+                                        class="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                                        onclick="return confirm('Aktifkan pelanggan ini?')"
+                                        title="Klik untuk mengaktifkan">
+                                    <i class="fas fa-ban me-1"></i> Non-Aktif
+                                </button>
+                            @endif
+                        </form>
+                    </td>
+
                     <td>{{ $customer->join_date->isoFormat('D MMMM YYYY') }}</td>
                     <td class="text-center">
                         <x-button href="{{ route('admin.customers.show', $customer->id) }}" variant="info" class="btn-sm">
@@ -68,7 +121,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="5" class="text-center">Tidak ada data pelanggan.</td></tr>
+                <tr><td colspan="6" class="text-center">Tidak ada data pelanggan.</td></tr>
             @endforelse
         </x-table>
         @if ($customers->hasPages())
@@ -82,7 +135,6 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const ctx = document.getElementById('monthlyCustomersChart');
-    
     const monthlyData = @json($monthlyStats);
     
     new Chart(ctx, {
@@ -102,10 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
             responsive: true,
             maintainAspectRatio: true,
             plugins: {
-                legend: {
-                    display: true,
-                    position: 'top'
-                },
+                legend: { display: true, position: 'top' },
                 tooltip: {
                     callbacks: {
                         label: function(context) {
@@ -117,10 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: {
-                        stepSize: 1,
-                        precision: 0
-                    }
+                    ticks: { stepSize: 1, precision: 0 }
                 }
             }
         }
