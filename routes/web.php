@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 
@@ -22,6 +23,12 @@ Route::get('/', function () {
 Route::get('login', [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest');
 Route::post('login', [LoginController::class, 'login']);
 Route::post('logout', [LoginController::class, 'logout'])->name('logout');
+
+// Rute Google Login
+Route::controller(GoogleController::class)->group(function(){
+    Route::get('auth/google', 'redirectToGoogle')->name('auth.google');
+    Route::get('auth/google/callback', 'handleGoogleCallback');
+});
 
 Route::get('register', [RegisterController::class, 'showRegistrationForm'])->name('register')->middleware('guest');
 // ... (rute auth lainnya) ...

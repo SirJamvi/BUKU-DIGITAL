@@ -58,6 +58,18 @@
         </div>
     </form>
 
+    {{-- MULAI KODE BARU: Opsi Login Google --}}
+    <div class="text-center my-3">
+        <span class="text-muted" style="font-size: 0.8rem;">ATAU MASUK DENGAN</span>
+    </div>
+
+    <div class="d-grid mb-4">
+        <a href="{{ route('auth.google') }}" class="btn btn-outline-danger" style="border-radius: 50px;">
+            <i class="fab fa-google me-2"></i> Google
+        </a>
+    </div>
+    {{-- SELESAI KODE BARU --}}
+
     <div class="text-center">
         <p class="text-muted">
             Belum punya akun? 
