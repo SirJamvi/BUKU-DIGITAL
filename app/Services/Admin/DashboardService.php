@@ -9,18 +9,14 @@ use App\Models\UserActivityLog;
 use App\Models\FundAllocationSetting;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
-// 1. IMPOR SERVICE YANG SUDAH MEMILIKI LOGIKA BENAR
 use App\Services\Admin\FinancialService;
 
 class DashboardService
 {
-    /**
-     * 2. TAMBAHKAN SERVICE BARU SEBAGAI PROPERTI
-     */
     protected FinancialService $financialService;
 
     /**
-     * 3. INJEKSI SERVICE KE DALAM CONSTRUCTOR
+     * Injeksi Service FinancialService ke dalam Constructor
      */
     public function __construct(FinancialService $financialService)
     {
@@ -33,6 +29,8 @@ class DashboardService
     public function getDashboardData(): array
     {
         $businessId = Auth::user()->business_id;
+        
+        // Setup Tanggal
         $today = Carbon::today();
         $yesterday = Carbon::yesterday();
         $startOfMonth = Carbon::now()->startOfMonth();
@@ -40,14 +38,11 @@ class DashboardService
         $startOfLastMonth = Carbon::now()->subMonth()->startOfMonth();
         $endOfLastMonth = Carbon::now()->subMonth()->endOfMonth();
 
-        // --- Metrik Utama ---
+        // 1. Metrik Utama (Penjualan Hari Ini)
         $salesToday = $this->getSalesForDate($businessId, $today);
 
-        // ====================================================================
-        // 4. PERBAIKAN PERHITUNGAN LABA BERSIH
-        // ====================================================================
-        
-        // Menggunakan FinancialService untuk menghitung Laba Bersih Bulan Ini
+        // 2. Perhitungan Laba Bersih (Menggunakan FinancialService)
+        // Bulan Ini
         $thisMonthFilters = [
             'start_date' => $startOfMonth->toDateString(), 
             'end_date' => $endOfMonth->toDateString()
@@ -55,51 +50,49 @@ class DashboardService
         $thisMonthReport = $this->financialService->getFinancialReport($thisMonthFilters);
         $netProfitThisMonth = $thisMonthReport['net_profit'];
 
-        // Menggunakan FinancialService untuk menghitung Laba Bersih Bulan Lalu
+        // Bulan Lalu
         $lastMonthFilters = [
             'start_date' => $startOfLastMonth->toDateString(), 
             'end_date' => $endOfLastMonth->toDateString()
         ];
         $lastMonthReport = $this->financialService->getFinancialReport($lastMonthFilters);
         $netProfitLastMonth = $lastMonthReport['net_profit'];
-        
-        // ====================================================================
 
-        // --- Perbandingan ---
+        // 3. Perbandingan & Persentase
         $salesYesterday = $this->getSalesForDate($businessId, $yesterday);
         $salesChangePercentage = $this->calculatePercentageChange($salesToday, $salesYesterday);
-
-        // Perhitungan persentase profit sekarang sudah menggunakan data yang benar
         $profitChangePercentage = $this->calculatePercentageChange($netProfitThisMonth, $netProfitLastMonth);
 
-        // --- Metrik Lainnya ---
+        // 4. Metrik Lainnya (Stock, User, Activity, Allocation)
         $lowStockItems = Inventory::where('business_id', $businessId)
             ->whereColumn('current_stock', '<=', 'min_stock')
             ->count();
 
         $totalUsers = User::where('business_id', $businessId)->count();
-        $activeUsers = 1; // Placeholder; ganti jika ada tabel session
-
-        // --- Aktivitas Terbaru ---
+        $activeUsers = 1; // Placeholder
+        
         $recentActivities = UserActivityLog::with('user')
             ->where('business_id', $businessId)
             ->latest()
             ->limit(5)
             ->get();
 
-        // --- Data Alokasi Dana ---
         $fundAllocationSettings = FundAllocationSetting::where('business_id', $businessId)
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->get();
 
-        // --- Data Performa Bulanan (6 bulan terakhir) ---
+        // 5. DATA GRAFIK
+        // A. Data Bulanan (6 Bulan)
         $monthlyPerformance = $this->getMonthlyPerformanceData($businessId, 6);
+        
+        // B. [BARU] Data Mingguan (4 Minggu Terakhir)
+        $weeklyPerformance = $this->getWeeklyPerformanceData($businessId);
 
-        // --- Hitung Rata-rata & Margin ---
-        $salesArr = $monthlyPerformance['sales'];   // sudah dalam jutaan
-        $profitArr = $monthlyPerformance['profits']; // sudah dalam jutaan
-
+        // 6. Hitung Rata-rata & Margin (Menggunakan data bulanan sebagai acuan)
+        $salesArr = $monthlyPerformance['sales'];
+        $profitArr = $monthlyPerformance['profits'];
+        
         $count = count($salesArr);
         $avgSales = $count ? round(array_sum($salesArr) / $count, 2) : 0;
         $avgProfit = $count ? round(array_sum($profitArr) / $count, 2) : 0;
@@ -118,6 +111,7 @@ class DashboardService
             'recentActivities' => $recentActivities,
             'fundAllocationData' => $fundAllocationSettings,
             'monthlyPerformanceData' => $monthlyPerformance,
+            'weeklyPerformanceData' => $weeklyPerformance, // [BARU] Ditambahkan ke return array
             'avgSales' => $avgSales,
             'avgProfit' => $avgProfit,
             'profitMargin' => $profitMargin,
@@ -147,12 +141,7 @@ class DashboardService
     }
 
     /**
-     * 5. HAPUS METODE LAMA INI KARENA SALAH DAN TIDAK DIGUNAKAN LAGI
-     * private function getNetProfitForPeriod(...) { ... }
-     */
-
-    /**
-     * Menghitung persentase perubahan antara nilai sekarang dan sebelumnya.
+     * Menghitung persentase perubahan.
      */
     private function calculatePercentageChange(float $current, float $previous): float
     {
@@ -177,21 +166,57 @@ class DashboardService
             $startOfMonth = $date->copy()->startOfMonth();
             $endOfMonth = $date->copy()->endOfMonth();
 
-            // Penjualan bulan ini (dalam jutaan)
+            // Penjualan (Jutaan)
             $sales = $this->getSalesForDateRange($businessId, $startOfMonth, $endOfMonth);
             $salesData[] = round($sales / 1000000, 2);
 
-            // ====================================================================
-            // 6. PERBAIKAN PERHITUNGAN LABA BERSIH BULANAN
-            // ====================================================================
+            // Profit (Jutaan) via FinancialService
             $monthFilters = [
                 'start_date' => $startOfMonth->toDateString(), 
                 'end_date' => $endOfMonth->toDateString()
             ];
             $monthReport = $this->financialService->getFinancialReport($monthFilters);
-            $netProfit = $monthReport['net_profit'];
-            $profitData[] = round($netProfit / 1000000, 2);
-            // ====================================================================
+            $profitData[] = round($monthReport['net_profit'] / 1000000, 2);
+        }
+
+        return [
+            'labels' => $labels,
+            'sales' => $salesData,
+            'profits' => $profitData,
+        ];
+    }
+
+    /**
+     * [BARU] Mengambil data performa mingguan (4 minggu terakhir)
+     */
+    private function getWeeklyPerformanceData(int $businessId): array
+    {
+        $labels = [];
+        $salesData = [];
+        $profitData = [];
+
+        // Loop 4 minggu terakhir (0 = minggu ini, 3 = 3 minggu lalu)
+        for ($i = 3; $i >= 0; $i--) {
+            $date = Carbon::now()->subWeeks($i);
+            
+            // Tentukan awal dan akhir minggu
+            $startOfWeek = $date->copy()->startOfWeek();
+            $endOfWeek = $date->copy()->endOfWeek();
+
+            // Label range tanggal
+            $labels[] = $startOfWeek->format('d M') . ' - ' . $endOfWeek->format('d M');
+
+            // Hitung Penjualan Mingguan
+            $sales = $this->getSalesForDateRange($businessId, $startOfWeek, $endOfWeek);
+            $salesData[] = round($sales / 1000000, 2); // Dalam Jutaan
+
+            // Hitung Profit Mingguan via FinancialService
+            $weekFilters = [
+                'start_date' => $startOfWeek->toDateString(), 
+                'end_date' => $endOfWeek->toDateString()
+            ];
+            $weekReport = $this->financialService->getFinancialReport($weekFilters);
+            $profitData[] = round($weekReport['net_profit'] / 1000000, 2); // Dalam Jutaan
         }
 
         return [
