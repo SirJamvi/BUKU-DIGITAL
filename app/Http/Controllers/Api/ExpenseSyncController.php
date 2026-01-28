@@ -20,8 +20,9 @@ class ExpenseSyncController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        // 2. Validasi Data
+        // 2. Validasi Data (Tambahkan user_id)
         $request->validate([
+            'user_id' => 'required|integer',  // ID Driver yang checkout
             'amount' => 'required|numeric',
             'description' => 'required|string',
             'date' => 'required|date',
@@ -29,52 +30,62 @@ class ExpenseSyncController extends Controller
         ]);
 
         try {
-            // 3. Cari Kategori Gaji
+            // 3. Cari Kategori Gaji untuk Business ID 10
             $category = DB::table('expense_categories')
                 ->where('name', 'LIKE', '%Gaji%')
-                ->where('business_id', 10) // ✅ Filter berdasarkan Business ID 10 juga
+                ->where('business_id', 10)
                 ->first();
 
             $categoryId = $category ? $category->id : null;
 
-            // Jika kategori tidak ditemukan, buat kategori default untuk Business ID 10
+            // Jika kategori tidak ditemukan, gunakan ID default atau return error
             if (!$categoryId) {
-                 // Opsional: Return error atau gunakan ID kategori default/umum
-                 // return response()->json(['message' => 'Kategori Gaji tidak ditemukan untuk Business ID 10'], 404);
-                 
-                 // ATAU Hardcode ID kategori jika Anda tahu ID-nya:
-                 $categoryId = 2; // Sesuaikan dengan ID kategori 'Gaji' milik Business 10
+                Log::warning("⚠️ Kategori Gaji tidak ditemukan untuk Business ID 10");
+                // Opsi 1: Return error
+                // return response()->json(['message' => 'Kategori Gaji tidak ditemukan untuk Business ID 10'], 404);
+                
+                // Opsi 2: Gunakan ID kategori default (sesuaikan dengan DB Anda)
+                $categoryId = 2; // Sesuaikan dengan ID kategori 'Gaji' milik Business 10
             }
 
-            // 4. Cek Duplikasi
+            // 4. Cek Duplikasi berdasarkan reference_id
             $exists = DB::table('cash_flow')
                 ->where('reference_id', 'ATT-' . $request->reference_id)
+                ->where('business_id', 10)
                 ->exists();
 
             if ($exists) {
+                Log::info("ℹ️ Data sudah ada: ATT-{$request->reference_id}");
                 return response()->json(['message' => 'Data already synced'], 200);
             }
 
-            // 5. Insert Data
+            // 5. Insert Data ke cash_flow
             $id = DB::table('cash_flow')->insertGetId([
-                'business_id' => 10, // ✅ PERBAIKAN: Ubah dari 1 ke 10
+                'business_id' => 10,
                 'type' => 'expense',
                 'category_id' => $categoryId,
                 'amount' => $request->amount,
                 'description' => $request->description,
                 'date' => $request->date,
                 'reference_id' => 'ATT-' . $request->reference_id,
-                'created_by' => null, // Biarkan null agar aman dari error foreign key user
+                'user_id' => $request->user_id,  // Simpan ID Driver
+                'created_by' => null, // Biarkan null agar aman dari error foreign key
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
-            Log::info("✅ Sukses Insert ke Buku Digital ID: $id (Business: 10)");
+            Log::info("✅ Sukses Insert Gaji ke Buku Digital | ID: {$id} | User: {$request->user_id} | Amount: {$request->amount} | Ref: ATT-{$request->reference_id}");
 
-            return response()->json(['message' => 'Sukses sync gaji', 'id' => $id], 200);
+            return response()->json([
+                'message' => 'Sukses sync gaji',
+                'id' => $id,
+                'user_id' => $request->user_id,
+                'amount' => $request->amount
+            ], 200);
 
         } catch (\Exception $e) {
             Log::error("🔥 Error saat insert Buku Digital: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
             return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
         }
     }
