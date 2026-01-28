@@ -89,4 +89,6 @@ class ExpenseSyncController extends Controller
             return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
         }
     }
+
+    // Metode tambahan jika diperlukan
 }
