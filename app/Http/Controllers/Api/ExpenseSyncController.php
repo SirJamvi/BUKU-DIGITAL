@@ -68,13 +68,15 @@ class ExpenseSyncController extends Controller
                 'description' => $request->description,
                 'date' => $request->date,
                 'reference_id' => 'ATT-' . $request->reference_id,
-                'user_id' => $request->user_id,  // Simpan ID Driver
-                'created_by' => null, // Biarkan null agar aman dari error foreign key
+                
+                // ✅ BENAR: Masukkan user_id ke kolom created_by (kolom yang ada di tabel)
+                'created_by' => $request->user_id,
+                
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
-            Log::info("✅ Sukses Insert Gaji ke Buku Digital | ID: {$id} | User: {$request->user_id} | Amount: {$request->amount} | Ref: ATT-{$request->reference_id}");
+            Log::info("✅ Sukses Insert Gaji ke Buku Digital | ID: {$id} | Driver: {$request->user_id} | Amount: {$request->amount} | Ref: ATT-{$request->reference_id}");
 
             return response()->json([
                 'message' => 'Sukses sync gaji',
@@ -89,6 +91,4 @@ class ExpenseSyncController extends Controller
             return response()->json(['message' => 'Error: ' . $e->getMessage()], 500);
         }
     }
-
-    // Metode tambahan jika diperlukan
 }
