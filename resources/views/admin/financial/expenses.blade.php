@@ -446,7 +446,7 @@
 
         <div>
             <h5 class="mb-3">
-                <i class="fas fa-list text-info me-2"></i>Daftar Kategori
+                <i class="fas fa-list text-info me-2"></i>Daftar Kategorii
             </h5>
             <div class="list-group">
                 @forelse ($categories as $category)
