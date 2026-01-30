@@ -584,13 +584,21 @@ class FinancialService
     /**
      * Ambil data pengeluaran dengan pagination - Versi yang disempurnakan
      */
-    public function getExpensesWithPagination(int $perPage = 20): LengthAwarePaginator
+    public function getExpensesWithPagination(array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        return CashFlow::where('type', 'expense')
+        $query = CashFlow::where('type', 'expense')
             ->where('business_id', Auth::user()->business_id)
-            ->with('category', 'createdBy')
-            ->latest('date')
-            ->paginate($perPage);
+            ->with('category', 'createdBy');
+
+        // 1. Logika Filter Kategori
+        if (!empty($filters['category_id'])) {
+            $query->where('category_id', $filters['category_id']);
+        }
+
+        // 2. Logika Filter Tanggal
+        $this->applyDateFilters($query, $filters, 'date');
+
+        return $query->latest('date')->paginate($perPage);
     }
 
     /**

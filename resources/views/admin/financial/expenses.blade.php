@@ -192,19 +192,38 @@
     <x-card title="Filter Laporan">
         <form method="GET" action="{{ route('admin.financial.expenses') }}" id="filterForm">
             <div class="row g-3">
-                <div class="col-md-4 col-sm-6">
+                {{-- 1. Filter Tanggal Mulai --}}
+                <div class="col-md-3 col-sm-6">
                     <x-input type="date" name="start_date" label="Dari Tanggal" :value="request('start_date')" />
                 </div>
-                <div class="col-md-4 col-sm-6">
+
+                {{-- 2. Filter Tanggal Sampai --}}
+                <div class="col-md-3 col-sm-6">
                     <x-input type="date" name="end_date" label="Sampai Tanggal" :value="request('end_date')" />
                 </div>
-                <div class="col-md-4 col-12">
+
+                {{-- 3. Filter Kategori (INI YANG BARU DITAMBAHKAN) --}}
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label">Kategori</label>
+                    <select name="category_id" class="form-select">
+                        <option value="">Semua Kategori</option>
+                        @foreach($categories as $cat)
+                            {{-- PERHATIKAN BAGIAN VALUE DAN LOGIKA SELECTED INI --}}
+                            <option value="{{ $cat->id }}" {{ request('category_id') == $cat->id ? 'selected' : '' }}>
+                                {{ $cat->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                {{-- 4. Tombol Aksi --}}
+                <div class="col-md-3 col-12">
                     <label class="form-label d-none d-md-block">&nbsp;</label>
                     <div class="d-flex filter-actions">
-                        <x-button type="submit" variant="primary" class="me-2">
+                        <x-button type="submit" variant="primary" class="me-2 w-100">
                             <i class="fas fa-filter me-1"></i> Terapkan
                         </x-button>
-                        <a href="{{ route('admin.financial.expenses') }}" class="btn btn-secondary">
+                        <a href="{{ route('admin.financial.expenses') }}" class="btn btn-secondary w-100">
                             <i class="fas fa-redo me-1"></i> Reset
                         </a>
                     </div>
@@ -427,7 +446,7 @@
 
         <div>
             <h5 class="mb-3">
-                <i class="fas fa-list text-info me-2"></i>Daftar Kategori
+                <i class="fas fa-list text-info me-2"></i>Daftar Kategorii
             </h5>
             <div class="list-group">
                 @forelse ($categories as $category)

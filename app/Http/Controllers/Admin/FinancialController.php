@@ -56,23 +56,19 @@ class FinancialController extends Controller
         return view('admin.financial.index', compact('financialSummary', 'years', 'months'));
     }
 
-    // Menampilkan halaman Laporan Pengeluaran (Daftar) dengan filter
+    // ========================================================================
+    // MENAMPILKAN HALAMAN LAPORAN PENGELUARAN DENGAN FILTER (UPDATED)
+    // ========================================================================
     public function expenses(Request $request): View
     {
-        // Query dasar untuk pengeluaran, pastikan relasi di-load dengan `with()`
-        $query = CashFlow::where('type', 'expense')->with('category', 'createdBy');
+        // 1. Ambil input filter dari request (termasuk category_id)
+        $filters = $request->only(['category_id', 'start_date', 'end_date']);
+
+        // 2. Panggil Service yang sudah kita update
+        $expenses = $this->financialService->getExpensesWithPagination($filters);
         
-        // Terapkan filter tanggal jika ada input dari user
-        if ($request->filled('start_date')) {
-            $query->whereDate('date', '>=', $request->start_date);
-        }
-        if ($request->filled('end_date')) {
-            $query->whereDate('date', '<=', $request->end_date);
-        }
-        
-        // Ambil data dengan paginasi
-        $expenses = $query->latest('date')->paginate(10);
-        $categories = ExpenseCategory::all();
+        // 3. Ambil Kategori untuk dropdown
+        $categories = $this->financialService->getExpenseCategories();
         
         return view('admin.financial.expenses', compact('expenses', 'categories'));
     }
@@ -96,12 +92,17 @@ class FinancialController extends Controller
     // Menyimpan data pengeluaran baru
     public function storeExpense(Request $request): RedirectResponse
     {
+        // ========================================================================
+        // VALIDASI DIPERBARUI: Menggunakan category_id (bukan category_name)
+        // ========================================================================
         $request->validate([
-            'category_name' => 'required|string|max:191',
-            'amount'        => 'required|numeric|min:1',
-            'description'   => 'required|string|max:500',
-            'date'          => 'required|date',
+            'category_id' => 'required_without:new_category_name|exists:expense_categories,id',
+            'new_category_name' => 'required_without:category_id|string|max:191',
+            'amount' => 'required|numeric|min:1',
+            'description' => 'required|string|max:500',
+            'date' => 'required|date',
         ]);
+
         $this->financialService->createExpense($request->all());
         return redirect()->route('admin.financial.expenses')->with('success', 'Data pengeluaran berhasil disimpan.');
     }
@@ -109,24 +110,31 @@ class FinancialController extends Controller
     // Menyimpan kategori pengeluaran baru dari modal
     public function storeExpenseCategory(Request $request): RedirectResponse
     {
-        $request->validate(['name' => 'required|string|max:191', 'type' => 'required|string']);
+        $request->validate(['name' => 'required|string|max:191']);
         $this->financialService->createExpenseCategory($request->all());
         return back()->with('success', 'Kategori pengeluaran baru berhasil ditambahkan.');
     }
 
-    /**
-     * Menangani ekspor data pengeluaran ke Excel.
-     */
+    // ========================================================================
+    // EKSPOR EXCEL DENGAN FILTER KATEGORI (UPDATED)
+    // ========================================================================
     public function exportExcel(Request $request)
     {
-        $query = CashFlow::where('type', 'expense')->with('category', 'createdBy');
+        $query = CashFlow::where('type', 'expense')
+            ->where('business_id', Auth::user()->business_id) // Tambahkan keamanan business_id
+            ->with('category', 'createdBy');
         
-        // Terapkan filter yang sama dari request
+        // Terapkan filter Tanggal
         if ($request->filled('start_date')) {
             $query->whereDate('date', '>=', $request->start_date);
         }
         if ($request->filled('end_date')) {
             $query->whereDate('date', '<=', $request->end_date);
+        }
+
+        // Terapkan filter Kategori (Agar hasil download sesuai filter)
+        if ($request->filled('category_id')) {
+            $query->where('expense_category_id', $request->category_id);
         }
         
         // Ambil semua data yang cocok (tanpa paginasi)
@@ -136,19 +144,26 @@ class FinancialController extends Controller
         return Excel::download(new ExpensesExport($expenses), $fileName);
     }
 
-    /**
-     * Menangani ekspor data pengeluaran ke PDF.
-     */
+    // ========================================================================
+    // EKSPOR PDF DENGAN FILTER KATEGORI (UPDATED)
+    // ========================================================================
     public function exportPdf(Request $request)
     {
-        $query = CashFlow::where('type', 'expense')->with('category', 'createdBy');
+        $query = CashFlow::where('type', 'expense')
+            ->where('business_id', Auth::user()->business_id) // Tambahkan keamanan business_id
+            ->with('category', 'createdBy');
         
-        // Terapkan filter yang sama dari request
+        // Terapkan filter Tanggal
         if ($request->filled('start_date')) {
             $query->whereDate('date', '>=', $request->start_date);
         }
         if ($request->filled('end_date')) {
             $query->whereDate('date', '<=', $request->end_date);
+        }
+
+        // Terapkan filter Kategori (Agar hasil download sesuai filter)
+        if ($request->filled('category_id')) {
+            $query->where('expense_category_id', $request->category_id);
         }
         
         // Ambil semua data yang cocok (tanpa paginasi)
@@ -268,7 +283,13 @@ class FinancialController extends Controller
     public function editExpense(CashFlow $expense): View
     {
         $this->authorize('update', $expense);
-        return view('admin.financial.edit_expense', compact('expense'));
+        
+        // Ambil kategori untuk dropdown di form edit
+        $categories = ExpenseCategory::where('business_id', Auth::user()->business_id)
+                                     ->orderBy('name')
+                                     ->get();
+        
+        return view('admin.financial.edit_expense', compact('expense', 'categories'));
     }
 
     /**
@@ -278,11 +299,14 @@ class FinancialController extends Controller
     {
         $this->authorize('update', $expense);
         
+        // ========================================================================
+        // VALIDASI DIPERBARUI: Menggunakan category_id (bukan category_name)
+        // ========================================================================
         $request->validate([
-            'category_name' => 'required|string|max:191',
-            'amount'        => 'required|numeric|min:1',
-            'description'   => 'required|string|max:500',
-            'date'          => 'required|date',
+            'category_id' => 'required|exists:expense_categories,id',
+            'amount' => 'required|numeric|min:1',
+            'description' => 'required|string|max:500',
+            'date' => 'required|date',
         ]);
 
         $this->financialService->updateExpense($expense, $request->all());
