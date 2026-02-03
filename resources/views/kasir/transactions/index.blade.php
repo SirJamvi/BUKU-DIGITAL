@@ -34,7 +34,23 @@
                         <td>{{ $transaction->transaction_date->isoFormat('D MMMM YYYY, HH:mm') }}</td>
                         <td>{{ $transaction->customer->name ?? 'Umum' }}</td>
                         <td class="text-end fw-bold">Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</td>
-                        <td class="text-center"><span class="badge" style="background-color: var(--kasir-bg-secondary); color: var(--kasir-text);">{{ $transaction->payment_method }}</span></td>
+                        <td class="text-center">
+                            @php
+                                $pm = strtolower($transaction->payment_method);
+                                $badgeClass = match($pm) {
+                                    'cash' => 'bg-success text-white',
+                                    'dana' => 'bg-primary text-white',
+                                    'transfer bank' => 'bg-info text-dark',
+                                    'debit' => 'bg-info text-dark', // Support data lama
+                                    default => 'bg-secondary text-white'
+                                };
+                                // Ubah tampilan teks jika 'debit' jadi 'Transfer Bank'
+                                $displayText = ($pm == 'debit') ? 'Transfer Bank' : $transaction->payment_method;
+                            @endphp
+                            <span class="badge {{ $badgeClass }}">
+                                {{ ucwords($displayText) }}
+                            </span>
+                        </td>
                         <td class="text-center">
                             <x-button href="{{ route('kasir.transactions.show', $transaction->id) }}" variant="info" class="btn-sm">
                                 <i class="fas fa-eye"></i>

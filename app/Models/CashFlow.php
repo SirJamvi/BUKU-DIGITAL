@@ -16,6 +16,7 @@ class CashFlow extends Model
         'business_id',
         'type',
         'category_id',
+        'payment_method',
         'amount',
         'description',
         'date',

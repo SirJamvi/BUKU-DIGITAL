@@ -80,28 +80,31 @@ class FinancialController extends Controller
     // Menampilkan halaman form untuk mencatat pengeluaran baru
     public function createExpense(): View
     {
-        // =======================================================
-        // PERUBAHAN DI SINI
-        // =======================================================
-        // 1. Ambil semua kategori pengeluaran yang ada
+        // 1. Ambil kategori pengeluaran
         $categories = ExpenseCategory::where('business_id', Auth::user()->business_id)
                                      ->orderBy('name')
                                      ->get();
         
-        // 2. Kirim data kategori ke view
-        return view('admin.financial.create_expense', compact('categories'));
-        // =======================================================
+        // 2. [BARU] Ambil metode pembayaran dari Service (Database)
+        $paymentMethods = $this->financialService->getPaymentMethods();
+        
+        // 3. Kirim kedua data tersebut ke View
+        return view('admin.financial.create_expense', compact('categories', 'paymentMethods'));
     }
 
     // Menyimpan data pengeluaran baru
     public function storeExpense(Request $request): RedirectResponse
     {
         $request->validate([
-            'category_name' => 'required|string|max:191',
-            'amount'        => 'required|numeric|min:1',
-            'description'   => 'required|string|max:500',
-            'date'          => 'required|date',
+            'category_name'  => 'required|string|max:191',
+            'amount'         => 'required|numeric|min:1',
+            'description'    => 'required|string|max:500',
+            'date'           => 'required|date',
+            
+            // [BARU] Validasi Payment Method: Wajib diisi & harus ada di kolom 'slug' tabel payment_methods
+            'payment_method' => 'required|exists:payment_methods,slug',
         ]);
+        
         $this->financialService->createExpense($request->all());
         return redirect()->route('admin.financial.expenses')->with('success', 'Data pengeluaran berhasil disimpan.');
     }
@@ -268,7 +271,16 @@ class FinancialController extends Controller
     public function editExpense(CashFlow $expense): View
     {
         $this->authorize('update', $expense);
-        return view('admin.financial.edit_expense', compact('expense'));
+        
+        // Ambil semua kategori pengeluaran untuk dropdown
+        $categories = ExpenseCategory::where('business_id', Auth::user()->business_id)
+                                     ->orderBy('name')
+                                     ->get();
+        
+        // [BARU] Ambil metode pembayaran dari Service (Database)
+        $paymentMethods = $this->financialService->getPaymentMethods();
+        
+        return view('admin.financial.edit_expense', compact('expense', 'categories', 'paymentMethods'));
     }
 
     /**
@@ -279,10 +291,13 @@ class FinancialController extends Controller
         $this->authorize('update', $expense);
         
         $request->validate([
-            'category_name' => 'required|string|max:191',
-            'amount'        => 'required|numeric|min:1',
-            'description'   => 'required|string|max:500',
-            'date'          => 'required|date',
+            'category_name'  => 'required|string|max:191',
+            'amount'         => 'required|numeric|min:1',
+            'description'    => 'required|string|max:500',
+            'date'           => 'required|date',
+            
+            // [BARU] Validasi Payment Method: Wajib diisi & harus ada di kolom 'slug' tabel payment_methods
+            'payment_method' => 'required|exists:payment_methods,slug',
         ]);
 
         $this->financialService->updateExpense($expense, $request->all());

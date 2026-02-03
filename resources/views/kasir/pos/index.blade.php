@@ -187,10 +187,15 @@
                     <div class="mb-3">
                         <label for="payment_method" class="form-label">Metode Pembayaran</label>
                         <select name="payment_method" id="payment_method" class="form-select" required>
-                            <option value="Cash">Tunai (Cash)</option>
-                            <option value="QRIS">QRIS</option>
-                            <option value="Debit">Debit</option>
-                            <option value="Credit Card">Kartu Kredit</option>
+                            {{-- Opsi Default jika data kosong --}}
+                            <option value="" disabled selected>-- Pilih Metode --</option>
+                            
+                            @foreach($paymentMethods as $method)
+                                {{-- Value menggunakan SLUG agar tersimpan seragam di database (contoh: 'transfer-bank') --}}
+                                <option value="{{ $method->slug }}">
+                                    {{ $method->name }}
+                                </option>
+                            @endforeach
                         </select>
                     </div>
 

@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\CashFlow;
+use App\Models\PaymentMethod;
 use App\Exceptions\InsufficientStockException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -17,8 +18,8 @@ class PosService
      */
     public function getPosData(): array
     {
-        // Global Scope sudah otomatis memfilter produk dan pelanggan
-        // berdasarkan business_id dari kasir yang login.
+        $businessId = Auth::user()->business_id;
+
         $products = Product::where('is_active', true)
             ->whereHas('inventory', function ($query) {
                 $query->where('current_stock', '>', 0);
@@ -26,17 +27,20 @@ class PosService
             ->with('category', 'inventory')
             ->get();
             
-        // =======================================================
-        // PERUBAHAN DI SINI: Tambahkan `orderBy`
-        // =======================================================
         $customers = Customer::where('status', 'active')
-                             ->orderBy('name', 'asc') // Urutkan berdasarkan nama A-Z
+                             ->orderBy('name', 'asc')
                              ->get();
-        // =======================================================
+
+        // [BARU] Ambil Metode Pembayaran Dinamis
+        $paymentMethods = PaymentMethod::where('business_id', $businessId)
+            ->where('is_active', true)
+            ->orderBy('name', 'asc')
+            ->get();
 
         return [
             'products' => $products,
             'customers' => $customers,
+            'paymentMethods' => $paymentMethods,
         ];
     }
 
@@ -88,8 +92,10 @@ class PosService
             CashFlow::create([
                 'business_id' => $transaction->business_id,
                 'type' => 'income',
-                'category_id' => 1, // Ganti dengan ID kategori "Penjualan Produk" Anda
+                'category_id' => 1,
                 'amount' => $transaction->total_amount,
+                // [FIX] Agar data di Cash Flow mengikuti metode bayar transaksi (Dana/Transfer/Cash)
+                'payment_method' => $transaction->payment_method,
                 'description' => 'Pendapatan dari penjualan #' . $transaction->id,
                 'date' => $transaction->transaction_date,
                 'reference_id' => $transaction->id,
@@ -97,7 +103,7 @@ class PosService
             ]);
 
             // ====================================================================
-            // PERBAIKAN BARU: Update total belanja pelanggan jika ada
+            // Update total belanja pelanggan jika ada
             // ====================================================================
             if ($transaction->customer_id) {
                 $customer = Customer::find($transaction->customer_id);
@@ -116,7 +122,6 @@ class PosService
      */
     public function getTransactionWithDetails(int $transactionId): Transaction
     {
-        // findOrFail sudah otomatis di-scope oleh trait BelongsToBusiness
         return Transaction::with([
             'details.product',
             'customer',
