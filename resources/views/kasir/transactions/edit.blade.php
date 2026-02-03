@@ -7,7 +7,6 @@
 @endsection
 
 @push('styles')
-{{-- Salin semua style dari kasir.pos.index --}}
 <style>
     .pos-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; max-height: 75vh; overflow-y: auto; padding: 5px; }
     .product-card { cursor: pointer; border: 1px solid #eee; transition: all 0.2s ease; }
@@ -75,14 +74,29 @@
                     <div id="hidden-items"></div>
                     <input type="hidden" name="total_amount" id="total_amount_hidden" value="0">
                     <hr>
+
+                    {{-- [UPDATE] Dropdown Metode Pembayaran Dinamis dari Database --}}
                     <div class="mb-3">
                         <label for="payment_method" class="form-label">Metode Pembayaran</label>
                         <select name="payment_method" id="payment_method" class="form-select" required>
-                            <option value="Cash" {{ strtolower($transaction->payment_method) == 'cash' ? 'selected' : '' }}>Tunai (Cash)</option>
-                            <option value="QRIS" {{ strtolower($transaction->payment_method) == 'qris' ? 'selected' : '' }}>QRIS</option>
-                            <option value="Debit" {{ strtolower($transaction->payment_method) == 'debit' ? 'selected' : '' }}>Debit</option>
+                            <option value="" disabled>-- Pilih Metode --</option>
+
+                            @foreach ($paymentMethods as $method)
+                                <option value="{{ $method->slug }}"
+                                    {{ (old('payment_method', $transaction->payment_method) == $method->slug) ? 'selected' : '' }}>
+                                    {{ $method->name }}
+                                </option>
+                            @endforeach
+
+                            {{-- Fallback: jika payment_method lama tidak ditemukan di master terbaru --}}
+                            @if (! $paymentMethods->contains('slug', $transaction->payment_method))
+                                <option value="{{ $transaction->payment_method }}" selected>
+                                    {{ ucfirst($transaction->payment_method) }} (Arsip)
+                                </option>
+                            @endif
                         </select>
                     </div>
+
                     <div class="d-grid">
                         <button type="submit" class="btn btn-checkout"><i class="fas fa-save me-2"></i> SIMPAN PERUBAHAN</button>
                     </div>
@@ -92,7 +106,7 @@
     </div>
 </form>
 
-{{-- PERBAIKAN #3: Pindahkan data awal ke elemen yang tidak terlihat --}}
+{{-- Data awal transaksi untuk diload ke keranjang via JavaScript --}}
 <div id="initial-transaction-data" data-items="{{ json_encode($transaction->details) }}" class="d-none"></div>
 @endsection
 
@@ -186,7 +200,7 @@
             });
         });
         
-        // Memuat data awal dari elemen HTML
+        // Memuat data awal dari elemen HTML ke keranjang
         const initialDataEl = document.getElementById('initial-transaction-data');
         const initialItems = JSON.parse(initialDataEl.dataset.items);
         initialItems.forEach(item => {

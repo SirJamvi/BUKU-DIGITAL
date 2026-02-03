@@ -332,9 +332,18 @@
                     <td>TOTAL</td>
                     <td>Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</td>
                 </tr>
-                <tr class="payment-row">
+                    <tr class="payment-row">
                     <td>Metode Bayar</td>
-                    <td>{{ $transaction->payment_method }}</td>
+                    <td>
+                        @php
+                            $methodName = $transaction->payment_method;
+                            // Mapping manual jika masih ada data lama "debit"
+                            if (strtolower($methodName) == 'debit') {
+                                $methodName = 'Transfer Bank';
+                            }
+                        @endphp
+                        {{ ucwords($methodName) }}
+                    </td>
                 </tr>
             </table>
         </div>

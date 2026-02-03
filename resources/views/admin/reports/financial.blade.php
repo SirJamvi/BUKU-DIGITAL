@@ -56,7 +56,9 @@
             </a>
         @endslot
 
-        {{-- Ringkasan Data --}}
+        {{-- ========================================== --}}
+        {{-- SECTION 1: Ringkasan Profitabilitas --}}
+        {{-- ========================================== --}}
         <div class="row text-center mb-4 g-3">
             {{-- Total Pemasukan --}}
             <div class="col-md-3 col-sm-6">
@@ -112,13 +114,52 @@
             <div class="col-12 mt-3">
                 <div class="card border-0 shadow-sm bg-primary text-white">
                     <div class="card-body text-center">
-                        <p class="mb-2 opacity-75">Keuntungan Bersih</p>
+                        <p class="mb-2 opacity-75">Keuntungan Bersih (Periode Ini)</p>
                         <h2 class="mb-0 fw-bold">
                             Rp {{ number_format($reportData['net_profit'] ?? 0, 0, ',', '.') }}
                         </h2>
                         <small class="opacity-75">Laba Kotor - Beban Operasional</small>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        {{-- ========================================== --}}
+        {{-- SECTION 2: [BARU] SALDO REALTIME --}}
+        {{-- ========================================== --}}
+        <div class="mt-5 mb-4">
+            <h5 class="mb-3 border-bottom pb-2">
+                <i class="fas fa-wallet me-2"></i>Saldo Kas & Rekening (Realtime Akumulasi)
+            </h5>
+            <div class="row g-3">
+                @if(isset($reportData['balances']) && count($reportData['balances']) > 0)
+                    @foreach($reportData['balances'] as $balance)
+                        <div class="col-md-4">
+                            <div class="card h-100 border-start border-4 
+                                {{ $balance['slug'] == 'cash' ? 'border-success' : ($balance['slug'] == 'dana' ? 'border-primary' : 'border-info') }} shadow-sm">
+                                <div class="card-body d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <h6 class="text-muted mb-1">{{ $balance['name'] }}</h6>
+                                        <h4 class="fw-bold mb-0">Rp {{ number_format($balance['balance'], 0, ',', '.') }}</h4>
+                                    </div>
+                                    <div class="fs-1 opacity-25">
+                                        @if($balance['slug'] == 'cash')
+                                            <i class="fas fa-money-bill-wave text-success"></i>
+                                        @elseif($balance['slug'] == 'dana')
+                                            <i class="fas fa-wallet text-primary"></i>
+                                        @else
+                                            <i class="fas fa-university text-info"></i>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                @else
+                    <div class="col-12">
+                        <div class="alert alert-light border">Belum ada data metode pembayaran.</div>
+                    </div>
+                @endif
             </div>
         </div>
 
@@ -133,7 +174,7 @@
 
         {{-- Tabel Rincian Arus Kas --}}
         <h5 class="mt-4 mb-3">
-            <i class="fas fa-stream me-2"></i>Rincian Arus Kas (Pemasukan & Pengeluaran)
+            <i class="fas fa-stream me-2"></i>Rincian Arus Kas (Periode Ini)
         </h5>
         
         <div class="table-responsive">
@@ -141,11 +182,11 @@
                 @slot('thead')
                     <tr>
                         <th style="width: 10%;">Tanggal</th>
-                        <th style="width: 35%;">Deskripsi</th>
+                        <th style="width: 25%;">Deskripsi</th>
+                        <th style="width: 15%;" class="text-center">Metode</th> {{-- Kolom Baru --}}
                         <th style="width: 15%;" class="text-center">Kategori</th>
                         <th style="width: 5%;" class="text-center">Tipe</th>
-                        <th style="width: 17.5%;" class="text-end">Pemasukan</th>
-                        <th style="width: 17.5%;" class="text-end">Pengeluaran</th>
+                        <th style="width: 15%;" class="text-end">Jumlah</th>
                     </tr>
                 @endslot
                 
@@ -155,6 +196,20 @@
                         <td>
                             <small class="text-muted d-block">#{{ $flow->id }}</small>
                             {{ Str::limit($flow->description, 50) }}
+                        </td>
+                        {{-- [BARU] Kolom Metode Pembayaran --}}
+                        <td class="text-center">
+                            @php
+                                $badgeClass = match($flow->payment_method) {
+                                    'cash' => 'bg-success',
+                                    'dana' => 'bg-primary',
+                                    'transfer-bank' => 'bg-info text-dark',
+                                    default => 'bg-secondary'
+                                };
+                            @endphp
+                            <span class="badge {{ $badgeClass }}">
+                                {{ ucfirst(str_replace('-', ' ', $flow->payment_method ?? 'Cash')) }}
+                            </span>
                         </td>
                         <td class="text-center">
                             @if($flow->category)
@@ -177,22 +232,9 @@
                             @endif
                         </td>
                         <td class="text-end">
-                            @if($flow->type == 'income')
-                                <span class="text-success fw-bold">
-                                    Rp {{ number_format($flow->amount, 0, ',', '.') }}
-                                </span>
-                            @else
-                                <span class="text-muted">-</span>
-                            @endif
-                        </td>
-                        <td class="text-end">
-                            @if($flow->type == 'expense')
-                                <span class="text-danger fw-bold">
-                                    Rp {{ number_format($flow->amount, 0, ',', '.') }}
-                                </span>
-                            @else
-                                <span class="text-muted">-</span>
-                            @endif
+                            <span class="{{ $flow->type == 'income' ? 'text-success' : 'text-danger' }} fw-bold">
+                                {{ $flow->type == 'expense' ? '-' : '+' }} Rp {{ number_format($flow->amount, 0, ',', '.') }}
+                            </span>
                         </td>
                     </tr>
                 @empty
