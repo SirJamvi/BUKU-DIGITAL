@@ -35,10 +35,11 @@
 
             <div class="row">
                 <div class="col-md-6">
+                    {{-- PERBAIKAN DI SINI: Menambahkan opsi Driver --}}
                     <x-select 
                         name="role" 
                         label="Role Pengguna" 
-                        :options="['admin' => 'Admin', 'kasir' => 'Kasir']" 
+                        :options="['admin' => 'Admin', 'kasir' => 'Kasir', 'driver' => 'Driver']" 
                         :selected="$user->role"
                         required 
                     />

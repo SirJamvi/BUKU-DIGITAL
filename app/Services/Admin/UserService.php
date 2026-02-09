@@ -14,34 +14,40 @@ class UserService
      */
     public function getAllUsersWithPagination(int $perPage = 15): LengthAwarePaginator
     {
-        // Mengambil business_id dari user (admin) yang sedang login
         $businessId = Auth::user()->business_id;
 
-        // INI PERBAIKANNYA: Mengambil semua user yang memiliki business_id yang sama
         return User::where('business_id', $businessId)
                    ->latest()
                    ->paginate($perPage);
     }
 
     /**
-     * Membuat user baru UNTUK BISNIS SAAT INI.
+     * Membuat user baru.
      */
     public function createUser(array $data): User
     {
+        // Hash password
         $data['password'] = Hash::make($data['password']);
         
-        // Secara otomatis mengaitkan user baru dengan bisnis admin saat ini
+        // Otomatis set business_id dari admin yang login
         $data['business_id'] = Auth::user()->business_id;
 
+        // Validasi tambahan: Pastikan role valid (double check)
+        // Default ke 'kasir' jika aneh-aneh, tapi harusnya sudah dihandle Request
+        if (!in_array($data['role'], ['admin', 'kasir', 'driver'])) {
+            $data['role'] = 'kasir';
+        }
+
+        // Create user
+        // Note: Karena $data berasal dari validated(), 'slug' tidak akan ada di sini
         return User::create($data);
     }
 
     /**
-     * Memperbarui data user.
+     * Memperbarui user.
      */
     public function updateUser(User $user, array $data): User
     {
-        // Keamanan: Pastikan admin hanya bisa mengedit user di bisnisnya sendiri
         if ($user->business_id !== Auth::user()->business_id) {
             abort(403, 'AKSES DITOLAK.');
         }
@@ -56,16 +62,12 @@ class UserService
         return $user;
     }
 
-    /**
-     * Menghapus user.
-     */
     public function deleteUser(User $user): void
     {
         if ($user->id === Auth::id()) {
             throw new \Exception("Anda tidak dapat menghapus akun Anda sendiri.");
         }
         
-        // Tambahan keamanan: pastikan hanya bisa menghapus user dari bisnis yang sama
         if ($user->business_id !== Auth::user()->business_id) {
             abort(403, 'AKSES DITOLAK.');
         }

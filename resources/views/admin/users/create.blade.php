@@ -33,7 +33,7 @@
                     <x-select 
                         name="role" 
                         label="Role Pengguna" 
-                        :options="['admin' => 'Admin', 'kasir' => 'Kasir']" 
+                        :options="['admin' => 'Admin', 'kasir' => 'Kasir', 'driver' => 'Driver']" 
                         required 
                     />
                 </div>
