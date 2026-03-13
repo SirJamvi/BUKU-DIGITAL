@@ -31,6 +31,7 @@ Route::controller(GoogleController::class)->group(function(){
 });
 
 Route::get('register', [RegisterController::class, 'showRegistrationForm'])->name('register')->middleware('guest');
+Route::post('register', [RegisterController::class, 'register']);
 // ... (rute auth lainnya) ...
 
 
