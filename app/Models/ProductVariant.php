@@ -4,17 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\BelongsToBusiness; 
+// HAPUS IMPORT BelongsToBusiness
 
 class ProductVariant extends Model
 {
-    use HasFactory, BelongsToBusiness;
+    use HasFactory; // HAPUS BelongsToBusiness DARI SINI
 
     protected $table = 'product_variants';
 
     protected $fillable = [
-        'business_id',
-        'product_id',
+        'product_id', // Pastikan product_id ada di sini
         'variant_name',
         'variant_value',
         'price_adjustment',

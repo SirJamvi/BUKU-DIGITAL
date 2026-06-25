@@ -24,12 +24,14 @@ class PosService
             ->whereHas('inventory', function ($query) {
                 $query->where('current_stock', '>', 0);
             })
-            ->with('category', 'inventory')
+            // Tambahkan 'variants' di dalam array with()
+            ->with(['category', 'inventory', 'variants'])
             ->get();
-            
+
+
         $customers = Customer::where('status', 'active')
-                             ->orderBy('name', 'asc')
-                             ->get();
+            ->orderBy('name', 'asc')
+            ->get();
 
         // [BARU] Ambil Metode Pembayaran Dinamis
         $paymentMethods = PaymentMethod::where('business_id', $businessId)
@@ -59,7 +61,7 @@ class PosService
                     );
                 }
             }
-            
+
             // 2. Buat transaksi utama
             $transaction = Transaction::create([
                 'business_id' => Auth::user()->business_id,
@@ -77,14 +79,14 @@ class PosService
             // 3. Simpan detail transaksi dan kurangi stok
             foreach ($data['items'] as $item) {
                 $product = Product::find($item['product_id']);
-                
+
                 $transaction->details()->create([
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
                     'total_price' => $item['total_price'],
                 ]);
-                
+
                 $product->inventory->decrement('current_stock', $item['quantity']);
             }
 

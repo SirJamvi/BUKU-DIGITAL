@@ -48,10 +48,10 @@ class InventoryService
     {
         DB::transaction(function () use ($data) {
             $product = Product::with('inventory')->findOrFail($data['product_id']);
-            
+
             // Tambah stok di inventory
             $product->inventory->increment('current_stock', $data['quantity']);
-            
+
             // Catat pergerakan stok sebagai 'in' (masuk)
             StockMovement::create([
                 'business_id' => Auth::user()->business_id,
@@ -74,7 +74,7 @@ class InventoryService
     {
         DB::transaction(function () use ($data) {
             $currentUserId = Auth::id();
-            
+
             foreach ($data['items'] as $item) {
                 $inventory = Inventory::find($item['inventory_id']);
                 if (!$inventory) continue;
@@ -98,6 +98,41 @@ class InventoryService
         });
     }
 
+
+    /**
+     * Memecah produk besar (Ball) menjadi produk eceran.
+     * Khusus untuk bisnis Es Kristal.
+     */
+    public function breakUnit(int $fromProductId, int $toProductId, int $quantityToBreak, int $yieldAmount): void
+    {
+        DB::transaction(function () use ($fromProductId, $toProductId, $quantityToBreak, $yieldAmount) {
+            $fromInventory = $this->getInventoryByProductId($fromProductId);
+            $toInventory = $this->getInventoryByProductId($toProductId);
+
+            if (!$fromInventory || $fromInventory->current_stock < $quantityToBreak) {
+                throw new \Exception("Stok karung tidak mencukupi untuk dipecah.");
+            }
+            if (!$toInventory) {
+                throw new \Exception("Inventory untuk produk eceran belum dibuat.");
+            }
+
+            // 1. Kurangi stok karung besar (Gunakan type 'out' agar sesuai dengan enum database Anda)
+            $this->updateStock(
+                $fromInventory->id,
+                $quantityToBreak,
+                'out',
+                "Pecah ball ke eceran (menjadi {$yieldAmount} pcs)"
+            );
+
+            // 2. Tambah stok eceran (Gunakan type 'in')
+            $this->updateStock(
+                $toInventory->id,
+                $yieldAmount,
+                'in',
+                "Hasil pecah ball dari karung " . $fromInventory->product->name
+            );
+        });
+    }
     /**
      * Mendapatkan inventory berdasarkan product ID.
      *
@@ -122,12 +157,12 @@ class InventoryService
     {
         DB::transaction(function () use ($inventoryId, $quantity, $type, $notes) {
             $inventory = Inventory::findOrFail($inventoryId);
-            
+
             // Hitung stok baru berdasarkan tipe
-            $newStock = match($type) {
+            $newStock = match ($type) {
                 'in', 'purchase', 'return' => $inventory->current_stock + $quantity,
                 'out', 'sale', 'damaged' => $inventory->current_stock - $quantity,
-                'adjustment' => $quantity, // Untuk adjustment, quantity adalah stok final
+                'adjustment' => $quantity,
                 default => $inventory->current_stock
             };
 
@@ -136,6 +171,7 @@ class InventoryService
 
             // Catat pergerakan stok
             StockMovement::create([
+                'business_id' => $inventory->business_id, // <--- TAMBAHKAN BARIS INI
                 'product_id' => $inventory->product_id,
                 'type' => $type,
                 'quantity' => $type === 'adjustment' ? ($quantity - $inventory->current_stock) : $quantity,
@@ -154,8 +190,8 @@ class InventoryService
     public function getLowStockProducts(int $threshold = 10)
     {
         return Inventory::with('product.category')
-                       ->where('current_stock', '<=', $threshold)
-                       ->get();
+            ->where('current_stock', '<=', $threshold)
+            ->get();
     }
 
     /**
@@ -188,11 +224,11 @@ class InventoryService
     public function searchInventory(string $keyword, int $perPage = 15): LengthAwarePaginator
     {
         return Inventory::with('product.category')
-                       ->whereHas('product', function ($query) use ($keyword) {
-                           $query->where('name', 'like', "%{$keyword}%")
-                                 ->orWhere('sku', 'like', "%{$keyword}%");
-                       })
-                       ->latest('updated_at')
-                       ->paginate($perPage);
+            ->whereHas('product', function ($query) use ($keyword) {
+                $query->where('name', 'like', "%{$keyword}%")
+                    ->orWhere('sku', 'like', "%{$keyword}%");
+            })
+            ->latest('updated_at')
+            ->paginate($perPage);
     }
 }
