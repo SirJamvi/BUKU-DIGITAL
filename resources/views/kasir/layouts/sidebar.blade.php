@@ -139,6 +139,22 @@
                 <span class="divider-text">Laporan</span>
             </li>
 
+            {{-- ===== TAMBAHAN: MENU KEUANGAN KASIR ===== --}}
+            <li class="nav-divider">
+                <span class="divider-text">Keuangan</span>
+            </li>
+
+            <li class="nav-item {{ request()->routeIs('kasir.expenses.*') ? 'active' : '' }}">
+                <a href="{{ route('kasir.expenses.index') }}" class="nav-link">
+                    <div class="nav-icon">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </div>
+                    <span class="nav-text">Pengeluaran</span>
+                    <div class="nav-indicator"></div>
+                </a>
+            </li>
+            {{-- ========================================== --}}
+
             <li class="nav-item {{ request()->routeIs('kasir.reports*') ? 'active' : '' }}">
                 <a href="{{ route('kasir.reports.index') }}" class="nav-link">
                     <div class="nav-icon">
