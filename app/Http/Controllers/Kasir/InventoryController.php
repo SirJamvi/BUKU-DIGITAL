@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
 
+
 class InventoryController extends Controller
 {
     protected InventoryService $inventoryService;
@@ -80,6 +81,34 @@ class InventoryController extends Controller
         } catch (\Exception $e) {
             logger()->error('Kasir error breaking unit: ' . $e->getMessage());
             return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function stockOpnameForm(): View
+    {
+        // Ambil produk aktif beserta relasi inventory-nya
+        $products = $this->inventoryService->getActiveProducts()->filter(function ($product) {
+            return $product->inventory !== null;
+        });
+
+        return view('kasir.inventory.stock_opname', compact('products'));
+    }
+
+    public function processStockOpname(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'items' => 'required|array',
+            'items.*.inventory_id' => 'required|exists:inventory,id',
+            'items.*.actual_stock' => 'required|integer|min:0',
+            'items.*.notes' => 'nullable|string|max:255',
+        ]);
+
+        try {
+            $this->inventoryService->processStockOpname($request->all());
+            return redirect()->back()->with('success', 'Stock Opname berhasil disimpan. Data stok telah disesuaikan dengan fisik.');
+        } catch (\Exception $e) {
+            logger()->error('Kasir error stock opname: ' . $e->getMessage());
+            return back()->with('error', 'Gagal memproses stock opname: ' . $e->getMessage());
         }
     }
 }

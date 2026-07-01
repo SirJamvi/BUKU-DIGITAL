@@ -122,6 +122,17 @@
                     <div class="nav-indicator"></div>
                 </a>
             </li>
+
+            {{-- MENU BARU: TUTUP SHIFT (OPNAME) --}}
+            <li class="nav-item {{ request()->routeIs('kasir.inventory.stock_opname') ? 'active' : '' }}">
+                <a href="{{ route('kasir.inventory.stock_opname') }}" class="nav-link">
+                    <div class="nav-icon">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+                    <span class="nav-text">Tutup Shift (Opname)</span>
+                    <div class="nav-indicator"></div>
+                </a>
+            </li>
             {{-- ========================================== --}}
 
             <li class="nav-divider">

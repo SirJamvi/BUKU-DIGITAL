@@ -74,7 +74,7 @@ class InventoryService
     {
         DB::transaction(function () use ($data) {
             $currentUserId = Auth::id();
-
+            
             foreach ($data['items'] as $item) {
                 $inventory = Inventory::find($item['inventory_id']);
                 if (!$inventory) continue;
@@ -82,15 +82,14 @@ class InventoryService
                 $difference = $item['actual_stock'] - $inventory->current_stock;
 
                 if ($difference !== 0) {
-                    // Update stok saat ini
                     $inventory->update(['current_stock' => $item['actual_stock']]);
 
-                    // Catat pergerakan stok sebagai 'adjustment'
                     StockMovement::create([
+                        'business_id' => $inventory->business_id, // <--- TAMBAHKAN BARIS INI
                         'product_id' => $inventory->product_id,
                         'type' => 'adjustment',
                         'quantity' => $difference,
-                        'notes' => 'Stock Opname: ' . ($item['notes'] ?? 'Penyesuaian stok fisik.'),
+                        'notes' => 'Stock Opname: ' . ($item['notes'] ?? 'Tutup Shift / Penyesuaian fisik.'),
                         'created_by' => $currentUserId,
                     ]);
                 }

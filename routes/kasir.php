@@ -49,6 +49,10 @@ Route::prefix('reports')->name('reports.')->group(function () {
     Route::get('/sales', [KasirReportController::class, 'sales'])->name('sales');
 });
 
+// Stock Opname (Tutup Shift)
+Route::get('/stock-opname', [KasirInventoryController::class, 'stockOpnameForm'])->name('stock_opname');
+Route::post('/stock-opname', [KasirInventoryController::class, 'processStockOpname'])->name('process_stock_opname');
+
 // ✅ RUTE BARU: INVENTORY UNTUK KASIR (Penerimaan Supplier & Pecah Ball)
 Route::prefix('inventory')->name('inventory.')->group(function () {
     // Input Stok dari Supplier
