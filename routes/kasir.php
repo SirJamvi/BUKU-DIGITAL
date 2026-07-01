@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Kasir\DashboardController as KasirDashboardController;
 use App\Http\Controllers\Kasir\TransactionController;
 use App\Http\Controllers\Kasir\ProductController as KasirProductController;
+use App\Http\Controllers\Kasir\ExpenseController;
 use App\Http\Controllers\Kasir\ReportController as KasirReportController;
 use App\Http\Controllers\Kasir\PosController;
 use App\Http\Controllers\Kasir\CustomerController;
@@ -25,7 +26,7 @@ Route::prefix('pos')->name('pos.')->group(function () {
 Route::prefix('transactions')->name('transactions.')->group(function () {
     Route::get('/', [TransactionController::class, 'index'])->name('index');
     Route::get('/{transaction}', [TransactionController::class, 'show'])->name('show');
-    
+
     // RUTE BARU UNTUK EDIT
     Route::get('/{transaction}/edit', [TransactionController::class, 'edit'])->name('edit');
     Route::put('/{transaction}', [TransactionController::class, 'update'])->name('update');
@@ -33,6 +34,13 @@ Route::prefix('transactions')->name('transactions.')->group(function () {
 
 // Customer Management
 Route::resource('customers', CustomerController::class)->except(['edit', 'update', 'destroy']);
+
+// Rute Pengeluaran / Expenses Kasir
+Route::prefix('expenses')->name('expenses.')->group(function () {
+    Route::get('/', [ExpenseController::class, 'index'])->name('index');
+    Route::get('/create', [ExpenseController::class, 'create'])->name('create');
+    Route::post('/', [ExpenseController::class, 'store'])->name('store');
+});
 
 
 // Product Lookup

@@ -13,7 +13,7 @@
                 </div>
             </a>
         </div>
-        
+
         <!-- Close button for mobile -->
         <button class="sidebar-close d-lg-none" type="button" id="sidebarClose">
             <i class="fas fa-times"></i>
@@ -100,6 +100,22 @@
             <li class="nav-divider">
                 <span class="divider-text">Laporan</span>
             </li>
+
+            {{-- ===== TAMBAHAN: MENU KEUANGAN KASIR ===== --}}
+            <li class="nav-divider">
+                <span class="divider-text">Keuangan</span>
+            </li>
+
+            <li class="nav-item {{ request()->routeIs('kasir.expenses.*') ? 'active' : '' }}">
+                <a href="{{ route('kasir.expenses.index') }}" class="nav-link">
+                    <div class="nav-icon">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </div>
+                    <span class="nav-text">Pengeluaran</span>
+                    <div class="nav-indicator"></div>
+                </a>
+            </li>
+            {{-- ========================================== --}}
 
             <li class="nav-item {{ request()->routeIs('kasir.reports*') ? 'active' : '' }}">
                 <a href="{{ route('kasir.reports.index') }}" class="nav-link">
@@ -619,6 +635,7 @@
             opacity: 0;
             transform: translateX(-20px);
         }
+
         to {
             opacity: 1;
             transform: translateX(0);
@@ -629,14 +646,37 @@
         animation: slideIn 0.4s ease forwards;
     }
 
-    .nav-item:nth-child(1) { animation-delay: 0.05s; }
-    .nav-item:nth-child(2) { animation-delay: 0.1s; }
-    .nav-item:nth-child(3) { animation-delay: 0.15s; }
-    .nav-item:nth-child(4) { animation-delay: 0.2s; }
-    .nav-item:nth-child(5) { animation-delay: 0.25s; }
-    .nav-item:nth-child(6) { animation-delay: 0.3s; }
-    .nav-item:nth-child(7) { animation-delay: 0.35s; }
-    .nav-item:nth-child(8) { animation-delay: 0.4s; }
+    .nav-item:nth-child(1) {
+        animation-delay: 0.05s;
+    }
+
+    .nav-item:nth-child(2) {
+        animation-delay: 0.1s;
+    }
+
+    .nav-item:nth-child(3) {
+        animation-delay: 0.15s;
+    }
+
+    .nav-item:nth-child(4) {
+        animation-delay: 0.2s;
+    }
+
+    .nav-item:nth-child(5) {
+        animation-delay: 0.25s;
+    }
+
+    .nav-item:nth-child(6) {
+        animation-delay: 0.3s;
+    }
+
+    .nav-item:nth-child(7) {
+        animation-delay: 0.35s;
+    }
+
+    .nav-item:nth-child(8) {
+        animation-delay: 0.4s;
+    }
 
     /* Focus States for Accessibility */
     .nav-link:focus {
@@ -679,7 +719,7 @@
                 if (icon) {
                     const originalClass = icon.className;
                     icon.className = 'fas fa-spinner fa-spin';
-                    
+
                     // Restore icon after a brief moment
                     setTimeout(() => {
                         icon.className = originalClass;
