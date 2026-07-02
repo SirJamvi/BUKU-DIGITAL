@@ -48,13 +48,11 @@ class ReportController extends Controller
      */
     public function exportFinancialPdf(Request $request)
     {
-        // Gunakan FinancialService untuk mendapatkan data yang sudah difilter
-        $reportData = $this->financialService->getFinancialReport($request->all());
+        // Pakai versi full data (tanpa pagination) khusus untuk PDF
+        $reportData = $this->financialService->getFinancialReportForExport($request->all());
 
-        // Load view khusus untuk PDF dengan data yang didapat
         $pdf = Pdf::loadView('admin.reports.financial_pdf', compact('reportData'));
 
-        // Beri nama file dan kirim sebagai unduhan
         $fileName = 'laporan-keuangan-' . now()->format('d-m-Y') . '.pdf';
         return $pdf->download($fileName);
     }

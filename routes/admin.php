@@ -25,6 +25,7 @@ Route::resource('products', ProductController::class);
 Route::resource('users', UserController::class);
 Route::resource('suppliers', SupplierController::class)->except(['show']);
 Route::resource('transactions', TransactionController::class)->except(['create', 'store', 'destroy']);
+Route::delete('transactions/{transaction}', [TransactionController::class, 'destroy'])->name('transactions.destroy');
 
 // --- Update Bagian Customer ---
 // PENTING: Taruh rute kustom (toggle-status) SEBELUM Route::resource
@@ -51,7 +52,7 @@ Route::prefix('financial')->name('financial.')->group(function () {
     // Rute untuk menambah pengeluaran
     Route::get('/expenses/create', [FinancialController::class, 'createExpense'])->name('expenses.create');
     Route::post('/expenses', [FinancialController::class, 'storeExpense'])->name('expenses.store');
-    
+
     // Rute untuk edit, update, dan delete pengeluaran
     Route::get('/expenses/{expense}/edit', [FinancialController::class, 'editExpense'])->name('expenses.edit');
     Route::put('/expenses/{expense}', [FinancialController::class, 'updateExpense'])->name('expenses.update');

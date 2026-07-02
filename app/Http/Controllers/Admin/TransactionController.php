@@ -5,15 +5,15 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Transaction;
 use App\Services\Admin\TransactionService as AdminTransactionService;
-use App\Services\Kasir\TransactionService as KasirTransactionService; // <-- Perbaikan #1
-use App\Http\Requests\Kasir\StoreTransactionRequest; // <-- Perbaikan #2
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests; // <-- Perbaikan #3
+use App\Services\Kasir\TransactionService as KasirTransactionService;
+use App\Http\Requests\Kasir\StoreTransactionRequest;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class TransactionController extends Controller
 {
-    use AuthorizesRequests; // <-- Perbaikan #4
+    use AuthorizesRequests;
 
     protected AdminTransactionService $transactionService;
 
@@ -34,20 +34,12 @@ class TransactionController extends Controller
         return view('admin.transactions.show', compact('transaction'));
     }
 
-    /**
-     * [BARU] Menampilkan form untuk admin mengedit transaksi.
-     */
     public function edit(Transaction $transaction): View
     {
-        // Policy sudah otomatis memberikan izin kepada admin
         $data = app(KasirTransactionService::class)->getEditTransactionData($transaction);
-        
         return view('admin.transactions.edit', $data);
     }
 
-    /**
-     * [BARU] Memproses pembaruan transaksi oleh admin.
-     */
     public function update(StoreTransactionRequest $request, Transaction $transaction): RedirectResponse
     {
         try {
@@ -57,6 +49,25 @@ class TransactionController extends Controller
                 ->with('success', 'Transaksi berhasil diperbarui oleh Admin.');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal memperbarui transaksi: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    /**
+     * [BARU] Memproses penghapusan transaksi beserta rollback stok dan kas.
+     */
+    public function destroy(Transaction $transaction): RedirectResponse
+    {
+        try {
+            // Ambil ID dan tanggal untuk pesan sukses sebelum data hilang
+            $txId = $transaction->id;
+
+            $this->transactionService->deleteTransaction($transaction);
+
+            return redirect()
+                ->route('admin.transactions.index')
+                ->with('success', "Transaksi #{$txId} berhasil dihapus. Stok, Poin, dan Arus Kas telah dikembalikan.");
+        } catch (\Exception $e) {
+            return back()->with('error', 'Gagal menghapus transaksi: ' . $e->getMessage());
         }
     }
 }
