@@ -28,7 +28,10 @@ class PosService
             ->with(['category', 'inventory', 'variants'])
             ->get();
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> feature/pendingpay
         $customers = Customer::where('status', 'active')
             ->orderBy('name', 'asc')
             ->get();
@@ -52,7 +55,7 @@ class PosService
     public function processTransaction(array $data): Transaction
     {
         return DB::transaction(function () use ($data) {
-            // 1. Validasi stok sebelum membuat transaksi
+            // 1. Validasi stok sebelum membuat transaksi (TETAP SAMA)
             foreach ($data['items'] as $item) {
                 $product = Product::with('inventory')->find($item['product_id']);
                 if ($product->inventory->current_stock < $item['quantity']) {
@@ -62,58 +65,69 @@ class PosService
                 }
             }
 
+<<<<<<< HEAD
+=======
+            // Cek apakah ini transaksi kasbon
+            $isKasbon = $data['payment_method'] === 'kasbon';
+
+>>>>>>> feature/pendingpay
             // 2. Buat transaksi utama
             $transaction = Transaction::create([
                 'business_id' => Auth::user()->business_id,
                 'type' => 'sale',
                 'customer_id' => $data['customer_id'] ?? null,
                 'total_amount' => $data['total_amount'],
-                'payment_method' => $data['payment_method'],
-                'payment_status' => 'paid',
+                // PERBAIKAN: Masukkan string 'kasbon' alih-alih null
+                'payment_method' => $isKasbon ? 'kasbon' : $data['payment_method'],
+                'payment_status' => $isKasbon ? 'pending' : 'paid',
                 'status' => 'completed',
                 'transaction_date' => now(),
                 'notes' => $data['notes'] ?? null,
                 'created_by' => Auth::id(),
             ]);
 
-            // 3. Simpan detail transaksi dan kurangi stok
+            // 3. Simpan detail transaksi dan kurangi stok (TETAP SAMA)
             foreach ($data['items'] as $item) {
                 $product = Product::find($item['product_id']);
+<<<<<<< HEAD
 
+=======
+>>>>>>> feature/pendingpay
                 $transaction->details()->create([
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
                     'total_price' => $item['total_price'],
                 ]);
+<<<<<<< HEAD
 
+=======
+>>>>>>> feature/pendingpay
                 $product->inventory->decrement('current_stock', $item['quantity']);
             }
 
-            // 4. Catat transaksi sebagai Pemasukan (Income)
-            CashFlow::create([
-                'business_id' => $transaction->business_id,
-                'type' => 'income',
-                'category_id' => 1,
-                'amount' => $transaction->total_amount,
-                // [FIX] Agar data di Cash Flow mengikuti metode bayar transaksi (Dana/Transfer/Cash)
-                'payment_method' => $transaction->payment_method,
-                'description' => 'Pendapatan dari penjualan #' . $transaction->id,
-                'date' => $transaction->transaction_date,
-                'reference_id' => $transaction->id,
-                'created_by' => Auth::id(),
-            ]);
+            // 4. Catat ke Cash Flow HANYA JIKA LUNAS
+            if (!$isKasbon) {
+                CashFlow::create([
+                    'business_id' => $transaction->business_id,
+                    'type' => 'income',
+                    'category_id' => 1,
+                    'amount' => $transaction->total_amount,
+                    'payment_method' => $transaction->payment_method,
+                    'description' => 'Pendapatan dari penjualan #' . $transaction->id,
+                    'date' => $transaction->transaction_date,
+                    'reference_id' => $transaction->id,
+                    'created_by' => Auth::id(),
+                ]);
+            }
 
-            // ====================================================================
-            // Update total belanja pelanggan jika ada
-            // ====================================================================
+            // Update total belanja pelanggan (TETAP SAMA)
             if ($transaction->customer_id) {
                 $customer = Customer::find($transaction->customer_id);
                 if ($customer) {
                     $customer->increment('total_purchases', $transaction->total_amount);
                 }
             }
-            // ====================================================================
 
             return $transaction;
         });

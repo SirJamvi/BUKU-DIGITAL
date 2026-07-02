@@ -226,6 +226,12 @@
                             {{-- Opsi Default jika data kosong --}}
                             <option value="" disabled selected>-- Pilih Metode --</option>
 
+<<<<<<< HEAD
+=======
+                            {{-- ✅ BARU: Opsi Kasbon / Belum Lunas --}}
+                            <option value="kasbon" class="text-danger fw-bold">⚠️ BELUM LUNAS (KASBON)</option>
+
+>>>>>>> feature/pendingpay
                             @foreach($paymentMethods as $method)
                             {{-- Value menggunakan SLUG agar tersimpan seragam di database (contoh: 'transfer-bank') --}}
                             <option value="{{ $method->slug }}">

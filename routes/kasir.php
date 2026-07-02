@@ -19,6 +19,10 @@ Route::prefix('pos')->name('pos.')->group(function () {
     Route::get('/', [PosController::class, 'index'])->name('index');
     Route::post('/store', [PosController::class, 'store'])->name('store');
     Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
+<<<<<<< HEAD
+=======
+    Route::get('/receipt-unpaid/{transaction}', [PosController::class, 'receiptUnpaid'])->name('receiptUnpaid'); // ✅ BARU
+>>>>>>> feature/pendingpay
 });
 
 // Transaction Management
@@ -26,9 +30,12 @@ Route::prefix('transactions')->name('transactions.')->group(function () {
     Route::get('/', [TransactionController::class, 'index'])->name('index');
     Route::get('/{transaction}', [TransactionController::class, 'show'])->name('show');
 
-    // RUTE BARU UNTUK EDIT
+    // RUTE EDIT
     Route::get('/{transaction}/edit', [TransactionController::class, 'edit'])->name('edit');
     Route::put('/{transaction}', [TransactionController::class, 'update'])->name('update');
+
+    // RUTE BARU: Tandai lunas
+    Route::put('/{transaction}/mark-as-paid', [TransactionController::class, 'markAsPaid'])->name('markAsPaid'); // ✅ BARU
 });
 
 // Customer Management
