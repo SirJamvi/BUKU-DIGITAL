@@ -35,20 +35,25 @@ class PosController extends Controller
     {
         try {
             $transaction = $this->posService->processTransaction($request->validated());
-            
+
             // ==========================================================
-            // PERBAIKAN: Redirect langsung ke halaman RECEIPT/STRUK
-            // untuk langsung print, bukan ke halaman detail transaksi
+            // Redirect ke struk yang sesuai berdasarkan status pembayaran
             // ==========================================================
+            if ($transaction->payment_status === 'pending') {
+                return redirect()
+                    ->route('kasir.pos.receiptUnpaid', $transaction->id)
+                    ->with('success', 'Transaksi Kasbon dicatat! Struk tagihan akan dicetak.');
+            }
+
             return redirect()
                 ->route('kasir.pos.receipt', $transaction->id)
-                ->with('success', 'Transaksi berhasil! Struk akan dicetak otomatis.');
+                ->with('success', 'Transaksi Lunas berhasil! Struk akan dicetak.');
 
         } catch (\App\Exceptions\InsufficientStockException $e) {
             // Jika stok tidak cukup, kembali ke halaman POS dengan pesan error
             logger()->warning('POS Transaction failed: ' . $e->getMessage());
             return back()->with('error', $e->getMessage())->withInput();
-        
+
         } catch (\Exception $e) {
             // Jika ada error lain, kembali ke halaman POS dengan pesan error umum
             logger()->error('Error processing POS transaction: ' . $e->getMessage());
@@ -57,13 +62,22 @@ class PosController extends Controller
     }
 
     /**
-     * Menampilkan halaman struk/receipt untuk printing.
+     * Menampilkan halaman struk/receipt untuk printing (transaksi LUNAS).
      */
     public function receipt(Transaction $transaction): View
     {
-        // Ambil data transaksi lengkap dengan relasi
         $transaction = $this->posService->getTransactionWithDetails($transaction->id);
-        
+
         return view('kasir.pos.receipt', compact('transaction'));
+    }
+
+    /**
+     * Menampilkan halaman struk TAGIHAN (Belum Lunas / Kasbon).
+     */
+    public function receiptUnpaid(Transaction $transaction): View
+    {
+        $transaction = $this->posService->getTransactionWithDetails($transaction->id);
+
+        return view('kasir.pos.receipt_unpaid', compact('transaction'));
     }
 }

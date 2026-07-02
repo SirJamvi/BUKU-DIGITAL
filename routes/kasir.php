@@ -19,7 +19,8 @@ Route::get('/', [KasirDashboardController::class, 'index'])->name('index');
 Route::prefix('pos')->name('pos.')->group(function () {
     Route::get('/', [PosController::class, 'index'])->name('index');
     Route::post('/store', [PosController::class, 'store'])->name('store');
-    Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt'); // ✅ BARU
+    Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
+    Route::get('/receipt-unpaid/{transaction}', [PosController::class, 'receiptUnpaid'])->name('receiptUnpaid'); // ✅ BARU
 });
 
 // Transaction Management
@@ -27,9 +28,12 @@ Route::prefix('transactions')->name('transactions.')->group(function () {
     Route::get('/', [TransactionController::class, 'index'])->name('index');
     Route::get('/{transaction}', [TransactionController::class, 'show'])->name('show');
 
-    // RUTE BARU UNTUK EDIT
+    // RUTE EDIT
     Route::get('/{transaction}/edit', [TransactionController::class, 'edit'])->name('edit');
     Route::put('/{transaction}', [TransactionController::class, 'update'])->name('update');
+
+    // RUTE BARU: Tandai lunas
+    Route::put('/{transaction}/mark-as-paid', [TransactionController::class, 'markAsPaid'])->name('markAsPaid'); // ✅ BARU
 });
 
 // Customer Management
@@ -41,7 +45,6 @@ Route::prefix('expenses')->name('expenses.')->group(function () {
     Route::get('/create', [ExpenseController::class, 'create'])->name('create');
     Route::post('/', [ExpenseController::class, 'store'])->name('store');
 });
-
 
 // Product Lookup
 Route::prefix('products')->name('products.')->group(function () {

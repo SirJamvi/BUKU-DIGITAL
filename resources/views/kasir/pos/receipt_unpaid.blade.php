@@ -1,11 +1,11 @@
-{{-- resources/views/kasir/pos/receipt.blade.php --}}
+{{-- resources/views/kasir/pos/receipt_unpaid.blade.php --}}
 <!DOCTYPE html>
 <html lang="id">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Struk #{{ $transaction->id }} - Adin Crystal</title>
+    <title>Struk Tagihan #{{ $transaction->id }} - Adin Crystal</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         @page {
@@ -25,7 +25,6 @@
             color: #000;
             line-height: 1.4;
             background-color: #f4f6f9;
-            /* Background luar struk */
         }
 
         .receipt-container {
@@ -34,13 +33,11 @@
             margin: 20px auto;
             padding: 5mm;
             background-color: #fff;
-            /* Pastikan background struk putih untuk foto */
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            /* Tambahan shadow untuk tampilan layar */
         }
 
         /* ========================================= */
-        /* HEADER - Lebih Profesional */
+        /* HEADER */
         /* ========================================= */
         .header {
             text-align: center;
@@ -66,6 +63,21 @@
             font-size: 9pt;
             color: #333;
             margin-top: 3px;
+        }
+
+        /* ========================================= */
+        /* BADGE KASBON DI HEADER */
+        /* ========================================= */
+        .kasbon-badge {
+            text-align: center;
+            background-color: #dc3545;
+            color: #fff;
+            font-weight: bold;
+            font-size: 10pt;
+            padding: 6px 0;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            border-radius: 3px;
         }
 
         /* ========================================= */
@@ -95,7 +107,7 @@
         }
 
         /* ========================================= */
-        /* TABEL ITEMS - Lebih Rapi */
+        /* TABEL ITEMS */
         /* ========================================= */
         .items-section {
             margin: 15px 0;
@@ -107,10 +119,6 @@
         .items-table {
             width: 100%;
             border-collapse: collapse;
-        }
-
-        .items-table .item-row {
-            margin-bottom: 8px;
         }
 
         .item-name {
@@ -143,7 +151,7 @@
         }
 
         /* ========================================= */
-        /* TOTALS - Lebih Menonjol */
+        /* TOTALS */
         /* ========================================= */
         .totals {
             margin-top: 12px;
@@ -170,14 +178,18 @@
             border-top: 2px solid #000;
         }
 
-        .totals .payment-row td {
-            font-size: 10pt;
-            padding-top: 4px;
-            color: #333;
-        }
-
         .totals td:last-child {
             text-align: right;
+        }
+
+        .status-box {
+            border: 1px dashed #dc3545;
+            padding: 8px;
+            margin-top: 10px;
+            font-weight: bold;
+            text-align: center;
+            color: #dc3545;
+            font-size: 10pt;
         }
 
         /* ========================================= */
@@ -256,31 +268,11 @@
 
         .btn-success {
             background: #25D366;
-            /* Warna khas WhatsApp */
             color: white;
         }
 
         .btn-success:hover {
             background: #128C7E;
-        }
-
-        /* Input No WA */
-        .wa-input-container {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #ddd;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .wa-input {
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 10pt;
-            width: 200px;
         }
 
         /* ========================================= */
@@ -318,6 +310,11 @@
                 Telp: 087811192774<br>
                 www.eskristalkarawang.com
             </div>
+        </div>
+
+        {{-- Badge Kasbon --}}
+        <div class="kasbon-badge">
+            ⚠️ STRUK TAGIHAN (KASBON)
         </div>
 
         {{-- ========================================= --}}
@@ -367,7 +364,7 @@
         </div>
 
         {{-- ========================================= --}}
-        {{-- TOTALS --}}
+        {{-- TOTALS (versi Belum Lunas) --}}
         {{-- ========================================= --}}
         <div class="totals">
             <table>
@@ -375,31 +372,22 @@
                     <td>Subtotal</td>
                     <td>Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</td>
                 </tr>
-                <tr class="total-row">
-                    <td>TOTAL</td>
+                <tr class="total-row" style="color: #dc3545;">
+                    <td>TOTAL TAGIHAN</td>
                     <td>Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</td>
                 </tr>
-                <tr class="payment-row">
-                    <td>Metode Bayar</td>
-                    <td>
-                        @php
-                        $methodName = $transaction->payment_method;
-                        if (strtolower($methodName) == 'debit') {
-                        $methodName = 'Transfer Bank';
-                        }
-                        @endphp
-                        {{ ucwords($methodName) }}
-                    </td>
-                </tr>
             </table>
+            <div class="status-box">
+                ⚠️ STATUS: BELUM LUNAS
+            </div>
         </div>
 
         {{-- ========================================= --}}
         {{-- FOOTER --}}
         {{-- ========================================= --}}
         <div class="footer">
-            <div class="footer-message">Terima Kasih Atas Kunjungan Anda!</div>
-            <div class="footer-note">Barang yang sudah dibeli tidak dapat ditukar/dikembalikan</div>
+            <div class="footer-message">Mohon segera lakukan pelunasan</div>
+            <div class="footer-note">Simpan struk ini sebagai bukti tagihan yang sah</div>
             <div class="footer-date">Dicetak: {{ now()->format('d/m/Y H:i:s') }}</div>
         </div>
     </div>
@@ -419,9 +407,9 @@
 
         <div class="wa-input-container" style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
             <button type="button" onclick="shareNative()" class="btn btn-success" id="btnShareNative" style="width: 100%; max-width: 300px; padding: 12px; font-size: 11pt; border-radius: 8px;">
-                <i class="fas fa-share-alt"></i> 📱 Bagikan Struk (WhatsApp)
+                <i class="fas fa-share-alt"></i> 📱 Bagikan Struk Tagihan (WhatsApp)
             </button>
-            <small style="color: #666; text-align: center;">*Klik tombol di atas untuk membagikan struk langsung ke aplikasi pilihan Anda (WA/Telegram/dll).</small>
+            <small style="color: #666; text-align: center;">*Klik tombol di atas untuk membagikan struk tagihan langsung ke aplikasi pilihan Anda (WA/Telegram/dll).</small>
         </div>
     </div>
 
@@ -444,22 +432,19 @@
                 backgroundColor: "#ffffff",
                 logging: false
             }).then(canvas => {
-                // Konversi Canvas menjadi file gambar (Blob)
                 canvas.toBlob(function(blob) {
-                    const file = new File([blob], `Struk_AdinCrystal_${transactionId}.png`, {
+                    const file = new File([blob], `Tagihan_AdinCrystal_${transactionId}.png`, {
                         type: 'image/png'
                     });
 
-                    // CEK DUKUNGAN WEB SHARE API (Fitur Native Share OS)
                     if (navigator.canShare && navigator.canShare({
                             files: [file]
                         })) {
                         navigator.share({
                             files: [file],
-                            title: 'Struk Adin Crystal',
-                            text: 'Terima kasih telah berbelanja di Adin Crystal. Berikut adalah struk pembelian Anda.'
+                            title: 'Struk Tagihan Adin Crystal',
+                            text: 'Berikut struk tagihan (kasbon) atas nama {{ $transaction->customer->name ?? "Pelanggan" }}. Mohon segera dilunasi. Terima kasih.'
                         }).then(() => {
-                            // Sukses dibagikan
                             btn.innerHTML = originalText;
                             btn.disabled = false;
                         }).catch((error) => {
@@ -468,13 +453,12 @@
                             btn.disabled = false;
                         });
                     } else {
-                        // FALLBACK: Jika kasir pakai PC/Browser lama yang tidak support Native Share
                         alert('Browser Anda tidak mendukung Share Langsung. Gambar akan didownload otomatis.');
 
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `Struk_AdinCrystal_${transactionId}.png`;
+                        a.download = `Tagihan_AdinCrystal_${transactionId}.png`;
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
