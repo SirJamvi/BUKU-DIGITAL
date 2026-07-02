@@ -2,24 +2,62 @@
 
 @section('title', 'Edit Transaksi #' . $transaction->id)
 @section('breadcrumb')
-    <li class="breadcrumb-item"><a href="{{ route('kasir.transactions.index') }}">Riwayat Transaksi</a></li>
-    <li class="breadcrumb-item active">Edit</li>
+<li class="breadcrumb-item"><a href="{{ route('kasir.transactions.index') }}">Riwayat Transaksi</a></li>
+<li class="breadcrumb-item active">Edit</li>
 @endsection
 
 @push('styles')
 <style>
-    .pos-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; max-height: 75vh; overflow-y: auto; padding: 5px; }
-    .product-card { cursor: pointer; border: 1px solid #eee; transition: all 0.2s ease; }
-    .product-card:hover { transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); border-color: var(--kasir-accent); }
-    .pos-cart { background-color: var(--kasir-bg-dominant); height: 100%; display: flex; flex-direction: column; }
-    .cart-items { flex-grow: 1; overflow-y: auto; min-height: 200px; }
-    .btn-checkout { background-color: var(--kasir-accent); color: white; font-weight: bold; padding: 15px; }
-    .btn-checkout:hover { background-color: #d64a6a; color: white; }
+    .pos-product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 1rem;
+        max-height: 75vh;
+        overflow-y: auto;
+        padding: 5px;
+    }
+
+    .product-card {
+        cursor: pointer;
+        border: 1px solid #eee;
+        transition: all 0.2s ease;
+    }
+
+    .product-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+        border-color: var(--kasir-accent);
+    }
+
+    .pos-cart {
+        background-color: var(--kasir-bg-dominant);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .cart-items {
+        flex-grow: 1;
+        overflow-y: auto;
+        min-height: 200px;
+    }
+
+    .btn-checkout {
+        background-color: var(--kasir-accent);
+        color: white;
+        font-weight: bold;
+        padding: 15px;
+    }
+
+    .btn-checkout:hover {
+        background-color: #d64a6a;
+        color: white;
+    }
 </style>
 @endpush
 
 @section('content')
-<form action="{{ route('kasir.transactions.update', $transaction->id) }}" method="POST" id="pos-form">
+<form action="{{ $update_route ?? route('kasir.transactions.update', $transaction->id) }}" method="POST" id="pos-form">
     @csrf
     @method('PUT')
     <div class="row g-4">
@@ -32,14 +70,14 @@
                 </div>
                 <div class="pos-product-grid">
                     @forelse ($products as $product)
-                        <div class="card product-card" data-id="{{ $product->id }}" data-name="{{ $product->name }}" data-price="{{ $product->base_price }}">
-                            <div class="card-body text-center p-2">
-                                <h6 class="card-title small fw-bold mb-1">{{ $product->name }}</h6>
-                                <p class="card-text small fw-bold" style="color: var(--kasir-accent);">Rp {{ number_format($product->base_price, 0, ',', '.') }}</p>
-                            </div>
+                    <div class="card product-card" data-id="{{ $product->id }}" data-name="{{ $product->name }}" data-price="{{ $product->base_price }}">
+                        <div class="card-body text-center p-2">
+                            <h6 class="card-title small fw-bold mb-1">{{ $product->name }}</h6>
+                            <p class="card-text small fw-bold" style="color: var(--kasir-accent);">Rp {{ number_format($product->base_price, 0, ',', '.') }}</p>
                         </div>
+                    </div>
                     @empty
-                        <p class="text-muted">Tidak ada produk yang tersedia.</p>
+                    <p class="text-muted">Tidak ada produk yang tersedia.</p>
                     @endforelse
                 </div>
             </x-card>
@@ -55,7 +93,7 @@
                     <select name="customer_id" id="customer_id" class="form-select">
                         <option value="">-- Pelanggan Umum --</option>
                         @foreach ($customers as $customer)
-                            <option value="{{ $customer->id }}" {{ $transaction->customer_id == $customer->id ? 'selected' : '' }}>{{ $customer->name }}</option>
+                        <option value="{{ $customer->id }}" {{ $transaction->customer_id == $customer->id ? 'selected' : '' }}>{{ $customer->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -64,12 +102,18 @@
                         <tbody id="cart-items-body"></tbody>
                     </table>
                 </div>
-                
+
                 <div class="mt-auto">
                     <hr>
                     <div>
-                        <div class="d-flex justify-content-between"><h6 class="text-muted">Subtotal</h6><h6 id="cart-subtotal">Rp 0</h6></div>
-                        <div class="d-flex justify-content-between"><h5 class="fw-bold">Total</h5><h5 class="fw-bold" id="cart-total" style="color: var(--kasir-accent);">Rp 0</h5></div>
+                        <div class="d-flex justify-content-between">
+                            <h6 class="text-muted">Subtotal</h6>
+                            <h6 id="cart-subtotal">Rp 0</h6>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <h5 class="fw-bold">Total</h5>
+                            <h5 class="fw-bold" id="cart-total" style="color: var(--kasir-accent);">Rp 0</h5>
+                        </div>
                     </div>
                     <div id="hidden-items"></div>
                     <input type="hidden" name="total_amount" id="total_amount_hidden" value="0">
@@ -82,17 +126,17 @@
                             <option value="" disabled>-- Pilih Metode --</option>
 
                             @foreach ($paymentMethods as $method)
-                                <option value="{{ $method->slug }}"
-                                    {{ (old('payment_method', $transaction->payment_method) == $method->slug) ? 'selected' : '' }}>
-                                    {{ $method->name }}
-                                </option>
+                            <option value="{{ $method->slug }}"
+                                {{ (old('payment_method', $transaction->payment_method) == $method->slug) ? 'selected' : '' }}>
+                                {{ $method->name }}
+                            </option>
                             @endforeach
 
                             {{-- Fallback: jika payment_method lama tidak ditemukan di master terbaru --}}
                             @if (! $paymentMethods->contains('slug', $transaction->payment_method))
-                                <option value="{{ $transaction->payment_method }}" selected>
-                                    {{ ucfirst($transaction->payment_method) }} (Arsip)
-                                </option>
+                            <option value="{{ $transaction->payment_method }}" selected>
+                                {{ ucfirst($transaction->payment_method) }} (Arsip)
+                            </option>
                             @endif
                         </select>
                     </div>
@@ -117,9 +161,13 @@
 
         function addToCart(productId, name, price) {
             if (cart[productId]) {
-                cart[productId].quantity++;
+                cart[productId].quantity = parseInt(cart[productId].quantity) + 1;
             } else {
-                cart[productId] = { name: name, price: parseFloat(price), quantity: 1 };
+                cart[productId] = {
+                    name: name,
+                    price: parseFloat(price),
+                    quantity: 1
+                };
             }
             renderCart();
         }
@@ -147,10 +195,12 @@
                         <span class="fw-bold small">${item.name}</span><br>
                         <small class="text-muted">Rp ${formatRupiah(item.price)}</small>
                     </td>
-                    <td class="text-center align-middle" style="width: 120px;">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updateQuantity(${productId}, -1)">-</button>
-                        <span class="mx-2">${item.quantity}</span>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updateQuantity(${productId}, 1)">+</button>
+                    <td class="align-middle" style="width: 140px;">
+                        <div class="d-flex align-items-center justify-content-center">
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-2" onclick="updateQuantity(${productId}, -1)">-</button>
+                            <span class="mx-3 fw-bold" style="min-width: 20px; text-align: center;">${item.quantity}</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-2" onclick="updateQuantity(${productId}, 1)">+</button>
+                        </div>
                     </td>
                     <td class="text-end align-middle fw-bold small">Rp ${formatRupiah(totalPrice)}</td>
                 `;
@@ -171,7 +221,9 @@
 
         window.updateQuantity = function(productId, change) {
             if (cart[productId]) {
-                cart[productId].quantity += change;
+                // [PERBAIKAN LOGIKA] Pastikan quantity dibaca sebagai Integer sebelum ditambah/dikurang
+                cart[productId].quantity = parseInt(cart[productId].quantity) + parseInt(change);
+
                 if (cart[productId].quantity <= 0) {
                     delete cart[productId];
                 }
@@ -180,6 +232,8 @@
         }
 
         function formatRupiah(angka) {
+            // Mengatasi NaN, pastikan selalu berupa angka yang valid
+            if (isNaN(angka)) return "0";
             return new Intl.NumberFormat('id-ID').format(angka);
         }
 
@@ -191,7 +245,7 @@
                 addToCart(id, name, price);
             });
         });
-        
+
         document.getElementById('product-search').addEventListener('keyup', function() {
             const filter = this.value.toLowerCase();
             document.querySelectorAll('.product-card').forEach(card => {
@@ -199,17 +253,20 @@
                 productName.includes(filter) ? card.style.display = '' : card.style.display = 'none';
             });
         });
-        
+
         // Memuat data awal dari elemen HTML ke keranjang
         const initialDataEl = document.getElementById('initial-transaction-data');
-        const initialItems = JSON.parse(initialDataEl.dataset.items);
-        initialItems.forEach(item => {
-            cart[item.product_id] = {
-                name: item.product.name,
-                price: parseFloat(item.unit_price),
-                quantity: item.quantity
-            };
-        });
+        if (initialDataEl && initialDataEl.dataset.items) {
+            const initialItems = JSON.parse(initialDataEl.dataset.items);
+            initialItems.forEach(item => {
+                cart[item.product_id] = {
+                    name: item.product.name,
+                    price: parseFloat(item.unit_price),
+                    // [PERBAIKAN LOGIKA] Pastikan data dari database dikonversi ke Integer (bukan String)
+                    quantity: parseInt(item.quantity)
+                };
+            });
+        }
 
         renderCart(); // Render keranjang dengan data awal
     });

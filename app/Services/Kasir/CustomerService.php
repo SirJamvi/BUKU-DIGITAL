@@ -11,10 +11,21 @@ class CustomerService
     /**
      * Mengambil semua pelanggan dengan paginasi.
      * Global Scope sudah otomatis memfilter.
+     * Mendukung pencarian berdasarkan nama, telepon, atau email.
      */
-    public function getAllCustomersWithPagination(int $perPage = 15): LengthAwarePaginator
+    public function getAllCustomersWithPagination(int $perPage = 15, ?string $search = null): LengthAwarePaginator
     {
-        return Customer::latest('join_date')->paginate($perPage);
+        return Customer::query()
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                });
+            })
+            ->latest('join_date')
+            ->paginate($perPage)
+            ->withQueryString();
     }
 
     /**

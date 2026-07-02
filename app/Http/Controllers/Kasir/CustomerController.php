@@ -24,14 +24,19 @@ class CustomerController extends Controller
 
     /**
      * Menampilkan daftar pelanggan.
+     * Mendukung pencarian via query string ?search=
      * [cite_start]Kasir memiliki akses lihat dan tambah pelanggan. [cite: 88]
      *
+     * @param Request $request
      * @return View
      */
-    public function index(): View
+    public function index(Request $request): View
     {
-        $customers = $this->customerService->getAllCustomersWithPagination();
-        return view('kasir.customers.index', compact('customers'));
+        $search = $request->query('search');
+
+        $customers = $this->customerService->getAllCustomersWithPagination(15, $search);
+
+        return view('kasir.customers.index', compact('customers', 'search'));
     }
 
     /**
@@ -72,4 +77,4 @@ class CustomerController extends Controller
         $customerData = $this->customerService->getCustomerDetails($customer);
         return view('kasir.customers.show', $customerData);
     }
-}   
+}
