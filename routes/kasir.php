@@ -19,10 +19,7 @@ Route::prefix('pos')->name('pos.')->group(function () {
     Route::get('/', [PosController::class, 'index'])->name('index');
     Route::post('/store', [PosController::class, 'store'])->name('store');
     Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
-<<<<<<< HEAD
-=======
-    Route::get('/receipt-unpaid/{transaction}', [PosController::class, 'receiptUnpaid'])->name('receiptUnpaid'); // ✅ BARU
->>>>>>> feature/pendingpay
+    Route::get('/receipt-unpaid/{transaction}', [PosController::class, 'receiptUnpaid'])->name('receiptUnpaid');
 });
 
 // Transaction Management
@@ -35,7 +32,7 @@ Route::prefix('transactions')->name('transactions.')->group(function () {
     Route::put('/{transaction}', [TransactionController::class, 'update'])->name('update');
 
     // RUTE BARU: Tandai lunas
-    Route::put('/{transaction}/mark-as-paid', [TransactionController::class, 'markAsPaid'])->name('markAsPaid'); // ✅ BARU
+    Route::put('/{transaction}/mark-as-paid', [TransactionController::class, 'markAsPaid'])->name('markAsPaid');
 });
 
 // Customer Management
@@ -61,7 +58,7 @@ Route::prefix('reports')->name('reports.')->group(function () {
     Route::get('/sales', [KasirReportController::class, 'sales'])->name('sales');
 });
 
-// ✅ SEMUA RUTE INVENTORY (termasuk stock opname) sekarang dalam satu grup
+// SEMUA RUTE INVENTORY (termasuk stock opname) sekarang dalam satu grup
 Route::prefix('inventory')->name('inventory.')->group(function () {
     // Input Stok dari Supplier
     Route::get('/add-stock', [KasirInventoryController::class, 'addStockForm'])->name('add_stock');

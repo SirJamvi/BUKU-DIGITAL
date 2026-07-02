@@ -28,10 +28,6 @@ class PosService
             ->with(['category', 'inventory', 'variants'])
             ->get();
 
-<<<<<<< HEAD
-
-=======
->>>>>>> feature/pendingpay
         $customers = Customer::where('status', 'active')
             ->orderBy('name', 'asc')
             ->get();
@@ -65,12 +61,9 @@ class PosService
                 }
             }
 
-<<<<<<< HEAD
-=======
             // Cek apakah ini transaksi kasbon
             $isKasbon = $data['payment_method'] === 'kasbon';
 
->>>>>>> feature/pendingpay
             // 2. Buat transaksi utama
             $transaction = Transaction::create([
                 'business_id' => Auth::user()->business_id,
@@ -89,20 +82,14 @@ class PosService
             // 3. Simpan detail transaksi dan kurangi stok (TETAP SAMA)
             foreach ($data['items'] as $item) {
                 $product = Product::find($item['product_id']);
-<<<<<<< HEAD
 
-=======
->>>>>>> feature/pendingpay
                 $transaction->details()->create([
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
                     'total_price' => $item['total_price'],
                 ]);
-<<<<<<< HEAD
 
-=======
->>>>>>> feature/pendingpay
                 $product->inventory->decrement('current_stock', $item['quantity']);
             }
 
