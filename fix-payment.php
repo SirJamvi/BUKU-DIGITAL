@@ -1,0 +1,16 @@
+<?php
+
+App\Models\PaymentMethod::where('slug', 'transfer bank')
+    ->update(['slug' => 'transfer-bank']);
+
+$trxAffected = App\Models\Transaction::where('payment_method', 'transfer bank')
+    ->update(['payment_method' => 'transfer-bank']);
+echo "Transaksi diperbaiki: " . $trxAffected . " baris\n";
+
+$cfAffected = App\Models\CashFlow::where('payment_method', 'transfer bank')
+    ->update(['payment_method' => 'transfer-bank']);
+echo "Cash Flow diperbaiki: " . $cfAffected . " baris\n";
+
+$payAffected = App\Models\Payment::where('payment_method', 'transfer bank')
+    ->update(['payment_method' => 'transfer-bank']);
+echo "Payments diperbaiki: " . $payAffected . " baris\n";

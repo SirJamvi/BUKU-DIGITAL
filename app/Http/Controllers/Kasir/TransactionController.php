@@ -3,13 +3,15 @@
 namespace App\Http\Controllers\Kasir;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kasir\StoreTransactionRequest;
+use App\Models\CashFlow;
 use App\Models\Transaction;
 use App\Services\Kasir\TransactionService;
-use Illuminate\View\View;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
-use App\Http\Requests\Kasir\StoreTransactionRequest;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
 
 class TransactionController extends Controller
 {
@@ -115,6 +117,65 @@ class TransactionController extends Controller
                 ->with('success', 'Transaksi berhasil diperbarui.');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal memperbarui transaksi: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    /**
+     * [BARU] Memproses pelunasan banyak transaksi (Bulk Payment) sekaligus.
+     */
+    public function bulkMarkAsPaid(\Illuminate\Http\Request $request): RedirectResponse
+    {
+        $request->validate([
+            'transaction_ids' => 'required|array',
+            'transaction_ids.*' => 'integer|exists:transactions,id',
+            'payment_method' => 'required|string'
+        ], [
+            'transaction_ids.required' => 'Anda belum memilih transaksi satupun untuk dilunasi.'
+        ]);
+
+        $businessId = Auth::user()->business_id;
+        $transactionIds = $request->transaction_ids;
+
+        // Pastikan transaksi yang diubah benar-benar milik toko ini dan statusnya masih pending
+        $transactions = Transaction::whereIn('id', $transactionIds)
+            ->where('business_id', $businessId)
+            ->where('payment_status', 'pending')
+            ->get();
+
+        if ($transactions->isEmpty()) {
+            return back()->with('error', 'Tidak ada transaksi valid yang dapat diproses.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            foreach ($transactions as $transaction) {
+                // 1. Update status masing-masing transaksi
+                $transaction->update([
+                    'payment_status' => 'paid',
+                    'payment_method' => $request->payment_method
+                ]);
+
+                // 2. Catat ke CashFlow untuk setiap transaksi agar laporan tercatat rapi
+                \App\Models\CashFlow::create([
+                    'business_id' => $transaction->business_id,
+                    'type' => 'income',
+                    'category_id' => 1,
+                    'payment_method' => $request->payment_method,
+                    'amount' => $transaction->total_amount,
+                    'description' => 'Pelunasan Kasbon (Bulk) #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT),
+                    'date' => now(),
+                    'reference_id' => $transaction->id,
+                    'created_by' => Auth::id(),
+                ]);
+            }
+
+            DB::commit();
+
+            return back()->with('success', count($transactions) . ' Transaksi berhasil dilunasi secara bersamaan.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Gagal memproses pelunasan massal: ' . $e->getMessage());
         }
     }
 }
