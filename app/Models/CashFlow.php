@@ -4,7 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\BelongsToBusiness; 
+use App\Traits\BelongsToBusiness;
+use Illuminate\Support\Str;
 
 class CashFlow extends Model
 {
@@ -27,6 +28,14 @@ class CashFlow extends Model
     protected $casts = [
         'date' => 'date',
     ];
+
+    /**
+     * [BARU] Mutator Otomatis untuk payment_method
+     */
+    public function setPaymentMethodAttribute($value)
+    {
+        $this->attributes['payment_method'] = Str::slug($value);
+    }
 
     public function category()
     {

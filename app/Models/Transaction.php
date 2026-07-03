@@ -6,6 +6,7 @@ use App\Traits\BelongsToBusiness;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class Transaction extends Model
 {
@@ -27,6 +28,15 @@ class Transaction extends Model
     protected $casts = [
         'transaction_date' => 'datetime',
     ];
+
+    /**
+     * [BARU] Mutator Otomatis untuk payment_method
+     * Mengubah spasi menjadi strip dan huruf kecil secara otomatis.
+     */
+    public function setPaymentMethodAttribute($value)
+    {
+        $this->attributes['payment_method'] = Str::slug($value);
+    }
 
     /**
      * The business that this transaction belongs to.
