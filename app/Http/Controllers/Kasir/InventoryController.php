@@ -100,8 +100,16 @@ class InventoryController extends Controller
             'items' => 'required|array',
             'items.*.inventory_id' => 'required|exists:inventory,id',
             'items.*.actual_stock' => 'required|integer|min:0',
+            'items.*.sys_stock' => 'required|integer|min:0',
             'items.*.notes' => 'nullable|string|max:255',
         ]);
+
+        // VALIDASI TAMBAHAN: Cek jika ada selisih tapi kasir tidak isi alasan
+        foreach ($request->items as $item) {
+            if ($item['actual_stock'] != $item['sys_stock'] && empty($item['notes'])) {
+                return back()->with('error', 'Gagal memproses opname! Terdapat selisih stok fisik dan sistem, kolom "Catatan/Alasan" WAJIB diisi.')->withInput();
+            }
+        }
 
         try {
             $this->inventoryService->processStockOpname($request->all());

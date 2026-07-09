@@ -52,6 +52,7 @@
                                     <h6 class="mb-0 fw-bold">{{ $product->name }}</h6>
                                     <small class="text-muted">{{ $product->unit }}</small>
                                     <input type="hidden" name="items[{{ $index }}][inventory_id]" value="{{ $product->inventory->id }}">
+                                    <input type="hidden" name="items[{{ $index }}][sys_stock]" value="{{ $product->inventory->current_stock }}">
                                 </td>
 
                                 <td class="text-center">
@@ -71,7 +72,7 @@
                                 </td>
 
                                 <td>
-                                    <input type="text" class="form-control" name="items[{{ $index }}][notes]" placeholder="Opsional (Misal: 1 ball cair)">
+                                    <input type="text" id="notes_{{ $index }}" class="form-control" name="items[{{ $index }}][notes]" placeholder="Opsional (Misal: 1 ball cair)">
                                 </td>
                             </tr>
                             @endforeach
@@ -94,7 +95,6 @@
 </div>
 
 <script>
-    // Script kecil untuk menyorot baris jika fisik tidak sama dengan sistem
     document.addEventListener('DOMContentLoaded', function() {
         const inputs = document.querySelectorAll('.actual-stock-input');
 
@@ -103,12 +103,21 @@
                 const index = this.getAttribute('data-index');
                 const sysStock = parseInt(document.getElementById(`sys_stock_${index}`).value);
                 const actualStock = parseInt(this.value);
-
+                const notesInput = document.getElementById(`notes_${index}`);
                 const tr = this.closest('tr');
+
                 if (sysStock !== actualStock && !isNaN(actualStock)) {
+                    // Jika ada selisih, baris jadi kuning dan catatan WAJIB diisi
                     tr.classList.add('table-warning');
+                    notesInput.required = true;
+                    notesInput.placeholder = "WAJIB DIISI! (Misal: minus 3 ball belum tercatat)";
+                    notesInput.classList.add('is-invalid'); // Tambah efek merah bootstrap
                 } else {
+                    // Jika sama, kembali normal
                     tr.classList.remove('table-warning');
+                    notesInput.required = false;
+                    notesInput.placeholder = "Opsional (Misal: 1 ball cair)";
+                    notesInput.classList.remove('is-invalid');
                 }
             });
         });
