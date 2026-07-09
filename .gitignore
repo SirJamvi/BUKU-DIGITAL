@@ -21,3 +21,25 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+
+# Logs
+error_log
+*.log
+
+# Backup
+*.zip
+*.bak
+*.backup
+*.save
+
+# Temporary
+df
+name
+
+# Laravel Build
+/public/build
+
+# PHPUnit
+.phpunit.cache
+.phpunit.result.cache
