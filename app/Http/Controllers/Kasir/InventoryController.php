@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Kasir;
 
 use App\Http\Controllers\Controller;
 use App\Services\Admin\InventoryService;
-use App\Models\ProductConversion; // PASTIKAN BARIS INI ADA
+use App\Models\Product;
+use App\Models\Inventory;
+use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Auth;
-
+use Illuminate\Support\Facades\DB;
 
 class InventoryController extends Controller
 {
@@ -45,44 +47,100 @@ class InventoryController extends Controller
         }
     }
 
-    // --- 2. FITUR PECAH BALL ---
+    // --- 2. FITUR PECAH BALL (DINAMIS) ---
 
     public function breakUnitForm(): View
     {
-        // Ambil aturan konversi yang berlaku untuk bisnis ini
-        $conversions = ProductConversion::with(['fromProduct', 'toProduct'])
-            ->where('business_id', Auth::user()->business_id)
+        // Ambil semua produk yang aktif untuk dijadikan pilihan dinamis
+        $products = Product::where('business_id', Auth::user()->business_id)
+            ->where('is_active', true)
             ->get();
 
-        return view('kasir.inventory.break_unit', compact('conversions'));
+        return view('kasir.inventory.break_unit', compact('products'));
     }
 
     public function processBreakUnit(Request $request): RedirectResponse
     {
+        // Validasi input dinamis
         $request->validate([
-            'conversion_id' => 'required|exists:product_conversions,id',
-            'multiplier' => 'required|integer|min:1', // Berapa ball yang mau dipecah sekaligus
+            'source_product_id' => 'required|exists:products,id',
+            'source_qty' => 'required|integer|min:1',
+            'targets' => 'required|array|min:1',
+            'targets.*.product_id' => 'required|exists:products,id',
+            'targets.*.qty' => 'required|integer|min:1',
         ]);
 
         try {
-            $conversion = ProductConversion::findOrFail($request->conversion_id);
+            DB::beginTransaction();
 
-            $quantityToBreak = $conversion->quantity_to_break * $request->multiplier;
-            $totalYield = $conversion->yield_amount * $request->multiplier;
+            $businessId = Auth::user()->business_id;
+            $userId = Auth::id();
 
-            $this->inventoryService->breakUnit(
-                $conversion->from_product_id,
-                $conversion->to_product_id,
-                $quantityToBreak,
-                $totalYield
-            );
+            // 1. Ambil data stok produk asal
+            $sourceInventory = Inventory::where('product_id', $request->source_product_id)
+                ->where('business_id', $businessId)
+                ->first();
 
-            return redirect()->back()->with('success', "Berhasil memecah {$quantityToBreak} ball menjadi {$totalYield} eceran.");
+            if (!$sourceInventory) {
+                throw new \Exception("Data inventaris untuk produk ini belum ada di sistem.");
+            }
+
+            // Ambil stok saat ini
+            $currentStock = $sourceInventory->current_stock ?? 0;
+
+            // Proteksi: Cek apakah stok mencukupi
+            if ($currentStock < $request->source_qty) {
+                throw new \Exception("Stok produk asal tidak mencukupi. Sisa stok saat ini: " . $currentStock . ". Anda mencoba memecah: " . $request->source_qty);
+            }
+
+            // Kurangi stok utama
+            $sourceInventory->decrement('current_stock', $request->source_qty);
+
+            // Catat pergerakan stok keluar (TANPA occurred_at)
+            StockMovement::create([
+                'business_id' => $businessId,
+                'product_id' => $request->source_product_id,
+                'type' => 'out',
+                'quantity' => $request->source_qty,
+                'notes' => 'Pecah Ball (Bahan Baku)',
+                'created_by' => $userId,
+            ]);
+
+            // 2. Tambahkan stok untuk setiap produk hasil pecahan
+            $totalHasilPecahan = 0;
+            foreach ($request->targets as $target) {
+                // Cari target, jika belum ada buat baris inventaris baru dengan nilai 0
+                $targetInventory = Inventory::firstOrCreate(
+                    ['product_id' => $target['product_id'], 'business_id' => $businessId],
+                    ['current_stock' => 0]
+                );
+
+                // Tambahkan stok hasil
+                $targetInventory->increment('current_stock', $target['qty']);
+
+                // Catat pergerakan stok masuk (TANPA occurred_at)
+                StockMovement::create([
+                    'business_id' => $businessId,
+                    'product_id' => $target['product_id'],
+                    'type' => 'in',
+                    'quantity' => $target['qty'],
+                    'notes' => 'Hasil Pecahan dari Produk ID: ' . $request->source_product_id,
+                    'created_by' => $userId,
+                ]);
+
+                $totalHasilPecahan += $target['qty'];
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', "Berhasil memecah {$request->source_qty} unit menjadi total {$totalHasilPecahan} kemasan baru.");
         } catch (\Exception $e) {
-            logger()->error('Kasir error breaking unit: ' . $e->getMessage());
+            DB::rollBack();
+            logger()->error('Kasir error breaking unit dinamis: ' . $e->getMessage());
             return back()->with('error', $e->getMessage());
         }
     }
+
+    // --- 3. FITUR STOCK OPNAME ---
 
     public function stockOpnameForm(): View
     {
