@@ -10,16 +10,19 @@ return new class extends Migration
      * Run the migrations.
      */
     public function up()
-{
-    Schema::table('users', function (Blueprint $table) {
-        // Menyimpan ID Shift (Integer). 
-        // NOTE: Ini tidak di-foreign key karena tabel shifts ada di database lain.
-        $table->integer('shift_id')->nullable()->after('role'); 
-        
-        // Menyimpan hari libur dalam bentuk JSON (contoh: ["Monday", "Tuesday"])
-        $table->json('off_days')->nullable()->after('shift_id');
-    });
-}
+    {
+        Schema::table('users', function (Blueprint $table) {
+            // Cek dulu apakah kolom shift_id belum ada, baru buat
+            if (!Schema::hasColumn('users', 'shift_id')) {
+                $table->integer('shift_id')->nullable()->after('role');
+            }
+            
+            // Cek dulu apakah kolom off_days belum ada, baru buat
+            if (!Schema::hasColumn('users', 'off_days')) {
+                $table->json('off_days')->nullable()->after('shift_id');
+            }
+        });
+    }
 
 public function down()
 {

@@ -1,0 +1,35 @@
+[90m= [39m[34;4mIlluminate\Database\Eloquent\Collection[39;24m {#6493
+    [34mall[39m: [
+      [34;4mApp\Models\User[39;24m {#6492
+        [34mid[39m: "[32m19[39m",
+        [34musername[39m: "[32mjavieramanullah[39m",
+        [34mname[39m: "[32mJavier Cinangoh[39m",
+        [34memail[39m: "[32mjavieramanullah@gmail.com[39m",
+      },
+      [34;4mApp\Models\User[39;24m {#6487
+        [34mid[39m: "[32m20[39m",
+        [34musername[39m: "[32mjn[39m",
+        [34mname[39m: "[32mKaisr Jn[39m",
+        [34memail[39m: "[32mjn@gmail.com[39m",
+      },
+      [34;4mApp\Models\User[39;24m {#6457
+        [34mid[39m: "[32m21[39m",
+        [34musername[39m: "[32mjavieramanullah12[39m",
+        [34mname[39m: "[32mNadini[39m",
+        [34memail[39m: "[32mjavieramanullah12@gmail.com[39m",
+      },
+      [34;4mApp\Models\User[39;24m {#6497
+        [34mid[39m: "[32m22[39m",
+        [34musername[39m: "[32mjavieramanullah2[39m",
+        [34mname[39m: "[32mCINANGOH[39m",
+        [34memail[39m: "[32mjavieramanullah2@gmail.com[39m",
+      },
+      [34;4mApp\Models\User[39;24m {#6498
+        [34mid[39m: "[32m23[39m",
+        [34musername[39m: "[32mnigga[39m",
+        [34mname[39m: "[32mnigga[39m",
+        [34memail[39m: "[32mnigga@gmail.com[39m",
+      },
+    ],
+  }
+
