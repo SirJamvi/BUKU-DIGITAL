@@ -137,16 +137,39 @@
     </div>
 </div>
 
-{{-- MONITORING STOCK OPNAME & SELISIH (MISS) HARI INI --}}
+{{-- FILTER TANGGAL UNTUK OPNAME & PECAH BALL --}}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body py-2 px-3 d-flex align-items-center bg-light rounded">
+                <form action="{{ route('admin.dashboard') }}" method="GET" class="d-flex align-items-center w-100">
+                    <label for="filter_date" class="form-label mb-0 me-3 fw-bold text-dark">
+                        <i class="fas fa-filter text-primary me-1"></i> Filter Aktivitas Stok:
+                    </label>
+                    <input type="date" name="filter_date" id="filter_date" class="form-control w-auto me-2 border-primary" value="{{ $filterDate }}">
+                    <button type="submit" class="btn btn-primary btn-sm px-3">Tampilkan</button>
+
+                    @if(!$isToday)
+                    <a href="{{ route('admin.dashboard') }}" class="btn btn-outline-secondary btn-sm ms-2">
+                        <i class="fas fa-undo"></i> Kembali ke Hari Ini
+                    </a>
+                    @endif
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- MONITORING STOCK OPNAME & SELISIH (MISS) --}}
 <div class="row mb-4">
     <div class="col-12">
         <div class="card border-{{ (isset($missedOpnames) && $missedOpnames->count() > 0) ? 'danger' : 'success' }} shadow-sm">
             <div class="card-header bg-{{ (isset($missedOpnames) && $missedOpnames->count() > 0) ? 'danger' : 'success' }} text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
                     @if(isset($missedOpnames) && $missedOpnames->count() > 0)
-                    <i class="fas fa-exclamation-triangle me-2"></i> Peringatan: Ada Selisih Stok Hari Ini!
+                    <i class="fas fa-exclamation-triangle me-2"></i> Peringatan: Ada Selisih Stok ({{ $isToday ? 'Hari Ini' : $formattedDate }})
                     @else
-                    <i class="fas fa-check-circle me-2"></i> Opname Stok Hari Ini Aman
+                    <i class="fas fa-check-circle me-2"></i> Opname Stok Aman ({{ $isToday ? 'Hari Ini' : $formattedDate }})
                     @endif
                 </h5>
             </div>
@@ -179,12 +202,12 @@
                     </table>
                 </div>
                 @else
-                <p class="text-muted mb-0">Belum ada laporan selisih stok (miss) dari kasir hari ini. Stok sistem dan fisik sinkron.</p>
+                <p class="text-muted mb-0">Belum ada laporan selisih stok (miss) dari kasir pada tanggal {{ $formattedDate }}.</p>
                 @endif
 
                 <hr>
 
-                <h6 class="fw-bold mt-3"><i class="fas fa-box me-1"></i> Stok Realtime Saat Ini:</h6>
+                <h6 class="fw-bold mt-3"><i class="fas fa-box me-1"></i> Stok Realtime Saat Ini (Tidak Terpengaruh Filter):</h6>
                 <div class="d-flex flex-wrap gap-2 mt-2">
                     @foreach($realtimeStocks ?? [] as $stock)
                     <span class="badge bg-info text-dark fs-6 p-2 border">
@@ -197,13 +220,13 @@
     </div>
 </div>
 
-{{-- MONITORING HISTORY PECAH BALL HARI INI --}}
+{{-- MONITORING HISTORY PECAH BALL --}}
 <div class="row mb-4">
     <div class="col-12">
         <div class="card border-primary shadow-sm">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
-                    <i class="fas fa-exchange-alt me-2"></i> Riwayat Pecah Ball / Repacking Hari Ini
+                    <i class="fas fa-exchange-alt me-2"></i> Riwayat Pecah Ball / Repacking ({{ $isToday ? 'Hari Ini' : $formattedDate }})
                 </h5>
             </div>
             <div class="card-body">
@@ -246,7 +269,7 @@
                     </table>
                 </div>
                 @else
-                <p class="text-muted mb-0">Belum ada aktivitas pecah karung/ball oleh kasir hari ini.</p>
+                <p class="text-muted mb-0">Belum ada aktivitas pecah karung/ball oleh kasir pada tanggal {{ $formattedDate }}.</p>
                 @endif
             </div>
         </div>

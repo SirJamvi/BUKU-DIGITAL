@@ -22,7 +22,15 @@ Route::get('/', [DashboardController::class, 'index'])->name('index');
 // Master Data & Manajemen
 Route::resource('categories', CategoryController::class);
 Route::resource('products', ProductController::class);
+
+// --- Update Bagian User ---
+// PENTING: Taruh rute kustom (toggle-status) SEBELUM Route::resource
+Route::patch('users/{user}/toggle-status', [UserController::class, 'toggleStatus'])
+    ->name('users.toggle-status');
+
 Route::resource('users', UserController::class);
+// ---------------------------
+
 Route::resource('suppliers', SupplierController::class)->except(['show']);
 Route::resource('transactions', TransactionController::class)->except(['create', 'store', 'destroy']);
 Route::delete('transactions/{transaction}', [TransactionController::class, 'destroy'])->name('transactions.destroy');

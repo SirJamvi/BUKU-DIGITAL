@@ -19,6 +19,18 @@ class UpdateUserRequest extends FormRequest
     }
 
     /**
+     * Menyiapkan dan memanipulasi data sebelum proses validasi berjalan.
+     * * @return void
+     */
+    protected function prepareForValidation(): void
+    {
+        // Memastikan is_active selalu memiliki nilai (1 atau 0) sebelum divalidasi
+        $this->merge([
+            'is_active' => $this->has('is_active') ? 1 : 0,
+        ]);
+    }
+
+    /**
      * Mendapatkan aturan validasi yang berlaku untuk request ini.
      *
      * @return array<string, mixed>
@@ -34,7 +46,8 @@ class UpdateUserRequest extends FormRequest
             'role' => ['required', 'in:admin,kasir,driver'],
             'phone' => ['nullable', 'string', 'max:20'],
             'address' => ['nullable', 'string'],
-            'is_active' => ['sometimes', 'boolean'],
+            // Kata 'sometimes' bisa dihapus karena nilainya sudah pasti ada berkat prepareForValidation
+            'is_active' => ['boolean'],
             'transaction_limit' => ['nullable', 'numeric', 'min:0'],
         ];
     }

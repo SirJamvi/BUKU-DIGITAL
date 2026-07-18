@@ -7,6 +7,7 @@ use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
 use App\Services\Admin\UserService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -72,6 +73,27 @@ class UserController extends Controller
         } catch (\Exception $e) {
             logger()->error('Error deleting user: ' . $e->getMessage());
             return back()->with('error', 'Gagal menghapus user. Silakan coba lagi.');
+        }
+    }
+
+    /**
+     * Toggle status aktif/nonaktif user (dipanggil via AJAX).
+     */
+    public function toggleStatus(User $user): JsonResponse
+    {
+        try {
+            $user = $this->userService->toggleStatus($user);
+            return response()->json([
+                'success'   => true,
+                'message'   => 'Status pengguna berhasil diperbarui.',
+                'is_active' => $user->is_active,
+            ]);
+        } catch (\Exception $e) {
+            logger()->error('Error toggling user status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memperbarui status.',
+            ], 500);
         }
     }
 }

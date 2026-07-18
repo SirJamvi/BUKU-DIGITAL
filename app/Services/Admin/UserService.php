@@ -26,20 +26,13 @@ class UserService
      */
     public function createUser(array $data): User
     {
-        // Hash password
         $data['password'] = Hash::make($data['password']);
-        
-        // Otomatis set business_id dari admin yang login
         $data['business_id'] = Auth::user()->business_id;
 
-        // Validasi tambahan: Pastikan role valid (double check)
-        // Default ke 'kasir' jika aneh-aneh, tapi harusnya sudah dihandle Request
         if (!in_array($data['role'], ['admin', 'kasir', 'driver'])) {
             $data['role'] = 'kasir';
         }
 
-        // Create user
-        // Note: Karena $data berasal dari validated(), 'slug' tidak akan ada di sini
         return User::create($data);
     }
 
@@ -67,11 +60,31 @@ class UserService
         if ($user->id === Auth::id()) {
             throw new \Exception("Anda tidak dapat menghapus akun Anda sendiri.");
         }
-        
+
         if ($user->business_id !== Auth::user()->business_id) {
             abort(403, 'AKSES DITOLAK.');
         }
 
         $user->delete();
+    }
+
+    /**
+     * Membalikkan (toggle) status aktif/nonaktif user.
+     */
+    public function toggleStatus(User $user): User
+    {
+        // Pastikan admin hanya bisa mengubah user dari bisnisnya sendiri
+        if ($user->business_id !== Auth::user()->business_id) {
+            abort(403, 'AKSES DITOLAK.');
+        }
+
+        // Mencegah user menonaktifkan dirinya sendiri (double protection, selain di view)
+        if ($user->id === Auth::id()) {
+            abort(403, 'Anda tidak dapat mengubah status akun Anda sendiri.');
+        }
+
+        $user->update(['is_active' => !$user->is_active]);
+
+        return $user;
     }
 }
