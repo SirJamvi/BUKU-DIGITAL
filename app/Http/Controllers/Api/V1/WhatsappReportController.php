@@ -49,6 +49,12 @@ class WhatsappReportController extends Controller
             ->where('type', 'sale')
             ->sum('total_amount');
 
+        // [BARU] Hitung Pengeluaran Hari Ini (Dari CashFlow)
+        $expenseToday = CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->whereDate('date', $today)
+            ->sum('amount');
+
         // 2. Laba Bersih Bulan Ini (Menggunakan Service yang sudah ada)
         $monthFilters = [
             'start_date' => Carbon::now()->startOfMonth()->toDateString(),
@@ -147,6 +153,7 @@ class WhatsappReportController extends Controller
 
         $whatsappMessage .= "👑 *DASHBOARD ADMIN*\n";
         $whatsappMessage .= "💰 Penjualan Hari Ini: Rp " . number_format($salesToday, 0, ',', '.') . "\n";
+        $whatsappMessage .= "💸 Pengeluaran Hari Ini: Rp " . number_format($expenseToday, 0, ',', '.') . "\n";
         $whatsappMessage .= "📈 Laba Bersih Bulan Ini: Rp " . number_format($netProfitThisMonth, 0, ',', '.') . "\n";
         $whatsappMessage .= "✅ Opname Stok Aman: {$safeStockCount} Produk\n";
         $whatsappMessage .= "♻️ Riwayat Pecah Ball Hari Ini: {$pecahBallText}\n\n";
