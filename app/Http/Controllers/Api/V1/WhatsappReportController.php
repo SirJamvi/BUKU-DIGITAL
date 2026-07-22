@@ -41,6 +41,30 @@ class WhatsappReportController extends Controller
         $today = Carbon::today();
 
         // ==============================================================
+        // [BARU] LOGGING UNTUK DEBUGGING
+        // ==============================================================
+        \Log::info('=== MULAI GENERATE REPORT WA ===');
+        \Log::info('Waktu Server (Today): ' . $today->toDateTimeString());
+        \Log::info('User Terpilih: ' . ($admin->name ?? 'TIDAK ADA') . ' | Business ID: ' . ($businessId ?? 'KOSONG'));
+
+        // Cek total transaksi mentah HARI INI tanpa filter status/tipe
+        $rawTxToday = Transaction::whereDate('transaction_date', $today)->count();
+        \Log::info('Cek 1: Total SEMUA transaksi hari ini (Tanpa Filter Apapun): ' . $rawTxToday);
+
+        // Cek total transaksi mentah HARI INI dengan Business ID ini
+        $rawTxBusiness = Transaction::where('business_id', $businessId)->whereDate('transaction_date', $today)->count();
+        \Log::info('Cek 2: Total transaksi hari ini untuk Business ID ' . $businessId . ': ' . $rawTxBusiness);
+
+        // Cek transaksi pertama hari ini untuk melihat tipe dan statusnya
+        $sampleTx = Transaction::whereDate('transaction_date', $today)->first();
+        if ($sampleTx) {
+            \Log::info('Cek 3: Contoh data transaksi hari ini -> Type: ' . $sampleTx->type . ' | Status: ' . $sampleTx->payment_status);
+        } else {
+            \Log::info('Cek 3: TIDAK DITEMUKAN transaksi sama sekali pada tanggal ' . $today->toDateString());
+        }
+        \Log::info('====================================');
+
+        // ==============================================================
         // A. DATA ADMIN
         // ==============================================================
         // 1. Penjualan Hari Ini
