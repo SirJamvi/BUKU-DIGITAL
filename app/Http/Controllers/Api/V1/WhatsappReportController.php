@@ -31,13 +31,26 @@ class WhatsappReportController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        // 2. Simulasi Login agar Auth::user()->business_id berfungsi untuk Service
-        $admin = User::whereHas('roles', function ($q) {
-            $q->where('name', 'admin');
-        })->first() ?? User::first();
+        // 2. Simulasi Login (Dikunci Spesifik untuk Business ID 10)
+        $admin = User::where('business_id', 10)
+            ->whereHas('roles', function ($q) {
+                $q->where('name', 'admin');
+            })->first();
 
-        Auth::login($admin);
-        $businessId = $admin->business_id;
+        // Fallback: Jika tidak ditemukan role 'admin', ambil user pertama di Business ID 10
+        if (!$admin) {
+            $admin = User::where('business_id', 10)->first();
+        }
+
+        // Pastikan login berhasil
+        if ($admin) {
+            Auth::login($admin);
+            $businessId = $admin->business_id;
+        } else {
+            \Log::error('Gagal Login: Tidak ada user di Business ID 10!');
+            return response()->json(['error' => 'Business ID not found'], 404);
+        }
+
         $today = Carbon::today();
 
         // ==============================================================
