@@ -28,6 +28,7 @@ class FinancialService
 
     /**
      * Menghitung Saldo per Metode Pembayaran (Dinamis Sesuai Filter)
+     * [FIXED]: Menggunakan CashFlow income untuk kas masuk riil.
      */
     private function calculatePaymentBalances(array $filters = []): array
     {
@@ -38,21 +39,20 @@ class FinancialService
         $balanceData = [];
 
         foreach ($methods as $method) {
-            $incomeQuery = Transaction::where('business_id', $businessId)
-                ->where('type', 'sale')
-                ->where('status', 'completed')
+            // PERBAIKAN: Ambil uang masuk riil langsung dari tabel cash_flow
+            $incomeQuery = CashFlow::where('business_id', $businessId)
+                ->where('type', 'income')
                 ->where('payment_method', $method->slug);
 
-            $this->applyDateFilters($incomeQuery, $filters, 'transaction_date');
+            $this->applyDateFilters($incomeQuery, $filters, 'date');
+            $income = $incomeQuery->sum('amount');
 
-            $income = $incomeQuery->sum('total_amount');
-
+            // Pengeluaran tetap mengambil dari tabel cash_flow
             $expenseQuery = CashFlow::where('business_id', $businessId)
                 ->where('type', 'expense')
                 ->where('payment_method', $method->slug);
 
             $this->applyDateFilters($expenseQuery, $filters, 'date');
-
             $expense = $expenseQuery->sum('amount');
 
             $balanceData[] = [
@@ -67,8 +67,7 @@ class FinancialService
 
     /**
      * Laporan keuangan — VERSI DENGAN PAGINATION.
-     * Total-total dihitung via SUM() langsung di database (bukan load-lalu-filter di PHP),
-     * dan tabel rincian arus kas dipaginate agar halaman tidak berat.
+     * [FIXED]: HPP dihitung dari transaksi, Laba Kotor = Revenue - COGS.
      */
     public function getFinancialReport(array $filters, int $perPage = 15): array
     {
@@ -84,33 +83,31 @@ class FinancialService
         $transactions = $transactionsQuery->get();
 
         $totalIncome = 0;
+        $totalCogs = 0;
         $totalGrossProfit = 0;
 
         foreach ($transactions as $transaction) {
-            $transactionGrossProfit = 0;
+            $transactionCogs = 0;
             if ($transaction->details) {
                 foreach ($transaction->details as $detail) {
-                    if ($detail->product) {
-                        $profitPerItem = ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
-                        $transactionGrossProfit += $profitPerItem;
-                    }
+                    // Fallback dinamis: Cari harga modal di transaction_detail, jika kosong ambil dari master Product
+                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
+                    $transactionCogs += ($costPrice * $detail->quantity);
                 }
             }
+
+            // Perbaikan Akuntansi: Gross Profit = Revenue Aktual - COGS Aktual
+            $transactionGrossProfit = $transaction->total_amount - $transactionCogs;
+
+            $transaction->cogs = $transactionCogs;
             $transaction->gross_profit = $transactionGrossProfit;
+
+            $totalCogs += $transactionCogs;
             $totalGrossProfit += $transactionGrossProfit;
             $totalIncome += $transaction->total_amount;
         }
 
-        // HPP (COGS) — SUM langsung di database
-        $cogsQuery = CashFlow::where('business_id', $businessId)
-            ->where('type', 'expense')
-            ->whereHas('category', function ($q) {
-                $q->where('is_cogs', 1);
-            });
-        $this->applyDateFilters($cogsQuery, $filters, 'date');
-        $totalCogs = $cogsQuery->sum('amount');
-
-        // Beban Operasional — SUM langsung di database
+        // Beban Operasional — SUM langsung di database (Murni Expense, is_cogs = 0)
         $expenseQuery = CashFlow::where('business_id', $businessId)
             ->where('type', 'expense')
             ->whereHas('category', function ($q) {
@@ -123,7 +120,7 @@ class FinancialService
 
         $balances = $this->calculatePaymentBalances($filters);
 
-        // Data untuk TABEL rincian arus kas — dipaginate, bukan ->get() semua
+        // Data untuk TABEL rincian arus kas — dipaginate
         $cashFlowListQuery = CashFlow::where('business_id', $businessId)->with('category');
         $this->applyDateFilters($cashFlowListQuery, $filters, 'date');
         $cashFlows = $cashFlowListQuery->latest('date')
@@ -144,8 +141,8 @@ class FinancialService
     }
 
     /**
-     * Versi khusus untuk export PDF — ambil SEMUA data arus kas tanpa pagination,
-     * karena PDF memang butuh data lengkap dalam satu dokumen.
+     * Versi khusus untuk export PDF — ambil SEMUA data arus kas tanpa pagination.
+     * [FIXED]: Sinkronisasi rumus Laba Kotor & HPP dengan fungsi laporan utama.
      */
     public function getFinancialReportForExport(array $filters): array
     {
@@ -160,19 +157,23 @@ class FinancialService
         $transactions = $transactionsQuery->get();
 
         $totalIncome = 0;
+        $totalCogs = 0;
         $totalGrossProfit = 0;
 
         foreach ($transactions as $transaction) {
-            $transactionGrossProfit = 0;
+            $transactionCogs = 0;
             if ($transaction->details) {
                 foreach ($transaction->details as $detail) {
-                    if ($detail->product) {
-                        $profitPerItem = ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
-                        $transactionGrossProfit += $profitPerItem;
-                    }
+                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
+                    $transactionCogs += ($costPrice * $detail->quantity);
                 }
             }
+
+            $transactionGrossProfit = $transaction->total_amount - $transactionCogs;
+            $transaction->cogs = $transactionCogs;
             $transaction->gross_profit = $transactionGrossProfit;
+
+            $totalCogs += $transactionCogs;
             $totalGrossProfit += $transactionGrossProfit;
             $totalIncome += $transaction->total_amount;
         }
@@ -181,10 +182,7 @@ class FinancialService
         $this->applyDateFilters($cashFlowQuery, $filters, 'date');
         $cashFlows = $cashFlowQuery->latest('date')->get();
 
-        $totalCogs = $cashFlows->filter(function ($flow) {
-            return $flow->type === 'expense' && $flow->category && $flow->category->is_cogs == 1;
-        })->sum('amount');
-
+        // Total beban operasional murni (is_cogs = 0)
         $totalExpense = $cashFlows->filter(function ($flow) {
             return $flow->type === 'expense' && $flow->category && $flow->category->is_cogs == 0;
         })->sum('amount');
@@ -208,6 +206,7 @@ class FinancialService
 
     /**
      * Ringkasan finansial dashboard
+     * [FIXED]: Menggunakan lazy() untuk optimalisasi memory dan perbaikan rumus.
      */
     public function getFinancialSummary(): array
     {
@@ -226,22 +225,31 @@ class FinancialService
             ->sum('amount');
 
         $grossProfit = 0;
+
+        // PERBAIKAN: Gunakan lazy() untuk mencegah RAM penuh
         $transactions = Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('status', 'completed')
             ->with('details.product')
-            ->get();
+            ->lazy();
 
         foreach ($transactions as $transaction) {
-            foreach ($transaction->details as $detail) {
-                if ($detail->product && $detail->product->base_price && $detail->product->cost_price) {
-                    $grossProfit += ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
+            $transactionCogs = 0;
+            if ($transaction->details) {
+                foreach ($transaction->details as $detail) {
+                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
+                    $transactionCogs += ($costPrice * $detail->quantity);
                 }
             }
+            $grossProfit += ($transaction->total_amount - $transactionCogs);
         }
 
         $netProfit = $grossProfit - $totalExpense;
-        $netCashFlow = $totalIncome - $totalExpense;
+
+        // Hitung Saldo Realtime (CashFlow Income - CashFlow Expense)
+        $totalCashIn = CashFlow::where('business_id', $businessId)->where('type', 'income')->sum('amount');
+        $totalCashOut = CashFlow::where('business_id', $businessId)->where('type', 'expense')->sum('amount');
+        $netCashFlow = $totalCashIn - $totalCashOut;
 
         return [
             'total_income'  => $totalIncome,
@@ -306,6 +314,9 @@ class FinancialService
         );
     }
 
+    /**
+     * [FIXED]: lazy() and Revenue - COGS calculation.
+     */
     public function processMonthlyClosing(string $period): OwnerProfit
     {
         $businessId = Auth::user()->business_id;
@@ -332,22 +343,24 @@ class FinancialService
             ->sum('total_amount');
 
         $monthlyGrossProfit = 0;
+
+        // PERBAIKAN: Gunakan lazy()
         $transactions = Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('status', 'completed')
             ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
             ->with(['details.product'])
-            ->get();
+            ->lazy();
 
         foreach ($transactions as $transaction) {
+            $transactionCogs = 0;
             if ($transaction->details) {
                 foreach ($transaction->details as $detail) {
-                    if ($detail->product && $detail->product->base_price && $detail->product->cost_price) {
-                        $profitPerItem = ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
-                        $monthlyGrossProfit += $profitPerItem;
-                    }
+                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
+                    $transactionCogs += ($costPrice * $detail->quantity);
                 }
             }
+            $monthlyGrossProfit += ($transaction->total_amount - $transactionCogs);
         }
 
         $monthlyOpex = CashFlow::where('business_id', $businessId)
@@ -429,6 +442,9 @@ class FinancialService
         return $result;
     }
 
+    /**
+     * [FIXED]: lazy() and Revenue - COGS calculation.
+     */
     public function getClosingSummaryForPeriod(string $period): array
     {
         $businessId = Auth::user()->business_id;
@@ -447,19 +463,23 @@ class FinancialService
             ->sum('total_amount');
 
         $monthlyGrossProfit = 0;
+
         $transactions = Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('status', 'completed')
             ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
             ->with(['details.product'])
-            ->get();
+            ->lazy();
 
         foreach ($transactions as $transaction) {
-            foreach ($transaction->details as $detail) {
-                if ($detail->product && $detail->product->base_price && $detail->product->cost_price) {
-                    $monthlyGrossProfit += ($detail->product->base_price - $detail->product->cost_price) * $detail->quantity;
+            $transactionCogs = 0;
+            if ($transaction->details) {
+                foreach ($transaction->details as $detail) {
+                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
+                    $transactionCogs += ($costPrice * $detail->quantity);
                 }
             }
+            $monthlyGrossProfit += ($transaction->total_amount - $transactionCogs);
         }
 
         $monthlyOpex = CashFlow::where('business_id', $businessId)
@@ -477,6 +497,13 @@ class FinancialService
             ->where('period_month', $month)
             ->first();
 
+        // Karena query di atas sekarang lazy, count() akan menghabiskan query lagi. Kita pakai direct DB count.
+        $transactionsCount = Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', 'completed')
+            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
+            ->count();
+
         return [
             'period'             => $period,
             'month_name'         => $monthName,
@@ -486,7 +513,7 @@ class FinancialService
             'net_profit'         => (float) $netProfit,
             'is_already_closed'  => $existingClosing ? true : false,
             'closing_data'       => $existingClosing,
-            'transactions_count' => $transactions->count(),
+            'transactions_count' => $transactionsCount,
             'expenses_count'     => CashFlow::where('business_id', $businessId)
                 ->where('type', 'expense')
                 ->whereBetween('date', [$startOfMonth, $endOfMonth])
@@ -702,4 +729,3 @@ class FinancialService
         }
     }
 }
-    
