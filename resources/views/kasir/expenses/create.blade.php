@@ -15,7 +15,7 @@
     </a>
     @endslot
 
-    <form action="{{ route('kasir.expenses.store') }}" method="POST">
+    <form action="{{ route('kasir.expenses.store') }}" method="POST" id="expenseForm">
         @csrf
 
         <div class="row mb-3">
@@ -53,8 +53,21 @@
 
             <div class="col-md-6">
                 <label class="form-label fw-bold">Jumlah (Rp) <span class="text-danger">*</span></label>
-                <input type="number" name="amount" class="form-control @error('amount') is-invalid @enderror" value="{{ old('amount') }}" min="1" required>
-                @error('amount') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                <div class="input-group">
+                    <span class="input-group-text">Rp</span>
+                    <input
+                        type="text"
+                        inputmode="numeric"
+                        autocomplete="off"
+                        id="amount_display"
+                        class="form-control @error('amount') is-invalid @enderror"
+                        value="{{ old('amount') ? number_format((float) old('amount'), 0, ',', '.') : '' }}"
+                        placeholder="0"
+                        required>
+                    @error('amount') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+                {{-- Nilai asli (tanpa titik) yang benar-benar dikirim ke server --}}
+                <input type="hidden" name="amount" id="amount_raw" value="{{ old('amount') }}">
             </div>
         </div>
 
@@ -71,4 +84,50 @@
         </div>
     </form>
 </x-card>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const displayInput = document.getElementById('amount_display');
+        const rawInput = document.getElementById('amount_raw');
+        const form = document.getElementById('expenseForm');
+
+        // Format angka jadi "300.000" gaya IDR (titik sebagai pemisah ribuan)
+        function formatRupiah(value) {
+            const numberOnly = value.replace(/\D/g, ''); // buang semua selain digit
+            if (!numberOnly) return '';
+            return new Intl.NumberFormat('id-ID').format(parseInt(numberOnly, 10));
+        }
+
+        // Ambil angka murni dari tampilan yang sudah berformat
+        function unformatRupiah(value) {
+            return value.replace(/\D/g, '');
+        }
+
+        displayInput.addEventListener('input', function (e) {
+            const cursorFromEnd = this.value.length - this.selectionStart;
+            this.value = formatRupiah(this.value);
+            rawInput.value = unformatRupiah(this.value);
+
+            // Jaga posisi kursor tetap wajar saat mengetik di tengah angka
+            const newPos = this.value.length - cursorFromEnd;
+            this.setSelectionRange(newPos, newPos);
+        });
+
+        // Pastikan nilai mentah sinkron tepat sebelum submit (jaga-jaga)
+        form.addEventListener('submit', function (e) {
+            rawInput.value = unformatRupiah(displayInput.value);
+
+            if (!rawInput.value || parseInt(rawInput.value, 10) < 1) {
+                e.preventDefault();
+                displayInput.classList.add('is-invalid');
+                displayInput.focus();
+            }
+        });
+
+        // Sinkronkan nilai awal jika ada old('amount') saat reload karena validasi gagal
+        if (displayInput.value) {
+            rawInput.value = unformatRupiah(displayInput.value);
+        }
+    });
+</script>
 @endsection
