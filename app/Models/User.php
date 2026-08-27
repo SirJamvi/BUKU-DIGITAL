@@ -9,6 +9,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use App\Traits\HasRoles;
 use App\Traits\HasPermissions;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * @method bool hasRole(string|array $roleName)
@@ -16,7 +17,7 @@ use App\Traits\HasPermissions;
  */
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasRoles, HasPermissions;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, HasPermissions;
 
     protected $fillable = [
         'business_id',

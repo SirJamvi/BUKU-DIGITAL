@@ -16,14 +16,17 @@ class Transaction extends Model
         'business_id',
         'type',
         'customer_id',
+        'driver_id',           // [TAMBAHAN BARU]
         'total_amount',
         'payment_method',
         'payment_status',
+        'delivery_status',     // [TAMBAHAN BARU]
         'status',
         'transaction_date',
         'notes',
         'created_by',
     ];
+
 
     protected $casts = [
         'transaction_date' => 'datetime',
@@ -36,6 +39,13 @@ class Transaction extends Model
     public function setPaymentMethodAttribute($value)
     {
         $this->attributes['payment_method'] = Str::slug($value);
+    }
+
+
+    // [TAMBAHAN BARU] Relasi ke kurir/driver
+    public function driver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'driver_id');
     }
 
     /**

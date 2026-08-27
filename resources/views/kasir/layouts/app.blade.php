@@ -1,6 +1,7 @@
 {{-- resources/views/kasir/layouts/app.blade.php --}}
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,10 +12,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-    
+
     <style>
         :root {
             --kasir-primary: #667eea;
@@ -39,12 +40,17 @@
             box-sizing: border-box;
         }
 
+        html,
+        body {
+            overflow-x: hidden;
+            max-width: 100%;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background: #f7f9fc;
             line-height: 1.6;
             color: var(--kasir-dark);
-            overflow-x: hidden;
         }
 
         /* Layout Container */
@@ -54,24 +60,25 @@
             position: relative;
         }
 
-        /* Main Content Area - Adjusted to match sidebar */
         .main-content {
             flex: 1;
-            margin-left: 280px; /* Match sidebar width */
+            margin-left: 280px;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             background: #f7f9fc;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            min-width: 0;
+            /* PENTING: mencegah flex child melebar melewati parent */
         }
 
         .content-wrapper {
             flex: 1;
             padding: 2rem;
             max-width: 100%;
+            min-width: 0;
         }
 
-        /* Mobile Overlay - Enhanced */
         .sidebar-overlay {
             display: none;
             position: fixed;
@@ -91,7 +98,7 @@
             opacity: 1;
         }
 
-        /* Enhanced Cards */
+        /* Cards */
         .card {
             border: none;
             border-radius: 16px;
@@ -99,6 +106,7 @@
             background-color: white;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             overflow: hidden;
+            min-width: 0;
         }
 
         .card:hover {
@@ -117,9 +125,10 @@
 
         .card-body {
             padding: 2rem;
+            min-width: 0;
         }
 
-        /* Mobile Menu Button - Styled to match sidebar theme */
+        /* Mobile Menu Button */
         .mobile-menu-btn {
             display: none;
             position: fixed;
@@ -147,14 +156,27 @@
             transform: scale(0.95);
         }
 
-        /* Enhanced Button Styles */
+        /* Buttons */
         .btn {
             border-radius: 10px;
             font-weight: 500;
-            padding: 0.875rem 1.75rem;
+            padding: 0.75rem 1.5rem;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border: none;
             font-size: 0.95rem;
+            white-space: nowrap;
+        }
+
+        /* FIX UTAMA: pastikan btn-sm & btn-lg TIDAK ke-override oleh .btn di atas */
+        .btn-sm {
+            padding: 0.4rem 0.9rem !important;
+            font-size: 0.8rem !important;
+            border-radius: 8px !important;
+        }
+
+        .btn-lg {
+            padding: 1rem 2rem !important;
+            font-size: 1.05rem !important;
         }
 
         .btn-primary {
@@ -193,7 +215,14 @@
             color: white;
         }
 
-        /* Enhanced Alerts */
+        /* Kelompok tombol aksi di dalam tabel: beri jarak rapi, boleh wrap di layar sempit */
+        td .btn+.btn,
+        td a.btn+a.btn,
+        td a.btn+.btn {
+            margin-left: 0.35rem;
+        }
+
+        /* Alerts */
         .alert {
             border-radius: 12px;
             border: none;
@@ -226,8 +255,9 @@
             border-left: 4px solid #06b6d4;
         }
 
-        /* Enhanced Form Controls */
-        .form-control, .form-select {
+        /* Form Controls */
+        .form-control,
+        .form-select {
             border-radius: 10px;
             border: 2px solid #e5e7eb;
             padding: 0.875rem 1.25rem;
@@ -236,7 +266,8 @@
             background-color: #fafbfc;
         }
 
-        .form-control:focus, .form-select:focus {
+        .form-control:focus,
+        .form-select:focus {
             border-color: var(--kasir-primary);
             box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
             background-color: white;
@@ -249,11 +280,15 @@
             margin-bottom: 0.75rem;
         }
 
-        /* Tables Enhancement */
-        .table {
+        /* Tables */
+        .table-responsive {
             border-radius: 12px;
-            overflow: hidden;
             box-shadow: 0 4px 25px rgba(0, 0, 0, 0.08);
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table {
+            margin-bottom: 0;
         }
 
         .table thead th {
@@ -261,7 +296,8 @@
             color: white;
             border: none;
             font-weight: 600;
-            padding: 1.25rem;
+            padding: 1rem 1.25rem;
+            white-space: nowrap;
         }
 
         .table tbody tr {
@@ -270,12 +306,12 @@
 
         .table tbody tr:hover {
             background-color: rgba(102, 126, 234, 0.05);
-            transform: scale(1.01);
         }
 
         .table tbody td {
-            padding: 1rem 1.25rem;
+            padding: 0.9rem 1.25rem;
             border-color: rgba(102, 126, 234, 0.1);
+            vertical-align: middle;
         }
 
         /* Page Header */
@@ -300,7 +336,7 @@
             font-size: 1.1rem;
         }
 
-        /* Responsive Design */
+        /* ===================== RESPONSIVE ===================== */
         @media (max-width: 992px) {
             .main-content {
                 margin-left: 0;
@@ -314,7 +350,7 @@
 
             .content-wrapper {
                 padding: 1.5rem;
-                padding-top: 6rem; /* Space for mobile menu button */
+                padding-top: 6rem;
             }
 
             .page-header {
@@ -341,11 +377,11 @@
             }
 
             .card-body {
-                padding: 1.5rem;
+                padding: 1.25rem;
             }
 
             .card-header {
-                padding: 1.25rem;
+                padding: 1rem 1.25rem;
             }
 
             .page-header {
@@ -354,6 +390,28 @@
 
             .page-title {
                 font-size: 1.5rem;
+            }
+
+            /* Tabel jadi lebih ringkas di HP */
+            .table thead th {
+                padding: 0.65rem 0.75rem;
+                font-size: 0.8rem;
+            }
+
+            .table tbody td {
+                padding: 0.65rem 0.75rem;
+                font-size: 0.85rem;
+            }
+
+            /* Tombol di kolom aksi jadi lebih kecil & tidak dorong tabel melebar */
+            .table .btn-sm {
+                padding: 0.3rem 0.6rem !important;
+                font-size: 0.75rem !important;
+            }
+
+            .table td.text-center .btn,
+            .table td.text-center a.btn {
+                margin-bottom: 0.25rem;
             }
         }
 
@@ -368,11 +426,23 @@
             }
 
             .card-header {
-                padding: 1rem;
+                padding: 0.85rem 1rem;
             }
 
             .page-header {
                 padding: 1rem;
+            }
+
+            /* Di layar sangat sempit, kolom aksi ditumpuk vertikal biar tidak perlu zoom/scroll */
+            .table td.text-center {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.35rem;
+            }
+
+            .table td.text-center .btn+.btn {
+                margin-left: 0;
             }
         }
 
@@ -388,15 +458,12 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
-        /* Smooth Animations */
-        * {
-            scroll-behavior: smooth;
-        }
-
-        /* Focus States for Accessibility */
+        /* Focus States */
         .btn:focus,
         .form-control:focus,
         .form-select:focus,
@@ -405,7 +472,7 @@
             outline-offset: 2px;
         }
 
-        /* Badge Enhancements */
+        /* Badges */
         .badge {
             padding: 0.5rem 1rem;
             border-radius: 20px;
@@ -417,7 +484,7 @@
             background: var(--kasir-gradient) !important;
         }
 
-        /* Animation Classes */
+        /* Animations */
         .fade-in {
             animation: fadeIn 0.6s ease-out;
         }
@@ -427,6 +494,7 @@
                 opacity: 0;
                 transform: translateY(20px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -442,6 +510,7 @@
                 opacity: 0;
                 transform: translateY(30px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -451,6 +520,7 @@
 
     @stack('styles')
 </head>
+
 <body>
     <!-- Mobile Menu Button -->
     <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" title="Toggle Menu">
@@ -465,41 +535,41 @@
 
         <div class="main-content">
             @if(View::exists('kasir.layouts.header'))
-                @include('kasir.layouts.header')
+            @include('kasir.layouts.header')
             @endif
-            
+
             <div class="content-wrapper">
                 <!-- Success/Error Messages -->
                 @if(session('success'))
-                    <div class="alert alert-success alert-dismissible fade show slide-up" role="alert">
-                        <i class="fas fa-check-circle me-2"></i>
-                        <strong>Berhasil!</strong> {{ session('success') }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
+                <div class="alert alert-success alert-dismissible fade show slide-up" role="alert">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Berhasil!</strong> {{ session('success') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
                 @endif
 
                 @if(session('error'))
-                    <div class="alert alert-danger alert-dismissible fade show slide-up" role="alert">
-                        <i class="fas fa-exclamation-circle me-2"></i>
-                        <strong>Error!</strong> {{ session('error') }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
+                <div class="alert alert-danger alert-dismissible fade show slide-up" role="alert">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>Error!</strong> {{ session('error') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
                 @endif
 
                 @if(session('warning'))
-                    <div class="alert alert-warning alert-dismissible fade show slide-up" role="alert">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Peringatan!</strong> {{ session('warning') }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
+                <div class="alert alert-warning alert-dismissible fade show slide-up" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Peringatan!</strong> {{ session('warning') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
                 @endif
 
                 @if(session('info'))
-                    <div class="alert alert-info alert-dismissible fade show slide-up" role="alert">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Info!</strong> {{ session('info') }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
+                <div class="alert alert-info alert-dismissible fade show slide-up" role="alert">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Info!</strong> {{ session('info') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
                 @endif
 
                 <main class="fade-in">
@@ -511,18 +581,18 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
+
     <script>
         // Enhanced Mobile Menu Toggle
         document.addEventListener('DOMContentLoaded', function() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const sidebar = document.getElementById('sidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
-            
+
             function toggleSidebar() {
                 sidebar.classList.toggle('show');
                 sidebarOverlay.classList.toggle('show');
-                
+
                 // Enhanced icon animation
                 const icon = mobileMenuBtn.querySelector('i');
                 if (sidebar.classList.contains('show')) {
@@ -533,15 +603,15 @@
                     mobileMenuBtn.style.transform = 'rotate(0deg)';
                 }
             }
-            
+
             if (mobileMenuBtn) {
                 mobileMenuBtn.addEventListener('click', toggleSidebar);
             }
-            
+
             if (sidebarOverlay) {
                 sidebarOverlay.addEventListener('click', toggleSidebar);
             }
-            
+
             // Close sidebar when clicking on a link (mobile)
             if (sidebar) {
                 const sidebarLinks = sidebar.querySelectorAll('a:not(.dropdown-toggle)');
@@ -555,7 +625,7 @@
                     });
                 });
             }
-            
+
             // Handle window resize
             window.addEventListener('resize', function() {
                 if (window.innerWidth > 992) {
@@ -575,7 +645,7 @@
                 if (e.key === 'Escape' && sidebar && sidebar.classList.contains('show')) {
                     toggleSidebar();
                 }
-                
+
                 // Toggle sidebar with Ctrl/Cmd + M
                 if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
                     e.preventDefault();
@@ -605,7 +675,7 @@
 
         // Smooth scroll for anchor links
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
+            anchor.addEventListener('click', function(e) {
                 e.preventDefault();
                 const target = document.querySelector(this.getAttribute('href'));
                 if (target) {
@@ -624,11 +694,11 @@
                 btn.addEventListener('mousedown', function() {
                     this.style.transform = 'scale(0.95)';
                 });
-                
+
                 btn.addEventListener('mouseup', function() {
                     this.style.transform = '';
                 });
-                
+
                 btn.addEventListener('mouseleave', function() {
                     this.style.transform = '';
                 });
@@ -645,7 +715,7 @@
                         const originalText = submitBtn.innerHTML;
                         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Memproses...';
                         submitBtn.disabled = true;
-                        
+
                         // Re-enable after 10 seconds as fallback
                         setTimeout(() => {
                             submitBtn.innerHTML = originalText;
@@ -659,4 +729,5 @@
 
     @stack('scripts')
 </body>
+
 </html>
