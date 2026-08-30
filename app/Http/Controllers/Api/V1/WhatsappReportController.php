@@ -219,6 +219,12 @@ class WhatsappReportController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
+        // ==========================================
+        // SETTING LIMIT KASBON DI SINI
+        // ==========================================
+        // Anda cukup mengubah angka 150000 di bawah ini jika ingin mengubah limit
+        $limitKasbon = 150000; 
+
         // 2. Ambil semua customer yang memiliki transaksi pending beserta detail produknya
         $customers = Customer::whereHas('transactions', function ($query) {
             $query->where('payment_status', 'pending');
@@ -227,14 +233,16 @@ class WhatsappReportController extends Controller
         }])->get();
 
         $whatsappMessage = "🚨 *REMINDER FOLLOW UP KASBON* 🚨\nBerikut adalah daftar customer dengan kasbon mencapai limit:\n";
+        
         $hasData = false;
+        $nomorUrut = 1; // [BARU] Variabel untuk membuat penomoran otomatis
 
         foreach ($customers as $customer) {
             // Hitung total hutang yang masih pending
             $totalHutang = $customer->transactions->sum('total_amount');
 
-            // Jika total hutang mencapai limit statis 150.000
-            if ($totalHutang >= 150000) {
+            // Jika total hutang mencapai limit yang sudah disetting di atas
+            if ($totalHutang >= $limitKasbon) {
                 $hasData = true;
 
                 // Mengumpulkan produk dan akumulasi qty dari semua transaksi pending
@@ -256,10 +264,12 @@ class WhatsappReportController extends Controller
                 }
                 $produkText = implode(', ', $formattedProducts);
 
-                // Masukkan ke format WhatsApp sesuai permintaan
-                $whatsappMessage .= "\nNama customer: " . $customer->name;
+                // Masukkan ke format WhatsApp dengan Nomor Urut
+                $whatsappMessage .= "\n" . $nomorUrut . ". Nama customer: " . $customer->name;
                 $whatsappMessage .= "\nJumlah yang belum dibayar: Rp " . number_format($totalHutang, 0, ',', '.');
                 $whatsappMessage .= "\nProduk yang dibeli: " . $produkText . "\n";
+                
+                $nomorUrut++; // [BARU] Angka bertambah 1 untuk customer berikutnya
             }
         }
 
@@ -267,7 +277,7 @@ class WhatsappReportController extends Controller
         if (!$hasData) {
              return response()->json([
                 'status' => 'success',
-                'whatsapp_text' => "✅ Aman. Belum ada customer yang mencapai limit kasbon Rp 150.000 hari ini."
+                'whatsapp_text' => "✅ Aman. Belum ada customer yang mencapai limit kasbon Rp " . number_format($limitKasbon, 0, ',', '.') . " hari ini."
             ]);
         }
 
