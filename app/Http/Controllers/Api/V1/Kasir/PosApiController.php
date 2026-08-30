@@ -20,8 +20,7 @@ class PosApiController extends Controller
      */
     public function getPosData(Request $request)
     {
-        // Catatan: Gunakan $request->user() saat autentikasi token (Sanctum) sudah aktif
-        $businessId = $request->user() ? $request->user()->business_id : 1; // Default 1 untuk testing sementara
+        $businessId = $request->user() ? $request->user()->business_id : 1;
 
         $products = Product::where('is_active', true)
             ->where('business_id', $businessId)
@@ -40,9 +39,7 @@ class PosApiController extends Controller
             ->orderBy('name', 'asc')
             ->get();
 
-        // Ambil daftar user yang memiliki peran sebagai kurir/driver
         $drivers = User::where('business_id', $businessId)
-            // ->where('role', 'driver') // Aktifkan ini jika Anda punya kolom role
             ->select('id', 'name')
             ->get();
 
@@ -58,12 +55,13 @@ class PosApiController extends Controller
     }
 
     /**
-     * 2. Menyimpan order baru dari aplikasi Android
+     * 2. Menyimpan order baru dari aplikasi Android (Langsung assign Driver)
      */
     public function storeOrder(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'customer_id' => 'nullable|exists:customers,id',
+            'driver_id' => 'required|exists:users,id',
             'total_amount' => 'required|numeric|min:0',
             'notes' => 'nullable|string',
             'items' => 'required|array|min:1',
@@ -82,7 +80,6 @@ class PosApiController extends Controller
                 $userId = $request->user() ? $request->user()->id : 1;
                 $businessId = $request->user() ? $request->user()->business_id : 1;
 
-                // Cek Stok
                 foreach ($request->items as $item) {
                     $product = Product::with('inventory')->find($item['product_id']);
                     if ($product->inventory->current_stock < $item['quantity']) {
@@ -90,22 +87,21 @@ class PosApiController extends Controller
                     }
                 }
 
-                // Buat Transaksi (Status masih pending, driver kosong, belum lunas)
                 $transaction = Transaction::create([
                     'business_id' => $businessId,
                     'type' => 'sale',
                     'customer_id' => $request->customer_id,
+                    'claimed_by_driver_id' => $request->driver_id,
                     'total_amount' => $request->total_amount,
-                    'payment_method' => 'kasbon', // Default kasbon sampai driver pulang
-                    'payment_status' => 'pending', 
-                    'delivery_status' => 'pending', // Menunggu driver ditugaskan
+                    'payment_method' => 'kasbon',
+                    'payment_status' => 'pending',
+                    'order_status' => 'delivering',
                     'status' => 'completed',
                     'transaction_date' => now(),
                     'notes' => $request->notes,
                     'created_by' => $userId,
                 ]);
 
-                // Simpan Detail & Kurangi Stok
                 foreach ($request->items as $item) {
                     $product = Product::find($item['product_id']);
                     $transaction->details()->create([
@@ -122,10 +118,9 @@ class PosApiController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Pesanan berhasil dibuat, menunggu penugasan kurir.',
+                'message' => 'Order berhasil dibuat dan driver telah ditugaskan.',
                 'data' => $transaction
             ], 201);
-
         } catch (\Exception $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
@@ -140,7 +135,7 @@ class PosApiController extends Controller
 
         $orders = Transaction::with(['customer', 'driver'])
             ->where('business_id', $businessId)
-            ->whereIn('delivery_status', ['pending', 'delivering'])
+            ->whereIn('order_status', ['pending', 'delivering'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -164,12 +159,12 @@ class PosApiController extends Controller
 
         Transaction::whereIn('id', $request->transaction_ids)
             ->update([
-                'driver_id' => $request->driver_id,
-                'delivery_status' => 'delivering'
+                'claimed_by_driver_id' => $request->driver_id,
+                'order_status' => 'delivering'
             ]);
 
         return response()->json([
-            'status' => 'success', 
+            'status' => 'success',
             'message' => 'Kurir berhasil ditugaskan. Barang siap diantar!'
         ]);
     }
@@ -182,7 +177,7 @@ class PosApiController extends Controller
         $validator = Validator::make($request->all(), [
             'transaction_ids' => 'required|array|min:1',
             'transaction_ids.*' => 'exists:transactions,id',
-            'payment_method' => 'required|string', // misal: 'cash', 'transfer', atau 'kasbon'
+            'payment_method' => 'required|string',
         ]);
 
         if ($validator->fails()) {
@@ -198,14 +193,12 @@ class PosApiController extends Controller
             foreach ($transactions as $transaction) {
                 $isKasbon = strtolower($request->payment_method) === 'kasbon';
 
-                // Update transaksi
                 $transaction->update([
                     'payment_method' => $request->payment_method,
                     'payment_status' => $isKasbon ? 'pending' : 'paid',
-                    'delivery_status' => 'delivered'
+                    'order_status' => 'delivered'
                 ]);
 
-                // Catat ke CashFlow JIKA BUKAN KASBON (uang riil diterima)
                 if (!$isKasbon) {
                     CashFlow::create([
                         'business_id' => $transaction->business_id,
@@ -219,7 +212,6 @@ class PosApiController extends Controller
                         'created_by' => $userId,
                     ]);
 
-                    // Tambah total belanja pelanggan jika ada
                     if ($transaction->customer_id) {
                         $transaction->customer()->increment('total_purchases', $transaction->total_amount);
                     }
@@ -229,10 +221,9 @@ class PosApiController extends Controller
             DB::commit();
 
             return response()->json([
-                'status' => 'success', 
+                'status' => 'success',
                 'message' => count($transactions) . ' Transaksi berhasil diselesaikan.'
             ]);
-
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);

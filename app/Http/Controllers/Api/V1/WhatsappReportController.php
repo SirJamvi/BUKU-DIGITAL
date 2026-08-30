@@ -11,6 +11,7 @@ use App\Models\Transaction;
 use App\Models\Inventory;
 use App\Models\CashFlow;
 use App\Models\StockMovement;
+use App\Models\Customer;
 use App\Services\Admin\FinancialService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -205,6 +206,71 @@ class WhatsappReportController extends Controller
         $whatsappMessage .= "🛒 *Produk Keluar Hari Ini:*" . $productSoldText;
 
         // Mengembalikan format JSON dengan satu key teks untuk mempermudah iOS Shortcuts
+        return response()->json([
+            'status' => 'success',
+            'whatsapp_text' => $whatsappMessage
+        ]);
+    }
+
+    public function checkKasbonLimit(Request $request): JsonResponse
+    {
+        // 1. Pengaman API Sederhana
+        if ($request->query('token') !== 'rahasia123') {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        // 2. Ambil semua customer yang memiliki transaksi pending beserta detail produknya
+        $customers = Customer::whereHas('transactions', function ($query) {
+            $query->where('payment_status', 'pending');
+        })->with(['transactions' => function ($query) {
+            $query->where('payment_status', 'pending')->with('details.product');
+        }])->get();
+
+        $whatsappMessage = "🚨 *REMINDER FOLLOW UP KASBON* 🚨\nBerikut adalah daftar customer dengan kasbon mencapai limit:\n";
+        $hasData = false;
+
+        foreach ($customers as $customer) {
+            // Hitung total hutang yang masih pending
+            $totalHutang = $customer->transactions->sum('total_amount');
+
+            // Jika total hutang mencapai limit statis 150.000
+            if ($totalHutang >= 150000) {
+                $hasData = true;
+
+                // Mengumpulkan produk dan akumulasi qty dari semua transaksi pending
+                $productSummary = [];
+                foreach ($customer->transactions as $transaction) {
+                    foreach ($transaction->details as $detail) {
+                        $productName = $detail->product->name ?? 'Produk Unknown';
+                        if (!isset($productSummary[$productName])) {
+                            $productSummary[$productName] = 0;
+                        }
+                        $productSummary[$productName] += $detail->quantity;
+                    }
+                }
+
+                // Format text produk: "Produk A (3), Produk B (6)"
+                $formattedProducts = [];
+                foreach ($productSummary as $name => $qty) {
+                    $formattedProducts[] = "{$name} ({$qty})";
+                }
+                $produkText = implode(', ', $formattedProducts);
+
+                // Masukkan ke format WhatsApp sesuai permintaan
+                $whatsappMessage .= "\nNama customer: " . $customer->name;
+                $whatsappMessage .= "\nJumlah yang belum dibayar: Rp " . number_format($totalHutang, 0, ',', '.');
+                $whatsappMessage .= "\nProduk yang dibeli: " . $produkText . "\n";
+            }
+        }
+
+        // Jika tidak ada data yang mencapai limit
+        if (!$hasData) {
+             return response()->json([
+                'status' => 'success',
+                'whatsapp_text' => "✅ Aman. Belum ada customer yang mencapai limit kasbon Rp 150.000 hari ini."
+            ]);
+        }
+
         return response()->json([
             'status' => 'success',
             'whatsapp_text' => $whatsappMessage

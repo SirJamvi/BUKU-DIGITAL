@@ -12,6 +12,9 @@ Route::prefix('v1')->group(function () {
     Route::post('/sync/salary', [ExpenseSyncController::class, 'storeFromAttendance']);
     Route::get('/whatsapp-report', [WhatsappReportController::class, 'generateDailyReport']);
 
+    // [RUTE BARU UNTUK SHORTCUT PENGINGAT KASBON]
+    Route::get('/whatsapp-kasbon-reminder', [WhatsappReportController::class, 'checkKasbonLimit']);
+
     // ==============================================================
     // RUTE AUTENTIKASI MOBILE
     // ==============================================================

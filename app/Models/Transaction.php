@@ -16,11 +16,11 @@ class Transaction extends Model
         'business_id',
         'type',
         'customer_id',
-        'driver_id',           // [TAMBAHAN BARU]
+        'claimed_by_driver_id',
         'total_amount',
         'payment_method',
         'payment_status',
-        'delivery_status',     // [TAMBAHAN BARU]
+        'order_status',
         'status',
         'transaction_date',
         'notes',
@@ -42,10 +42,10 @@ class Transaction extends Model
     }
 
 
-    // [TAMBAHAN BARU] Relasi ke kurir/driver
+    // Relasi ke kurir/driver
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'driver_id');
+        return $this->belongsTo(User::class, 'claimed_by_driver_id');
     }
 
     /**
