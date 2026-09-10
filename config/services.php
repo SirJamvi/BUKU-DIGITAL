@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'sync' => [
+        'secret' => env('SYNC_SECRET_KEY'),
+    ],
+
 ];
