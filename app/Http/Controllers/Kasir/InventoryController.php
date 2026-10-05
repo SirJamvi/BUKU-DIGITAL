@@ -7,6 +7,10 @@ use App\Services\Admin\InventoryService;
 use App\Models\Product;
 use App\Models\Inventory;
 use App\Models\StockMovement;
+use App\Models\Supplier;
+use App\Models\CashFlow;
+use App\Models\PaymentMethod;
+use App\Models\ExpenseCategory;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -26,24 +30,102 @@ class InventoryController extends Controller
 
     public function addStockForm(): View
     {
-        $products = $this->inventoryService->getActiveProducts();
-        return view('kasir.inventory.add_stock', compact('products'));
+        $businessId = Auth::user()->business_id;
+
+        // Ambil supplier beserta produk yang disuplai dan harga khusus (pivot)
+        $suppliers = Supplier::where('business_id', $businessId)->with('products')->get();
+
+        // Ambil metode pembayaran yang aktif
+        $paymentMethods = PaymentMethod::where('business_id', $businessId)
+            ->where('is_active', true)
+            ->get();
+
+        return view('kasir.inventory.add_stock', compact('suppliers', 'paymentMethods'));
     }
 
     public function storeStock(Request $request): RedirectResponse
     {
+        // Validasi input: payment_method hanya wajib jika record_expense dicentang
         $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1',
-            'notes' => 'nullable|string|max:500',
+            'supplier_id'    => 'required|exists:suppliers,id',
+            'product_id'     => 'required|exists:products,id',
+            'quantity'       => 'required|integer|min:1',
+            'record_expense' => 'nullable|boolean',
+            'payment_method' => 'required_if:record_expense,1|nullable|string',
+            'notes'          => 'nullable|string|max:500',
         ]);
 
         try {
-            $this->inventoryService->addStock($request->all());
-            return redirect()->back()->with('success', 'Stok dari supplier berhasil ditambahkan.');
+            DB::beginTransaction();
+
+            $businessId = Auth::user()->business_id;
+            $userId = Auth::id();
+
+            // 1. Dapatkan relasi produk & supplier untuk mengecek harga pivot
+            $supplier = Supplier::findOrFail($request->supplier_id);
+            $productPivot = $supplier->products()->where('product_id', $request->product_id)->first();
+
+            if (!$productPivot) {
+                throw new \Exception("Produk ini belum diatur harganya untuk supplier yang dipilih.");
+            }
+
+            // 2. Update Inventory & Catat Stock Movement
+            $inventory = Inventory::firstOrCreate(
+                ['product_id' => $request->product_id, 'business_id' => $businessId],
+                ['current_stock' => 0]
+            );
+            $inventory->increment('current_stock', $request->quantity);
+
+            StockMovement::create([
+                'business_id' => $businessId,
+                'product_id'  => $request->product_id,
+                'type'        => 'in',
+                'quantity'    => $request->quantity,
+                'notes'       => 'Restock dari ' . $supplier->name . '. ' . $request->notes,
+                'created_by'  => $userId,
+            ]);
+
+            $message = 'Stok berhasil ditambahkan (Tanpa mencatat pengeluaran).';
+
+            // 3. Catat ke Expenses (Cash Flow) JIKA toggle dicentang
+            if ($request->has('record_expense') && $request->record_expense == 1) {
+                $unitPrice = $productPivot->pivot->price;
+                $grandTotalExpense = $unitPrice * $request->quantity;
+
+                // Cari atau buat kategori "Refill Es Batu" khusus untuk bisnis ini
+                $expenseCategory = ExpenseCategory::firstOrCreate(
+                    [
+                        'business_id' => $businessId,
+                        'name'        => 'Refill Es Batu',
+                    ],
+                    [
+                        'type'        => 'Operasional',
+                        'is_cogs'     => 1,
+                        'is_active'   => 1,
+                    ]
+                );
+
+                CashFlow::create([
+                    'business_id'    => $businessId,
+                    'type'           => 'expense',
+                    'category_id'    => $expenseCategory->id, 
+                    'amount'         => $grandTotalExpense,
+                    'payment_method' => $request->payment_method,
+                    'description'    => "Pembelian " . $request->quantity . " unit " . $productPivot->name . " dari " . $supplier->name,
+                    'date'           => now()->toDateString(),
+                    'created_by'     => $userId,
+                ]);
+
+                $message = 'Stok berhasil ditambahkan dan biaya otomatis tercatat di Pengeluaran.';
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', $message);
+
         } catch (\Exception $e) {
-            logger()->error('Kasir error adding stock: ' . $e->getMessage());
-            return back()->with('error', 'Gagal menambahkan stok.')->withInput();
+            DB::rollBack();
+            logger()->error('Kasir error adding stock & expenses: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menambahkan stok: ' . $e->getMessage())->withInput();
         }
     }
 

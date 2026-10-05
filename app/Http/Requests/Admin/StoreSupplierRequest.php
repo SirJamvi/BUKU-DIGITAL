@@ -6,21 +6,11 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreSupplierRequest extends FormRequest
 {
-    /**
-     * Tentukan apakah pengguna berwenang untuk membuat request ini.
-     *
-     * @return bool
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Mendapatkan aturan validasi yang berlaku untuk request ini.
-     *
-     * @return array<string, mixed>
-     */
     public function rules(): array
     {
         return [
@@ -30,6 +20,11 @@ class StoreSupplierRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string'],
             'payment_terms' => ['nullable', 'string', 'max:255'],
+            
+            // Validasi Input Array Produk & Harga
+            'products' => ['nullable', 'array'],
+            'products.*.id' => ['required', 'exists:products,id'],
+            'products.*.price' => ['required', 'numeric', 'min:0'],
         ];
     }
 }

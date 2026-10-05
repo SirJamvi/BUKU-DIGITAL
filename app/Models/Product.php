@@ -34,9 +34,6 @@ class Product extends Model
         'is_featured' => 'boolean',
     ];
 
-    /**
-     * The business that this product belongs to.
-     */
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
@@ -75,5 +72,15 @@ class Product extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * Relasi many-to-many ke Supplier dengan harga khusus per supplier (pivot).
+     */
+    public function suppliers()
+    {
+        return $this->belongsToMany(Supplier::class, 'product_supplier')
+                    ->withPivot('price')
+                    ->withTimestamps();
     }
 }
