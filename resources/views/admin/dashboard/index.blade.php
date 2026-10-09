@@ -181,22 +181,34 @@
                             <tr>
                                 <th>Waktu Opname</th>
                                 <th>Kasir</th>
-                                <th>Produk</th>
                                 <th>Selisih (Miss)</th>
                                 <th>Alasan / Catatan Kasir</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach($missedOpnames as $miss)
+                            @php
+                                $groupedMissed = $missedOpnames->groupBy(function($item) {
+                                    return $item->product->name ?? 'Produk Dihapus';
+                                });
+                            @endphp
+
+                            @foreach($groupedMissed as $productName => $items)
+                            <tr class="table-secondary">
+                                <td colspan="4" class="fw-bold text-dark">
+                                    <i class="fas fa-box text-primary me-2"></i> {{ $productName }}
+                                    <span class="badge bg-white text-dark border ms-2">{{ $items->count() }} Aktivitas</span>
+                                </td>
+                            </tr>
+                            @foreach($items as $miss)
                             <tr>
-                                <td><span class="badge bg-secondary">{{ $miss->created_at->format('H:i') }}</span></td>
+                                <td class="ps-4"><span class="badge bg-secondary">{{ $miss->created_at->format('H:i') }}</span></td>
                                 <td><strong>{{ $miss->createdBy->name ?? 'Kasir' }}</strong></td>
-                                <td>{{ $miss->product->name ?? 'Produk Dihapus' }}</td>
                                 <td>
                                     <span class="badge bg-danger fs-6">{{ $miss->quantity }}</span>
                                 </td>
                                 <td class="text-danger fw-bold">"{{ $miss->notes }}"</td>
                             </tr>
+                            @endforeach
                             @endforeach
                         </tbody>
                     </table>

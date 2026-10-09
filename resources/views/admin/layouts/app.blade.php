@@ -524,20 +524,7 @@
         @media (min-width: 992px) {
             .sidebar {
                 position: fixed;
-                transform: translateX(0);
                 z-index: 1000;
-            }
-            
-            .main-content {
-                margin-left: var(--sidebar-width);
-            }
-            
-            .sidebar-toggle {
-                display: none;
-            }
-
-            .sidebar-overlay {
-                display: none !important;
             }
         }
 
@@ -711,9 +698,6 @@
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(function() {
                 if (!isMobile()) {
-                    sidebar.classList.remove('show');
-                    sidebarOverlay.classList.remove('show');
-                    mainContent.classList.add('sidebar-open');
                     document.body.style.overflow = '';
                 } else {
                     mainContent.classList.remove('sidebar-open');
@@ -724,9 +708,10 @@
             }, 250);
         });
 
-        // Initialize sidebar state
+        // Initialize sidebar state (Closed by default to maximize screen space)
         if (!isMobile()) {
-            mainContent.classList.add('sidebar-open');
+            mainContent.classList.remove('sidebar-open');
+            sidebar.classList.remove('show');
         }
 
         // Enhanced table responsiveness

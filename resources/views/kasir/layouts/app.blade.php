@@ -62,7 +62,7 @@
 
         .main-content {
             flex: 1;
-            margin-left: 280px;
+            margin-left: 0;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             background: #f7f9fc;
             min-height: 100vh;
@@ -130,11 +130,13 @@
 
         /* Mobile Menu Button */
         .mobile-menu-btn {
-            display: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             position: fixed;
             top: 1.5rem;
             left: 1.5rem;
-            z-index: 1056;
+            z-index: 1061;
             background: var(--kasir-gradient);
             border: none;
             border-radius: 12px;
@@ -628,15 +630,7 @@
 
             // Handle window resize
             window.addEventListener('resize', function() {
-                if (window.innerWidth > 992) {
-                    if (sidebar) sidebar.classList.remove('show');
-                    if (sidebarOverlay) sidebarOverlay.classList.remove('show');
-                    if (mobileMenuBtn) {
-                        const icon = mobileMenuBtn.querySelector('i');
-                        if (icon) icon.className = 'fas fa-bars';
-                        mobileMenuBtn.style.transform = 'rotate(0deg)';
-                    }
-                }
+                // Desktop behavior is now consistent with mobile, no auto-closing or icon reset required on resize
             });
 
             // Enhanced keyboard navigation

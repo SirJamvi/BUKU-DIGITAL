@@ -47,16 +47,14 @@ class DashboardService
             'start_date' => $startOfMonth->toDateString(), 
             'end_date' => $endOfMonth->toDateString()
         ];
-        $thisMonthReport = $this->financialService->getFinancialReport($thisMonthFilters);
-        $netProfitThisMonth = $thisMonthReport['net_profit'];
+        $netProfitThisMonth = $this->financialService->getNetProfitOnly($thisMonthFilters);
 
         // Bulan Lalu
         $lastMonthFilters = [
             'start_date' => $startOfLastMonth->toDateString(), 
             'end_date' => $endOfLastMonth->toDateString()
         ];
-        $lastMonthReport = $this->financialService->getFinancialReport($lastMonthFilters);
-        $netProfitLastMonth = $lastMonthReport['net_profit'];
+        $netProfitLastMonth = $this->financialService->getNetProfitOnly($lastMonthFilters);
 
         // 3. Perbandingan & Persentase
         $salesYesterday = $this->getSalesForDate($businessId, $yesterday);
@@ -175,8 +173,8 @@ class DashboardService
                 'start_date' => $startOfMonth->toDateString(), 
                 'end_date' => $endOfMonth->toDateString()
             ];
-            $monthReport = $this->financialService->getFinancialReport($monthFilters);
-            $profitData[] = round($monthReport['net_profit'] / 1000000, 2);
+            $netProfit = $this->financialService->getNetProfitOnly($monthFilters);
+            $profitData[] = round($netProfit / 1000000, 2);
         }
 
         return [
@@ -215,8 +213,8 @@ class DashboardService
                 'start_date' => $startOfWeek->toDateString(), 
                 'end_date' => $endOfWeek->toDateString()
             ];
-            $weekReport = $this->financialService->getFinancialReport($weekFilters);
-            $profitData[] = round($weekReport['net_profit'] / 1000000, 2); // Dalam Jutaan
+            $netProfit = $this->financialService->getNetProfitOnly($weekFilters);
+            $profitData[] = round($netProfit / 1000000, 2); // Dalam Jutaan
         }
 
         return [

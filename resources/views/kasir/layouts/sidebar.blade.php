@@ -222,17 +222,22 @@
         width: 280px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        z-index: 1050;
+        z-index: 1060;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         display: flex;
         flex-direction: column;
         box-shadow: 4px 0 25px rgba(0, 0, 0, 0.15);
         overflow: hidden;
+        transform: translateX(-100%);
+    }
+
+    .sidebar.show {
+        transform: translateX(0);
     }
 
     /* Main content adjustment */
     .main-content {
-        margin-left: 280px;
+        margin-left: 0;
         transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
 

@@ -720,6 +720,43 @@ class FinancialService
         ];
     }
 
+    public function getNetProfitOnly(array $filters): float
+    {
+        $businessId = Auth::user()->business_id;
+
+        // Gunakan lazy() dan batasi field select agar hemat memori
+        $transactions = Transaction::where('type', 'sale')
+            ->where('business_id', $businessId)
+            ->where('status', 'completed')
+            ->select('id', 'total_amount', 'transaction_date')
+            ->with(['details:id,transaction_id,product_id,cost_price,unit_cost,purchase_price,quantity', 'details.product:id,cost_price']);
+
+        $this->applyDateFilters($transactions, $filters, 'transaction_date');
+        $transactions = $transactions->lazy();
+
+        $totalGrossProfit = 0;
+        foreach ($transactions as $transaction) {
+            $transactionCogs = 0;
+            if ($transaction->details) {
+                foreach ($transaction->details as $detail) {
+                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
+                    $transactionCogs += ($costPrice * $detail->quantity);
+                }
+            }
+            $totalGrossProfit += ($transaction->total_amount - $transactionCogs);
+        }
+
+        $expenseQuery = CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->whereHas('category', function ($q) {
+                $q->where('is_cogs', 0);
+            });
+        $this->applyDateFilters($expenseQuery, $filters, 'date');
+        $totalExpense = $expenseQuery->sum('amount');
+
+        return $totalGrossProfit - $totalExpense;
+    }
+
     private function applyDateFilters($query, array $filters, string $dateColumn): void
     {
         if (!empty($filters['start_date']) && !empty($filters['end_date'])) {
