@@ -226,7 +226,7 @@
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         display: flex;
         flex-direction: column;
-        box-shadow: 4px 0 25px rgba(0, 0, 0, 0.15);
+        box-shadow: 2px 0 15px rgba(0, 0, 0, 0.1); /* Diperhalus agar tidak terlalu menimpa */
         overflow: hidden;
         transform: translateX(-100%);
     }
@@ -237,15 +237,19 @@
 
     /* Main content adjustment */
     .main-content {
+        flex: 1;
         margin-left: 0;
         width: 100%;
-        transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        max-width: 100%;
+        /* Transisi margin dan max-width disamakan agar bergerak serentak dengan sidebar */
+        transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+                    max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
     
     .main-content.sidebar-open {
         margin-left: 280px;
-        width: calc(100% - 280px); /* Kurangi lebar konten agar muat di sisa layar */
-        flex: none !important; /* Nonaktifkan flex bawaan agar kalkulasi width bekerja */
+        /* Gunakan max-width agar responsif dinamis, JANGAN gunakan flex: none */
+        max-width: calc(100% - 280px); 
     }
 
     /* Sidebar Header */
