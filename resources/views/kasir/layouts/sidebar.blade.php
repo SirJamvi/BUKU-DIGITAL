@@ -235,21 +235,22 @@
         transform: translateX(0);
     }
 
-    /* Main content adjustment */
+    /* Pastikan base main-content memiliki animasi untuk width */
     .main-content {
         flex: 1;
         margin-left: 0;
         width: 100%;
-        max-width: 100%;
-        /* Transisi margin dan max-width disamakan agar bergerak serentak dengan sidebar */
-        transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
-                    max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        /* Transisi ditambahkan pada width agar penyempitan layar terlihat mulus (tidak patah) */
+        transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    
-    .main-content.sidebar-open {
-        margin-left: 280px;
-        /* Gunakan max-width agar responsif dinamis, JANGAN gunakan flex: none */
-        max-width: calc(100% - 280px); 
+
+    /* Khusus di mode desktop, jalankan efek dorong DAN susutkan lebarnya */
+    @media (min-width: 992px) {
+        .main-content.sidebar-open {
+            margin-left: 280px;
+            /* Ini adalah kunci agar konten dinamis dan tidak terpotong di sebelah kanan */
+            width: calc(100% - 280px); 
+        }
     }
 
     /* Sidebar Header */
