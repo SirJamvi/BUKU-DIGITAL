@@ -222,7 +222,7 @@
         width: 280px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        z-index: 1060; /* Pastikan z-index lebih tinggi dari 1054 (overlay) */
+        z-index: 1060 !important; /* Tambahkan !important disini */
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         display: flex;
         flex-direction: column;

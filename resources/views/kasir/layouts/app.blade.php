@@ -86,10 +86,10 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6); /* Warna gelap transparan biasa */
-            backdrop-filter: none !important; /* Hapus total bug efek blur */
+            background: rgba(0, 0, 0, 0.6) !important; /* Warna transparan biasa */
+            backdrop-filter: none !important; /* Membunuh bug blur total */
             -webkit-backdrop-filter: none !important;
-            z-index: 1054;
+            z-index: 1054 !important;
             opacity: 0;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
@@ -600,26 +600,35 @@
             const sidebarOverlay = document.getElementById('sidebarOverlay');
 
             function toggleSidebar() {
-                sidebar.classList.toggle('show');
-                sidebarOverlay.classList.toggle('show');
+            sidebar.classList.toggle('show');
 
-                // Enhanced icon animation
-                const icon = mobileMenuBtn.querySelector('i');
-                const mainContent = document.querySelector('.main-content');
+            // Icon animation
+            const icon = mobileMenuBtn.querySelector('i');
+            const mainContent = document.querySelector('.main-content');
+            
+            if (sidebar.classList.contains('show')) {
+                icon.className = 'fas fa-times';
+                mobileMenuBtn.style.transform = 'rotate(90deg)';
                 
-                if (sidebar.classList.contains('show')) {
-                    icon.className = 'fas fa-times';
-                    mobileMenuBtn.style.transform = 'rotate(90deg)';
-                    if (window.innerWidth >= 992 && mainContent) {
-                        mainContent.classList.add('sidebar-open');
-                    }
+                if (window.innerWidth >= 992) {
+                    // MODE DESKTOP: Geser konten, JANGAN panggil overlay
+                    if (mainContent) mainContent.classList.add('sidebar-open');
+                    sidebarOverlay.classList.remove('show');
                 } else {
-                    icon.className = 'fas fa-bars';
-                    mobileMenuBtn.style.transform = 'rotate(0deg)';
-                    if (window.innerWidth >= 992 && mainContent) {
-                        mainContent.classList.remove('sidebar-open');
-                    }
+                    // MODE MOBILE: Tampilkan overlay
+                    sidebarOverlay.classList.add('show');
                 }
+            } else {
+                icon.className = 'fas fa-bars';
+                mobileMenuBtn.style.transform = 'rotate(0deg)';
+                
+                if (window.innerWidth >= 992) {
+                    // MODE DESKTOP: Kembalikan posisi konten
+                    if (mainContent) mainContent.classList.remove('sidebar-open');
+                }
+                // Sembunyikan overlay di semua ukuran layar
+                sidebarOverlay.classList.remove('show');
+                 }
             }
 
             if (mobileMenuBtn) {
