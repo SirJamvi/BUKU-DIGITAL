@@ -238,11 +238,14 @@
     /* Main content adjustment */
     .main-content {
         margin-left: 0;
-        transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        width: 100%;
+        transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
     
     .main-content.sidebar-open {
         margin-left: 280px;
+        width: calc(100% - 280px); /* Kurangi lebar konten agar muat di sisa layar */
+        flex: none !important; /* Nonaktifkan flex bawaan agar kalkulasi width bekerja */
     }
 
     /* Sidebar Header */
