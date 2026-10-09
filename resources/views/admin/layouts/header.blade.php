@@ -1,7 +1,7 @@
 <div class="main-header">
     <div class="d-flex justify-content-between align-items-center w-100">
-        <div class="header-left">
-            <button class="sidebar-toggle" id="sidebarToggle">
+        <div class="header-left d-flex align-items-center">
+            <button class="sidebar-toggle me-3" id="sidebarToggle" style="display: flex !important; align-items: center; justify-content: center;">
                 <i class="fas fa-bars"></i>
             </button>
 

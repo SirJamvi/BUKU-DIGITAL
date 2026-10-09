@@ -90,7 +90,6 @@
             z-index: 1054;
             opacity: 0;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(4px);
         }
 
         .sidebar-overlay.show {
@@ -597,12 +596,20 @@
 
                 // Enhanced icon animation
                 const icon = mobileMenuBtn.querySelector('i');
+                const mainContent = document.querySelector('.main-content');
+                
                 if (sidebar.classList.contains('show')) {
                     icon.className = 'fas fa-times';
                     mobileMenuBtn.style.transform = 'rotate(90deg)';
+                    if (window.innerWidth >= 992 && mainContent) {
+                        mainContent.classList.add('sidebar-open');
+                    }
                 } else {
                     icon.className = 'fas fa-bars';
                     mobileMenuBtn.style.transform = 'rotate(0deg)';
+                    if (window.innerWidth >= 992 && mainContent) {
+                        mainContent.classList.remove('sidebar-open');
+                    }
                 }
             }
 

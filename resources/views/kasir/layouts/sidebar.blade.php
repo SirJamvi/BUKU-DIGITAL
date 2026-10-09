@@ -240,6 +240,10 @@
         margin-left: 0;
         transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
+    
+    .main-content.sidebar-open {
+        margin-left: 280px;
+    }
 
     /* Sidebar Header */
     .sidebar-header {
