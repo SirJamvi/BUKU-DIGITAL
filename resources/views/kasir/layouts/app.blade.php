@@ -86,7 +86,9 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.6); /* Warna gelap transparan biasa */
+            backdrop-filter: none !important; /* Hapus total bug efek blur */
+            -webkit-backdrop-filter: none !important;
             z-index: 1054;
             opacity: 0;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -127,9 +129,9 @@
             min-width: 0;
         }
 
-        /* Mobile Menu Button */
+        /* Mobile Menu Button - Dipaksa aktif di semua layar (Desktop & Mobile) */
         .mobile-menu-btn {
-            display: flex;
+            display: flex !important; 
             align-items: center;
             justify-content: center;
             position: fixed;
@@ -146,6 +148,13 @@
             width: 3.5rem;
             height: 3.5rem;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Desktop specific: Sembunyikan overlay di desktop agar push content berfungsi tanpa menimpa layer hitam */
+        @media (min-width: 992px) {
+            .sidebar-overlay {
+                display: none !important; 
+            }
         }
 
         .mobile-menu-btn:hover {

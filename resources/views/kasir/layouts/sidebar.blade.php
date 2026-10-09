@@ -222,7 +222,7 @@
         width: 280px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        z-index: 1060;
+        z-index: 1060; /* Pastikan z-index lebih tinggi dari 1054 (overlay) */
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         display: flex;
         flex-direction: column;
@@ -616,7 +616,7 @@
         .sidebar {
             transform: translateX(-100%);
             width: 300px;
-            z-index: 1055;
+            z-index: 1060 !important; /* Ubah dari 1055 menjadi 1060 agar konsisten selalu menimpa overlay */
         }
 
         .sidebar.show {

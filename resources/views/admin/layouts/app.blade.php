@@ -526,6 +526,11 @@
                 position: fixed;
                 z-index: 1000;
             }
+            
+            /* Sembunyikan overlay di desktop agar mendapatkan efek dorong (push) murni */
+            .sidebar-overlay {
+                display: none !important;
+            }
         }
 
         /* Large Desktop */
