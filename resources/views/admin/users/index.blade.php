@@ -40,9 +40,9 @@
             <td>{{ $user->email }}</td>
             <td>
                 @if ($user->role == 'admin')
-                <span class="badge bg-danger">{{ ucfirst($user->role) }}</span>
+                <span class="badge bg-danger">{{ $user->role === 'ko' ? 'KO' : ucfirst($user->role) }}</span>
                 @else
-                <span class="badge bg-info">{{ ucfirst($user->role) }}</span>
+                <span class="badge bg-info">{{ $user->role === 'ko' ? 'KO' : ucfirst($user->role) }}</span>
                 @endif
             </td>
             <td>

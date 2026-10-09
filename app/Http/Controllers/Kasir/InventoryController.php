@@ -81,6 +81,7 @@ class InventoryController extends Controller
                 'product_id'  => $request->product_id,
                 'type'        => 'in',
                 'quantity'    => $request->quantity,
+                'reference_id' => 'supplier:' . $supplier->id,
                 'notes'       => 'Restock dari ' . $supplier->name . '. ' . $request->notes,
                 'created_by'  => $userId,
             ]);

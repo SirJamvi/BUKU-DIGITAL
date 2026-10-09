@@ -39,7 +39,7 @@ class LoginController extends Controller
 
         if ($user) {
             $request->session()->regenerate();
-            $redirectPath = $user->role === 'admin' ? '/admin/dashboard' : '/kasir/dashboard';
+            if ($user->role === 'ko') { $this->authService->logout(); $request->session()->invalidate(); $request->session()->regenerateToken(); return back()->withErrors(['email' => 'Akun KO tidak dapat masuk ke sistem ini. Silakan gunakan aplikasi ACS.'])->onlyInput('email'); } $redirectPath = $user->role === 'admin' ? '/admin/dashboard' : '/kasir/dashboard';
             return redirect()->intended($redirectPath);
         }
 

@@ -74,25 +74,49 @@ class InventoryService
     {
         DB::transaction(function () use ($data) {
             $currentUserId = Auth::id();
-            
+            $itemsCount = 0;
+            $differenceCount = 0;
+            $totalSystem = 0;
+            $totalActual = 0;
+
             foreach ($data['items'] as $item) {
                 $inventory = Inventory::find($item['inventory_id']);
                 if (!$inventory) continue;
 
                 $difference = $item['actual_stock'] - $inventory->current_stock;
 
+                $itemsCount++;
+                $totalSystem += (int) ($item['sys_stock'] ?? $inventory->current_stock);
+                $totalActual += (int) $item['actual_stock'];
+
                 if ($difference !== 0) {
                     $inventory->update(['current_stock' => $item['actual_stock']]);
 
                     StockMovement::create([
-                        'business_id' => $inventory->business_id, // <--- TAMBAHKAN BARIS INI
+                        'business_id' => $inventory->business_id,
                         'product_id' => $inventory->product_id,
                         'type' => 'adjustment',
                         'quantity' => $difference,
                         'notes' => 'Stock Opname: ' . ($item['notes'] ?? 'Tutup Shift / Penyesuaian fisik.'),
                         'created_by' => $currentUserId,
                     ]);
+
+                    $differenceCount++;
                 }
+            }
+
+            // Jejak sesi opname (dicatat juga saat tidak ada selisih) - dibaca ACS untuk checksheet.
+            if ($itemsCount > 0 && \Illuminate\Support\Facades\Schema::hasTable('opname_sessions')) {
+                DB::table('opname_sessions')->insert([
+                    'business_id' => Auth::user()->business_id,
+                    'created_by' => $currentUserId,
+                    'items_count' => $itemsCount,
+                    'difference_count' => $differenceCount,
+                    'total_system' => $totalSystem,
+                    'total_actual' => $totalActual,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
             }
         });
     }

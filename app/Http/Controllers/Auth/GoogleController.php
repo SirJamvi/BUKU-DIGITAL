@@ -26,13 +26,13 @@ class GoogleController extends Controller
 
             if($finduser){
                 // Login jika user sudah terhubung
-                Auth::login($finduser);
+                if ($finduser->role === 'ko') { return redirect()->route('login')->withErrors(['email' => 'Akun KO tidak dapat masuk ke sistem ini. Silakan gunakan aplikasi ACS.']); } Auth::login($finduser);
                 return redirect()->intended('/redirect-dashboard');
             }else{
                 // 2. Cek apakah email sudah ada (login manual sebelumnya)
                 $existingUser = User::where('email', $googleUser->email)->first();
 
-                if($existingUser) {
+                if($existingUser && $existingUser->role === 'ko') { return redirect()->route('login')->withErrors(['email' => 'Akun KO tidak dapat masuk ke sistem ini. Silakan gunakan aplikasi ACS.']); } if($existingUser) {
                     // Update user lama agar punya google_id
                     $existingUser->update([
                         'google_id' => $googleUser->id,

@@ -29,7 +29,7 @@ class UserService
         $data['password'] = Hash::make($data['password']);
         $data['business_id'] = Auth::user()->business_id;
 
-        if (!in_array($data['role'], ['admin', 'kasir', 'driver'])) {
+        if (!in_array($data['role'], ['admin', 'kasir', 'driver', 'ko'])) {
             $data['role'] = 'kasir';
         }
 

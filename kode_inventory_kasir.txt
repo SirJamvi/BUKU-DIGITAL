@@ -1,0 +1,2615 @@
+============================================================
+FILE: app\Models\Product.php
+============================================================
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Traits\BelongsToBusiness;
+
+class Product extends Model
+{
+    use HasFactory, BelongsToBusiness;
+
+    protected $fillable = [
+        'business_id',
+        'name',
+        'category_id',
+        'unit',
+        'base_price',
+        'cost_price',
+        'description',
+        'image_url',
+        'barcode',
+        'sku',
+        'is_active',
+        'is_featured',
+        'sort_order',
+        'created_by',
+        'updated_by',
+    ];
+
+    protected $casts = [
+        'is_active'   => 'boolean',
+        'is_featured' => 'boolean',
+    ];
+
+    public function business(): BelongsTo
+    {
+        return $this->belongsTo(Business::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(ProductCategory::class, 'category_id');
+    }
+
+    public function variants()
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
+    public function inventory()
+    {
+        return $this->hasOne(Inventory::class);
+    }
+
+    public function stockMovements()
+    {
+        return $this->hasMany(StockMovement::class);
+    }
+
+    public function transactionDetails()
+    {
+        return $this->hasMany(TransactionDetail::class);
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * Relasi many-to-many ke Supplier dengan harga khusus per supplier (pivot).
+     */
+    public function suppliers()
+    {
+        return $this->belongsToMany(Supplier::class, 'product_supplier')
+                    ->withPivot('price')
+                    ->withTimestamps();
+    }
+}
+
+
+============================================================
+FILE: app\Models\ProductVariant.php
+============================================================
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+// HAPUS IMPORT BelongsToBusiness
+
+class ProductVariant extends Model
+{
+    use HasFactory; // HAPUS BelongsToBusiness DARI SINI
+
+    protected $table = 'product_variants';
+
+    protected $fillable = [
+        'product_id', // Pastikan product_id ada di sini
+        'variant_name',
+        'variant_value',
+        'price_adjustment',
+        'cost_adjustment',
+        'sku_suffix',
+    ];
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
+}
+
+
+============================================================
+FILE: app\Models\ProductConversion.php
+============================================================
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness;
+
+class ProductConversion extends Model
+{
+    use HasFactory, BelongsToBusiness;
+
+    protected $table = 'product_conversions';
+
+    protected $fillable = [
+        'business_id',
+        'from_product_id',
+        'to_product_id',
+        'quantity_to_break',
+        'yield_amount',
+    ];
+
+    public function fromProduct()
+    {
+        return $this->belongsTo(Product::class, 'from_product_id');
+    }
+
+    public function toProduct()
+    {
+        return $this->belongsTo(Product::class, 'to_product_id');
+    }
+}
+
+
+============================================================
+FILE: app\Models\Inventory.php
+============================================================
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness; 
+
+class Inventory extends Model
+{
+    use HasFactory, BelongsToBusiness;
+
+    protected $table = 'inventory';
+
+    protected $fillable = [
+        'business_id',
+        'product_id',
+        'current_stock',
+        'min_stock',
+        'max_stock',
+        'last_updated',
+        'updated_by',
+    ];
+
+    protected $casts = [
+        'last_updated' => 'datetime',
+    ];
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function updatedBy()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+}
+
+
+============================================================
+FILE: app\Models\StockMovement.php
+============================================================
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness;
+
+class StockMovement extends Model
+{
+   use HasFactory, BelongsToBusiness;
+   
+   protected $table = 'stock_movements';
+
+   protected $fillable = [
+       'business_id',
+       'product_id',
+       'type',
+       'quantity',
+       'reference_id',
+       'notes',
+       'created_by',
+       'occurred_at',
+   ];
+
+   protected $casts = [
+       'occurred_at' => 'datetime',
+   ];
+
+   public function product()
+   {
+       return $this->belongsTo(Product::class);
+   }
+
+   public function createdBy()
+   {
+       return $this->belongsTo(User::class, 'created_by');
+   }
+}
+
+
+============================================================
+FILE: app\Models\Supplier.php
+============================================================
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness;
+
+class Supplier extends Model
+{
+    use HasFactory, BelongsToBusiness;
+
+    protected $fillable = [
+        'business_id',
+        'name',
+        'contact_person',
+        'phone',
+        'email',
+        'address',
+        'payment_terms',
+        'created_by',
+    ];
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Relasi many-to-many ke Product dengan harga khusus per produk (pivot).
+     */
+    public function products()
+    {
+        return $this->belongsToMany(Product::class, 'product_supplier')
+                    ->withPivot('price')
+                    ->withTimestamps();
+    }
+}
+
+
+============================================================
+FILE: app\Http\Controllers\Kasir\InventoryController.php
+============================================================
+<?php
+
+namespace App\Http\Controllers\Kasir;
+
+use App\Http\Controllers\Controller;
+use App\Services\Admin\InventoryService;
+use App\Models\Product;
+use App\Models\Inventory;
+use App\Models\StockMovement;
+use App\Models\Supplier;
+use App\Models\CashFlow;
+use App\Models\PaymentMethod;
+use App\Models\ExpenseCategory;
+use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+
+class InventoryController extends Controller
+{
+    protected InventoryService $inventoryService;
+
+    public function __construct(InventoryService $inventoryService)
+    {
+        $this->inventoryService = $inventoryService;
+    }
+
+    // --- 1. FITUR INPUT STOK DARI SUPPLIER ---
+
+    public function addStockForm(): View
+    {
+        $businessId = Auth::user()->business_id;
+
+        // Ambil supplier beserta produk yang disuplai dan harga khusus (pivot)
+        $suppliers = Supplier::where('business_id', $businessId)->with('products')->get();
+
+        // Ambil metode pembayaran yang aktif
+        $paymentMethods = PaymentMethod::where('business_id', $businessId)
+            ->where('is_active', true)
+            ->get();
+
+        return view('kasir.inventory.add_stock', compact('suppliers', 'paymentMethods'));
+    }
+
+    public function storeStock(Request $request): RedirectResponse
+    {
+        // Validasi input: payment_method hanya wajib jika record_expense dicentang
+        $request->validate([
+            'supplier_id'    => 'required|exists:suppliers,id',
+            'product_id'     => 'required|exists:products,id',
+            'quantity'       => 'required|integer|min:1',
+            'record_expense' => 'nullable|boolean',
+            'payment_method' => 'required_if:record_expense,1|nullable|string',
+            'notes'          => 'nullable|string|max:500',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $businessId = Auth::user()->business_id;
+            $userId = Auth::id();
+
+            // 1. Dapatkan relasi produk & supplier untuk mengecek harga pivot
+            $supplier = Supplier::findOrFail($request->supplier_id);
+            $productPivot = $supplier->products()->where('product_id', $request->product_id)->first();
+
+            if (!$productPivot) {
+                throw new \Exception("Produk ini belum diatur harganya untuk supplier yang dipilih.");
+            }
+
+            // 2. Update Inventory & Catat Stock Movement
+            $inventory = Inventory::firstOrCreate(
+                ['product_id' => $request->product_id, 'business_id' => $businessId],
+                ['current_stock' => 0]
+            );
+            $inventory->increment('current_stock', $request->quantity);
+
+            StockMovement::create([
+                'business_id' => $businessId,
+                'product_id'  => $request->product_id,
+                'type'        => 'in',
+                'quantity'    => $request->quantity,
+                'notes'       => 'Restock dari ' . $supplier->name . '. ' . $request->notes,
+                'created_by'  => $userId,
+            ]);
+
+            $message = 'Stok berhasil ditambahkan (Tanpa mencatat pengeluaran).';
+
+            // 3. Catat ke Expenses (Cash Flow) JIKA toggle dicentang
+            if ($request->has('record_expense') && $request->record_expense == 1) {
+                $unitPrice = $productPivot->pivot->price;
+                $grandTotalExpense = $unitPrice * $request->quantity;
+
+                // Cari atau buat kategori "Refill Es Batu" khusus untuk bisnis ini
+                $expenseCategory = ExpenseCategory::firstOrCreate(
+                    [
+                        'business_id' => $businessId,
+                        'name'        => 'Refill Es Batu',
+                    ],
+                    [
+                        'type'        => 'Operasional',
+                        'is_cogs'     => 1,
+                        'is_active'   => 1,
+                    ]
+                );
+
+                CashFlow::create([
+                    'business_id'    => $businessId,
+                    'type'           => 'expense',
+                    'category_id'    => $expenseCategory->id, 
+                    'amount'         => $grandTotalExpense,
+                    'payment_method' => $request->payment_method,
+                    'description'    => "Pembelian " . $request->quantity . " unit " . $productPivot->name . " dari " . $supplier->name,
+                    'date'           => now()->toDateString(),
+                    'created_by'     => $userId,
+                ]);
+
+                $message = 'Stok berhasil ditambahkan dan biaya otomatis tercatat di Pengeluaran.';
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', $message);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            logger()->error('Kasir error adding stock & expenses: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menambahkan stok: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    // --- 2. FITUR PECAH BALL (DINAMIS) ---
+
+    public function breakUnitForm(): View
+    {
+        // Ambil semua produk yang aktif untuk dijadikan pilihan dinamis
+        $products = Product::where('business_id', Auth::user()->business_id)
+            ->where('is_active', true)
+            ->get();
+
+        return view('kasir.inventory.break_unit', compact('products'));
+    }
+
+    public function processBreakUnit(Request $request): RedirectResponse
+    {
+        // Validasi input dinamis
+        $request->validate([
+            'source_product_id' => 'required|exists:products,id',
+            'source_qty' => 'required|integer|min:1',
+            'targets' => 'required|array|min:1',
+            'targets.*.product_id' => 'required|exists:products,id',
+            'targets.*.qty' => 'required|integer|min:1',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $businessId = Auth::user()->business_id;
+            $userId = Auth::id();
+
+            // 1. Ambil data stok produk asal
+            $sourceInventory = Inventory::where('product_id', $request->source_product_id)
+                ->where('business_id', $businessId)
+                ->first();
+
+            if (!$sourceInventory) {
+                throw new \Exception("Data inventaris untuk produk ini belum ada di sistem.");
+            }
+
+            // Ambil stok saat ini
+            $currentStock = $sourceInventory->current_stock ?? 0;
+
+            // Proteksi: Cek apakah stok mencukupi
+            if ($currentStock < $request->source_qty) {
+                throw new \Exception("Stok produk asal tidak mencukupi. Sisa stok saat ini: " . $currentStock . ". Anda mencoba memecah: " . $request->source_qty);
+            }
+
+            // Kurangi stok utama
+            $sourceInventory->decrement('current_stock', $request->source_qty);
+
+            // Catat pergerakan stok keluar (TANPA occurred_at)
+            StockMovement::create([
+                'business_id' => $businessId,
+                'product_id' => $request->source_product_id,
+                'type' => 'out',
+                'quantity' => $request->source_qty,
+                'notes' => 'Pecah Ball (Bahan Baku)',
+                'created_by' => $userId,
+            ]);
+
+            // 2. Tambahkan stok untuk setiap produk hasil pecahan
+            $totalHasilPecahan = 0;
+            foreach ($request->targets as $target) {
+                // Cari target, jika belum ada buat baris inventaris baru dengan nilai 0
+                $targetInventory = Inventory::firstOrCreate(
+                    ['product_id' => $target['product_id'], 'business_id' => $businessId],
+                    ['current_stock' => 0]
+                );
+
+                // Tambahkan stok hasil
+                $targetInventory->increment('current_stock', $target['qty']);
+
+                // Catat pergerakan stok masuk (TANPA occurred_at)
+                StockMovement::create([
+                    'business_id' => $businessId,
+                    'product_id' => $target['product_id'],
+                    'type' => 'in',
+                    'quantity' => $target['qty'],
+                    'notes' => 'Hasil Pecahan dari Produk ID: ' . $request->source_product_id,
+                    'created_by' => $userId,
+                ]);
+
+                $totalHasilPecahan += $target['qty'];
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', "Berhasil memecah {$request->source_qty} unit menjadi total {$totalHasilPecahan} kemasan baru.");
+        } catch (\Exception $e) {
+            DB::rollBack();
+            logger()->error('Kasir error breaking unit dinamis: ' . $e->getMessage());
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    // --- 3. FITUR STOCK OPNAME ---
+
+    public function stockOpnameForm(): View
+    {
+        // Ambil produk aktif beserta relasi inventory-nya
+        $products = $this->inventoryService->getActiveProducts()->filter(function ($product) {
+            return $product->inventory !== null;
+        });
+
+        return view('kasir.inventory.stock_opname', compact('products'));
+    }
+
+    public function processStockOpname(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'items' => 'required|array',
+            'items.*.inventory_id' => 'required|exists:inventory,id',
+            'items.*.actual_stock' => 'required|integer|min:0',
+            'items.*.notes' => 'nullable|string|max:255',
+        ]);
+
+        try {
+            $this->inventoryService->processStockOpname($request->all());
+            return redirect()->back()->with('success', 'Stock Opname berhasil disimpan. Data stok telah disesuaikan dengan fisik.');
+        } catch (\Exception $e) {
+            logger()->error('Kasir error stock opname: ' . $e->getMessage());
+            return back()->with('error', 'Gagal memproses stock opname: ' . $e->getMessage());
+        }
+    }
+}
+
+
+============================================================
+FILE: app\Services\Admin\InventoryService.php
+============================================================
+<?php
+
+namespace App\Services\Admin;
+
+use App\Models\Inventory;
+use App\Models\Product;
+use App\Models\StockMovement;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+
+class InventoryService
+{
+    /**
+     * Mendapatkan data inventory dengan paginasi.
+     *
+     * @param int $perPage
+     * @return LengthAwarePaginator
+     */
+    public function getInventoryWithPagination(int $perPage = 15): LengthAwarePaginator
+    {
+        return Inventory::with('product.category')->latest('updated_at')->paginate($perPage);
+    }
+
+    /**
+     * Mendapatkan riwayat pergerakan stok dengan paginasi.
+     *
+     * @param int $perPage
+     * @return LengthAwarePaginator
+     */
+    public function getStockMovementsWithPagination(int $perPage = 25): LengthAwarePaginator
+    {
+        return StockMovement::with('product', 'createdBy')->latest()->paginate($perPage);
+    }
+
+    /**
+     * Mengambil semua produk aktif untuk dropdown.
+     */
+    public function getActiveProducts()
+    {
+        return Product::where('is_active', true)->orderBy('name')->get();
+    }
+
+    /**
+     * Memproses penambahan stok baru.
+     */
+    public function addStock(array $data): void
+    {
+        DB::transaction(function () use ($data) {
+            $product = Product::with('inventory')->findOrFail($data['product_id']);
+
+            // Tambah stok di inventory
+            $product->inventory->increment('current_stock', $data['quantity']);
+
+            // Catat pergerakan stok sebagai 'in' (masuk)
+            StockMovement::create([
+                'business_id' => Auth::user()->business_id,
+                'product_id' => $data['product_id'],
+                'type' => 'in',
+                'quantity' => $data['quantity'],
+                'notes' => $data['notes'] ?? 'Stok masuk manual oleh admin.',
+                'created_by' => Auth::id(),
+            ]);
+        });
+    }
+
+    /**
+     * Memproses data dari stock opname.
+     *
+     * @param array $data
+     * @return void
+     */
+    public function processStockOpname(array $data): void
+    {
+        DB::transaction(function () use ($data) {
+            $currentUserId = Auth::id();
+            
+            foreach ($data['items'] as $item) {
+                $inventory = Inventory::find($item['inventory_id']);
+                if (!$inventory) continue;
+
+                $difference = $item['actual_stock'] - $inventory->current_stock;
+
+                if ($difference !== 0) {
+                    $inventory->update(['current_stock' => $item['actual_stock']]);
+
+                    StockMovement::create([
+                        'business_id' => $inventory->business_id, // <--- TAMBAHKAN BARIS INI
+                        'product_id' => $inventory->product_id,
+                        'type' => 'adjustment',
+                        'quantity' => $difference,
+                        'notes' => 'Stock Opname: ' . ($item['notes'] ?? 'Tutup Shift / Penyesuaian fisik.'),
+                        'created_by' => $currentUserId,
+                    ]);
+                }
+            }
+        });
+    }
+
+
+    /**
+     * Memecah produk besar (Ball) menjadi produk eceran.
+     * Khusus untuk bisnis Es Kristal.
+     */
+    public function breakUnit(int $fromProductId, int $toProductId, int $quantityToBreak, int $yieldAmount): void
+    {
+        DB::transaction(function () use ($fromProductId, $toProductId, $quantityToBreak, $yieldAmount) {
+            $fromInventory = $this->getInventoryByProductId($fromProductId);
+            $toInventory = $this->getInventoryByProductId($toProductId);
+
+            if (!$fromInventory || $fromInventory->current_stock < $quantityToBreak) {
+                throw new \Exception("Stok karung tidak mencukupi untuk dipecah.");
+            }
+            if (!$toInventory) {
+                throw new \Exception("Inventory untuk produk eceran belum dibuat.");
+            }
+
+            // 1. Kurangi stok karung besar (Gunakan type 'out' agar sesuai dengan enum database Anda)
+            $this->updateStock(
+                $fromInventory->id,
+                $quantityToBreak,
+                'out',
+                "Pecah ball ke eceran (menjadi {$yieldAmount} pcs)"
+            );
+
+            // 2. Tambah stok eceran (Gunakan type 'in')
+            $this->updateStock(
+                $toInventory->id,
+                $yieldAmount,
+                'in',
+                "Hasil pecah ball dari karung " . $fromInventory->product->name
+            );
+        });
+    }
+    /**
+     * Mendapatkan inventory berdasarkan product ID.
+     *
+     * @param int $productId
+     * @return Inventory|null
+     */
+    public function getInventoryByProductId(int $productId): ?Inventory
+    {
+        return Inventory::where('product_id', $productId)->with('product')->first();
+    }
+
+    /**
+     * Memperbarui stok inventory.
+     *
+     * @param int $inventoryId
+     * @param int $quantity
+     * @param string $type
+     * @param string|null $notes
+     * @return void
+     */
+    public function updateStock(int $inventoryId, int $quantity, string $type, ?string $notes = null): void
+    {
+        DB::transaction(function () use ($inventoryId, $quantity, $type, $notes) {
+            $inventory = Inventory::findOrFail($inventoryId);
+
+            // Hitung stok baru berdasarkan tipe
+            $newStock = match ($type) {
+                'in', 'purchase', 'return' => $inventory->current_stock + $quantity,
+                'out', 'sale', 'damaged' => $inventory->current_stock - $quantity,
+                'adjustment' => $quantity,
+                default => $inventory->current_stock
+            };
+
+            // Update stok
+            $inventory->update(['current_stock' => $newStock]);
+
+            // Catat pergerakan stok
+            StockMovement::create([
+                'business_id' => $inventory->business_id, // <--- TAMBAHKAN BARIS INI
+                'product_id' => $inventory->product_id,
+                'type' => $type,
+                'quantity' => $type === 'adjustment' ? ($quantity - $inventory->current_stock) : $quantity,
+                'notes' => $notes,
+                'created_by' => Auth::id(),
+            ]);
+        });
+    }
+
+    /**
+     * Mendapatkan produk dengan stok rendah.
+     *
+     * @param int $threshold
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function getLowStockProducts(int $threshold = 10)
+    {
+        return Inventory::with('product.category')
+            ->where('current_stock', '<=', $threshold)
+            ->get();
+    }
+
+    /**
+     * Mendapatkan statistik inventory.
+     *
+     * @return array
+     */
+    public function getInventoryStats(): array
+    {
+        $totalProducts = Inventory::count();
+        $totalStock = Inventory::sum('current_stock');
+        $lowStockCount = Inventory::where('current_stock', '<=', 10)->count();
+        $outOfStockCount = Inventory::where('current_stock', '=', 0)->count();
+
+        return [
+            'total_products' => $totalProducts,
+            'total_stock' => $totalStock,
+            'low_stock_count' => $lowStockCount,
+            'out_of_stock_count' => $outOfStockCount,
+        ];
+    }
+
+    /**
+     * Mencari inventory berdasarkan kata kunci.
+     *
+     * @param string $keyword
+     * @param int $perPage
+     * @return LengthAwarePaginator
+     */
+    public function searchInventory(string $keyword, int $perPage = 15): LengthAwarePaginator
+    {
+        return Inventory::with('product.category')
+            ->whereHas('product', function ($query) use ($keyword) {
+                $query->where('name', 'like', "%{$keyword}%")
+                    ->orWhere('sku', 'like', "%{$keyword}%");
+            })
+            ->latest('updated_at')
+            ->paginate($perPage);
+    }
+}
+
+
+============================================================
+FILE: app\Services\Admin\SupplierService.php
+============================================================
+<?php
+
+namespace App\Services\Admin;
+
+use App\Models\Supplier;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Auth;
+
+class SupplierService
+{
+    public function getAllSuppliersWithPagination(int $perPage = 15): LengthAwarePaginator
+    {
+        return Supplier::where('business_id', Auth::user()->business_id)->latest()->paginate($perPage);
+    }
+
+    public function createSupplier(array $data): Supplier
+    {
+        $data['business_id'] = Auth::user()->business_id;
+        $data['created_by'] = Auth::id();
+        return Supplier::create($data);
+    }
+    
+    public function updateSupplier(Supplier $supplier, array $data): Supplier
+    {
+        $supplier->update($data);
+        return $supplier;
+    }
+
+    public function deleteSupplier(Supplier $supplier): void
+    {
+        // Tambahkan validasi di sini jika supplier terhubung dengan data lain
+        // if ($supplier->purchaseOrders()->exists()) {
+        //     throw new \Exception("Supplier tidak dapat dihapus karena memiliki riwayat pesanan.");
+        // }
+        $supplier->delete();
+    }
+}
+
+
+============================================================
+FILE: app\Services\Kasir\InventoryService.php
+============================================================
+[FILE TIDAK DITEMUKAN]
+
+
+============================================================
+FILE: app\Services\Kasir\SupplierService.php
+============================================================
+[FILE TIDAK DITEMUKAN]
+
+
+============================================================
+FILE: resources\views\kasir\stock_opname.blade.php "@extends('kasir.layouts.app')
+
+@section('title', 'Tutup Shift - Stock Opname')
+
+@section('content')
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="font-weight-bold text-dark">Laporan Tutup Shift (Stock Opname)</h2>
+                <p class="text-muted">Hitung dan masukkan sisa fisik es di kulkas. Sistem akan menyesuaikan selisihnya secara otomatis.</p>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-primary fs-6 p-2"><i class="far fa-clock me-1"></i> {{ now()->format('d M Y, H:i') }}</span>
+            </div>
+        </div>
+    </div>
+
+    @if(session('success'))
+    <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm" role="alert">
+        <i class="fas fa-check-circle me-2"></i> {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    @endif
+
+    @if(session('error'))
+    <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm" role="alert">
+        <i class="fas fa-exclamation-triangle me-2"></i> {{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    @endif
+
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body p-4">
+            <form action="{{ route('kasir.inventory.process_stock_opname') }}" method="POST" id="opnameForm">
+                @csrf
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Produk</th>
+                                <th class="text-center">Stok di Sistem</th>
+                                <th class="text-center" width="200">Fisik di Kulkas Saat Ini</th>
+                                <th>Catatan / Alasan Selisih</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($products as $index => $product)
+                            <tr>
+                                <td>
+                                    <h6 class="mb-0 fw-bold">{{ $product->name }}</h6>
+                                    <small class="text-muted">{{ $product->unit }}</small>
+                                    <input type="hidden" name="items[{{ $index }}][inventory_id]" value="{{ $product->inventory->id }}">
+                                    <input type="hidden" name="items[{{ $index }}][sys_stock]" value="{{ $product->inventory->current_stock }}">
+                                </td>
+
+                                <td class="text-center">
+                                    <span class="badge bg-secondary fs-6">{{ $product->inventory->current_stock }}</span>
+                                    <input type="hidden" id="sys_stock_{{ $index }}" value="{{ $product->inventory->current_stock }}">
+                                </td>
+
+                                <td>
+                                    <div class="input-group">
+                                        <input type="number"
+                                            class="form-control form-control-lg text-center fw-bold actual-stock-input"
+                                            name="items[{{ $index }}][actual_stock]"
+                                            value="{{ $product->inventory->current_stock }}"
+                                            min="0" required
+                                            data-index="{{ $index }}">
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <input type="text" id="notes_{{ $index }}" class="form-control" name="items[{{ $index }}][notes]" placeholder="Opsional (Misal: 1 ball cair)">
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="alert alert-info mt-3 border-0">
+                    <i class="fas fa-info-circle me-2"></i> <strong>SOP Kasir:</strong> Jika angka di sistem dan fisik berbeda, pastikan Anda menuliskan catatan (misalnya "cair", "pecah", atau "lupa input terima barang").
+                </div>
+
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg px-5 rounded-3 fw-bold" onclick="return confirm('Apakah Anda yakin data fisik yang dimasukkan sudah benar?')">
+                        <i class="fas fa-save me-2"></i> Simpan Laporan Tutup Shift
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const inputs = document.querySelectorAll('.actual-stock-input');
+
+        inputs.forEach(input => {
+            input.addEventListener('input', function() {
+                const index = this.getAttribute('data-index');
+                const sysStock = parseInt(document.getElementById(`sys_stock_${index}`).value);
+                const actualStock = parseInt(this.value);
+                const notesInput = document.getElementById(`notes_${index}`);
+                const tr = this.closest('tr');
+
+                if (sysStock !== actualStock && !isNaN(actualStock)) {
+                    // Jika ada selisih, baris jadi kuning dan catatan WAJIB diisi
+                    tr.classList.add('table-warning');
+                    notesInput.required = true;
+                    notesInput.placeholder = "WAJIB DIISI! (Misal: minus 3 ball belum tercatat)";
+                    notesInput.classList.add('is-invalid'); // Tambah efek merah bootstrap
+                } else {
+                    // Jika sama, kembali normal
+                    tr.classList.remove('table-warning');
+                    notesInput.required = false;
+                    notesInput.placeholder = "Opsional (Misal: 1 ball cair)";
+                    notesInput.classList.remove('is-invalid');
+                }
+            });
+        });
+    });
+</script>
+@endsection"
+============================================================
+
+
+
+
+untuk database nya "-- phpMyAdmin SQL Dump
+-- version 5.2.3
+-- https://www.phpmyadmin.net/
+--
+-- Host: localhost:3306
+-- Waktu pembuatan: 06 Okt 2026 pada 08.27
+-- Versi server: 11.4.13-MariaDB
+-- Versi PHP: 8.4.25
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+START TRANSACTION;
+SET time_zone = "+00:00";
+
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
+
+--
+-- Basis data: `resdigaz_bukudiig`
+--
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `businesses`
+--
+
+CREATE TABLE `businesses` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `name` varchar(191) NOT NULL,
+  `owner_id` bigint(20) UNSIGNED NOT NULL,
+  `address` text DEFAULT NULL,
+  `phone` varchar(191) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `cache`
+--
+
+CREATE TABLE `cache` (
+  `key` varchar(191) NOT NULL,
+  `value` mediumtext NOT NULL,
+  `expiration` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `cache_locks`
+--
+
+CREATE TABLE `cache_locks` (
+  `key` varchar(191) NOT NULL,
+  `owner` varchar(191) NOT NULL,
+  `expiration` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `capital_tracking`
+--
+
+CREATE TABLE `capital_tracking` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED NOT NULL,
+  `initial_capital` decimal(15,2) NOT NULL,
+  `additional_capital` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `total_returned` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `status` enum('active','returned','partial') NOT NULL DEFAULT 'active',
+  `recorded_at` timestamp NULL DEFAULT NULL,
+  `updated_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `cash_flow`
+--
+
+CREATE TABLE `cash_flow` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `type` enum('income','expense') NOT NULL,
+  `category_id` bigint(20) UNSIGNED NOT NULL,
+  `amount` decimal(15,2) NOT NULL,
+  `payment_method` varchar(191) NOT NULL DEFAULT 'cash',
+  `description` text DEFAULT NULL,
+  `date` date NOT NULL,
+  `reference_id` varchar(191) DEFAULT NULL,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `cash_flow_backup_20260917`
+--
+
+CREATE TABLE `cash_flow_backup_20260917` (
+  `id` bigint(20) UNSIGNED NOT NULL DEFAULT 0,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `type` enum('income','expense') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `category_id` bigint(20) UNSIGNED NOT NULL,
+  `amount` decimal(15,2) NOT NULL,
+  `payment_method` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'cash',
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `date` date NOT NULL,
+  `reference_id` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `customers`
+--
+
+CREATE TABLE `customers` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `name` varchar(191) NOT NULL,
+  `phone` varchar(191) DEFAULT NULL,
+  `email` varchar(191) DEFAULT NULL,
+  `address` text DEFAULT NULL,
+  `join_date` date NOT NULL,
+  `total_purchases` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `loyalty_points` int(11) NOT NULL DEFAULT 0,
+  `status` enum('active','inactive') NOT NULL DEFAULT 'active',
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `customer_segments`
+--
+
+CREATE TABLE `customer_segments` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `name` varchar(191) NOT NULL,
+  `criteria` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `description` text DEFAULT NULL,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `daily_delivery_targets`
+--
+
+CREATE TABLE `daily_delivery_targets` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `day_name` varchar(255) NOT NULL,
+  `target_quantity` int(11) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `delivery_logs`
+--
+
+CREATE TABLE `delivery_logs` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `driver_id` bigint(20) UNSIGNED NOT NULL,
+  `customer_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `butterfly_customer_name` varchar(255) DEFAULT NULL,
+  `qty_20kg` int(11) NOT NULL DEFAULT 0,
+  `qty_b_half` int(11) NOT NULL DEFAULT 0,
+  `qty_half` int(11) NOT NULL DEFAULT 0,
+  `total_ball` int(11) NOT NULL DEFAULT 0,
+  `payment_method` enum('Cash','QRIS','Dana','Transfer Bank') NOT NULL,
+  `payment_note` varchar(255) DEFAULT NULL,
+  `proof_image_path` text NOT NULL,
+  `latitude` varchar(255) DEFAULT NULL,
+  `longitude` varchar(255) DEFAULT NULL,
+  `status` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  `approved_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `expense_categories`
+--
+
+CREATE TABLE `expense_categories` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `name` varchar(191) NOT NULL,
+  `type` varchar(191) NOT NULL,
+  `is_cogs` tinyint(1) DEFAULT 0,
+  `description` text DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `failed_jobs`
+--
+
+CREATE TABLE `failed_jobs` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `uuid` varchar(191) NOT NULL,
+  `connection` text NOT NULL,
+  `queue` text NOT NULL,
+  `payload` longtext NOT NULL,
+  `exception` longtext NOT NULL,
+  `failed_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `fund_allocation_history`
+--
+
+CREATE TABLE `fund_allocation_history` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED NOT NULL,
+  `period_month` int(11) NOT NULL COMMENT 'Bulan periode (1-12)',
+  `period_year` int(11) NOT NULL COMMENT 'Tahun periode',
+  `net_profit` decimal(15,2) NOT NULL COMMENT 'Keuntungan bersih periode',
+  `allocated_amount` decimal(15,2) NOT NULL COMMENT 'Jumlah yang dialokasikan',
+  `allocation_category` varchar(191) DEFAULT NULL,
+  `allocation_percentage` decimal(5,2) NOT NULL COMMENT 'Persentase alokasi',
+  `allocation_name` varchar(100) NOT NULL COMMENT 'Nama alokasi',
+  `is_manual` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Apakah alokasi manual',
+  `notes` text DEFAULT NULL COMMENT 'Catatan alokasi',
+  `status` enum('pending','allocated','used','cancelled') NOT NULL DEFAULT 'allocated' COMMENT 'Status alokasi',
+  `owner_profit_id` bigint(20) UNSIGNED DEFAULT NULL COMMENT 'Relasi ke owner_profits',
+  `fund_allocation_setting_id` bigint(20) UNSIGNED DEFAULT NULL COMMENT 'Relasi ke fund_allocation_settings',
+  `created_by` bigint(20) UNSIGNED NOT NULL COMMENT 'Dibuat oleh user ID',
+  `allocated_at` timestamp NULL DEFAULT NULL COMMENT 'Waktu alokasi',
+  `used_at` timestamp NULL DEFAULT NULL COMMENT 'Waktu penggunaan',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `fund_allocation_settings`
+--
+
+CREATE TABLE `fund_allocation_settings` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `allocation_name` varchar(100) NOT NULL COMMENT 'Nama alokasi',
+  `percentage` decimal(5,2) NOT NULL COMMENT 'Persentase alokasi (0-100)',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Status aktif',
+  `category` varchar(191) DEFAULT NULL,
+  `description` text DEFAULT NULL COMMENT 'Deskripsi alokasi',
+  `sort_order` int(11) NOT NULL DEFAULT 0 COMMENT 'Urutan tampilan',
+  `is_default` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Apakah pengaturan default',
+  `min_percentage` decimal(5,2) NOT NULL DEFAULT 0.00 COMMENT 'Minimum persentase',
+  `max_percentage` decimal(5,2) NOT NULL DEFAULT 100.00 COMMENT 'Maximum persentase',
+  `is_mandatory` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Apakah alokasi wajib',
+  `created_by` bigint(20) UNSIGNED NOT NULL COMMENT 'Dibuat oleh user ID',
+  `updated_by` bigint(20) UNSIGNED DEFAULT NULL COMMENT 'Diupdate oleh user ID',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `inventory`
+--
+
+CREATE TABLE `inventory` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `product_id` bigint(20) UNSIGNED NOT NULL,
+  `current_stock` int(11) NOT NULL DEFAULT 0,
+  `min_stock` int(11) NOT NULL DEFAULT 0,
+  `max_stock` int(11) NOT NULL DEFAULT 0,
+  `last_updated` timestamp NULL DEFAULT NULL,
+  `updated_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `jobs`
+--
+
+CREATE TABLE `jobs` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `queue` varchar(191) NOT NULL,
+  `payload` longtext NOT NULL,
+  `attempts` tinyint(3) UNSIGNED NOT NULL,
+  `reserved_at` int(10) UNSIGNED DEFAULT NULL,
+  `available_at` int(10) UNSIGNED NOT NULL,
+  `created_at` int(10) UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `job_batches`
+--
+
+CREATE TABLE `job_batches` (
+  `id` varchar(191) NOT NULL,
+  `name` varchar(191) NOT NULL,
+  `total_jobs` int(11) NOT NULL,
+  `pending_jobs` int(11) NOT NULL,
+  `failed_jobs` int(11) NOT NULL,
+  `failed_job_ids` longtext NOT NULL,
+  `options` mediumtext DEFAULT NULL,
+  `cancelled_at` int(11) DEFAULT NULL,
+  `created_at` int(11) NOT NULL,
+  `finished_at` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `migrations`
+--
+
+CREATE TABLE `migrations` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `migration` varchar(191) NOT NULL,
+  `batch` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `missions`
+--
+
+CREATE TABLE `missions` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `type` enum('delivery_volume','attendance_count','on_time_count') NOT NULL,
+  `reward_amount` decimal(15,2) NOT NULL,
+  `start_date` date NOT NULL,
+  `end_date` date NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `mission_winners`
+--
+
+CREATE TABLE `mission_winners` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `mission_id` bigint(20) UNSIGNED NOT NULL,
+  `driver_id` bigint(20) UNSIGNED NOT NULL,
+  `amount_won` decimal(15,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `notifications`
+--
+
+CREATE TABLE `notifications` (
+  `id` char(36) NOT NULL,
+  `type` varchar(191) NOT NULL,
+  `notifiable_type` varchar(191) NOT NULL,
+  `notifiable_id` bigint(20) UNSIGNED NOT NULL,
+  `data` text NOT NULL,
+  `read_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `owner_expenses`
+--
+
+CREATE TABLE `owner_expenses` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `type` enum('salary','personal','business','investment','emergency','expansion','other') NOT NULL COMMENT 'Jenis pengeluaran',
+  `amount` decimal(15,2) NOT NULL COMMENT 'Jumlah pengeluaran',
+  `title` varchar(200) NOT NULL COMMENT 'Judul pengeluaran',
+  `description` text DEFAULT NULL COMMENT 'Deskripsi pengeluaran',
+  `date` date NOT NULL COMMENT 'Tanggal pengeluaran',
+  `category` enum('operational','personal','investment','emergency','expansion','tax','other') NOT NULL COMMENT 'Kategori pengeluaran',
+  `payment_method` enum('cash','transfer','card','other') NOT NULL DEFAULT 'cash' COMMENT 'Metode pembayaran',
+  `reference_number` varchar(100) DEFAULT NULL COMMENT 'Nomor referensi',
+  `status` enum('pending','approved','paid','cancelled') NOT NULL DEFAULT 'pending' COMMENT 'Status pengeluaran',
+  `fund_allocation_history_id` bigint(20) UNSIGNED DEFAULT NULL COMMENT 'Relasi ke fund_allocation_history',
+  `receipt_file` varchar(500) DEFAULT NULL COMMENT 'File bukti pembayaran',
+  `is_recurring` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Apakah pengeluaran berulang',
+  `recurring_type` enum('daily','weekly','monthly','yearly') DEFAULT NULL COMMENT 'Jenis pengulangan',
+  `recurring_interval` int(11) NOT NULL DEFAULT 1 COMMENT 'Interval pengulangan',
+  `recurring_end_date` date DEFAULT NULL COMMENT 'Tanggal berakhir pengulangan',
+  `is_tax_deductible` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Apakah dapat dikurangkan pajak',
+  `notes` text DEFAULT NULL COMMENT 'Catatan tambahan',
+  `approved_by` bigint(20) UNSIGNED DEFAULT NULL COMMENT 'Disetujui oleh user ID',
+  `approved_at` timestamp NULL DEFAULT NULL COMMENT 'Waktu persetujuan',
+  `created_by` bigint(20) UNSIGNED NOT NULL COMMENT 'Dibuat oleh user ID',
+  `updated_by` bigint(20) UNSIGNED DEFAULT NULL COMMENT 'Diupdate oleh user ID',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `owner_profits`
+--
+
+CREATE TABLE `owner_profits` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED NOT NULL,
+  `period_month` int(11) NOT NULL COMMENT 'Bulan periode (1-12)',
+  `period_year` int(11) NOT NULL COMMENT 'Tahun periode',
+  `monthly_income` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `gross_profit` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `monthly_expense` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `net_profit` decimal(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Keuntungan bersih',
+  `owner_salary` decimal(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Gaji owner',
+  `withdrawal_amount` decimal(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Jumlah penarikan',
+  `reinvestment` decimal(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Reinvestasi bisnis',
+  `allocated_funds` decimal(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Total dana yang dialokasikan',
+  `allocation_settings` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Pengaturan alokasi dalam format JSON',
+  `auto_allocated` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Apakah alokasi otomatis',
+  `manual_override` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Apakah ada override manual',
+  `notes` text DEFAULT NULL COMMENT 'Catatan tambahan',
+  `status` enum('pending','allocated','completed') NOT NULL DEFAULT 'pending' COMMENT 'Status alokasi',
+  `recorded_at` timestamp NULL DEFAULT NULL,
+  `allocated_at` timestamp NULL DEFAULT NULL COMMENT 'Waktu alokasi',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payments`
+--
+
+CREATE TABLE `payments` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `transaction_id` bigint(20) UNSIGNED NOT NULL,
+  `amount` decimal(15,2) NOT NULL,
+  `payment_method` varchar(191) NOT NULL,
+  `status` varchar(191) NOT NULL DEFAULT 'pending',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payment_methods`
+--
+
+CREATE TABLE `payment_methods` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED NOT NULL,
+  `name` varchar(191) NOT NULL,
+  `slug` varchar(191) NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `permissions`
+--
+
+CREATE TABLE `permissions` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `name` varchar(191) NOT NULL,
+  `display_name` varchar(191) NOT NULL,
+  `description` text DEFAULT NULL,
+  `module` varchar(191) NOT NULL DEFAULT 'general',
+  `action` varchar(191) NOT NULL DEFAULT 'read',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `personal_access_tokens`
+--
+
+CREATE TABLE `personal_access_tokens` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `tokenable_type` varchar(191) NOT NULL,
+  `tokenable_id` bigint(20) UNSIGNED NOT NULL,
+  `name` varchar(191) NOT NULL,
+  `token` varchar(64) NOT NULL,
+  `abilities` text DEFAULT NULL,
+  `last_used_at` timestamp NULL DEFAULT NULL,
+  `expires_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `products`
+--
+
+CREATE TABLE `products` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `name` varchar(191) NOT NULL,
+  `category_id` bigint(20) UNSIGNED NOT NULL,
+  `unit` varchar(191) NOT NULL,
+  `unit_type` varchar(191) DEFAULT NULL COMMENT 'contoh: ball_20kg, ball_10kg, eceran_5rb',
+  `base_price` decimal(15,2) NOT NULL,
+  `cost_price` decimal(15,2) NOT NULL,
+  `description` text DEFAULT NULL,
+  `image_url` varchar(191) DEFAULT NULL,
+  `barcode` varchar(191) DEFAULT NULL,
+  `sku` varchar(191) NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `is_featured` tinyint(1) NOT NULL DEFAULT 0,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `updated_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `product_categories`
+--
+
+CREATE TABLE `product_categories` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `name` varchar(191) NOT NULL,
+  `description` text DEFAULT NULL,
+  `parent_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `product_conversions`
+--
+
+CREATE TABLE `product_conversions` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED NOT NULL,
+  `from_product_id` bigint(20) UNSIGNED NOT NULL,
+  `to_product_id` bigint(20) UNSIGNED NOT NULL,
+  `quantity_to_break` int(11) NOT NULL DEFAULT 1,
+  `yield_amount` int(11) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `product_supplier`
+--
+
+CREATE TABLE `product_supplier` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `product_id` bigint(20) UNSIGNED NOT NULL,
+  `supplier_id` bigint(20) UNSIGNED NOT NULL,
+  `price` decimal(15,2) NOT NULL COMMENT 'Harga modal spesifik dari supplier ini',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `product_variants`
+--
+
+CREATE TABLE `product_variants` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `product_id` bigint(20) UNSIGNED NOT NULL,
+  `variant_name` varchar(191) NOT NULL,
+  `variant_value` varchar(191) NOT NULL,
+  `price_adjustment` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `cost_adjustment` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `sku_suffix` varchar(191) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `roles`
+--
+
+CREATE TABLE `roles` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `name` varchar(191) NOT NULL,
+  `display_name` varchar(191) NOT NULL,
+  `description` text DEFAULT NULL,
+  `permissions` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `sessions`
+--
+
+CREATE TABLE `sessions` (
+  `id` varchar(191) NOT NULL,
+  `user_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `user_agent` text DEFAULT NULL,
+  `payload` longtext NOT NULL,
+  `last_activity` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `stock_movements`
+--
+
+CREATE TABLE `stock_movements` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED NOT NULL,
+  `product_id` bigint(20) UNSIGNED NOT NULL,
+  `type` enum('in','out','adjustment','waste') NOT NULL,
+  `quantity` int(11) NOT NULL,
+  `reference_id` varchar(191) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `suppliers`
+--
+
+CREATE TABLE `suppliers` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `name` varchar(191) NOT NULL,
+  `contact_person` varchar(191) DEFAULT NULL,
+  `phone` varchar(191) DEFAULT NULL,
+  `email` varchar(191) DEFAULT NULL,
+  `address` text DEFAULT NULL,
+  `payment_terms` varchar(191) DEFAULT NULL,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `transactions`
+--
+
+CREATE TABLE `transactions` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `type` enum('sale','purchase','return') NOT NULL,
+  `customer_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `driver_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `total_amount` decimal(15,2) NOT NULL,
+  `payment_method` varchar(191) NOT NULL,
+  `payment_status` enum('pending','paid','failed') NOT NULL DEFAULT 'pending',
+  `delivery_status` enum('pending','delivering','delivered') NOT NULL DEFAULT 'pending',
+  `status` enum('pending','completed','cancelled') NOT NULL DEFAULT 'pending',
+  `order_status` varchar(50) DEFAULT NULL COMMENT 'Status khusus delivery',
+  `claimed_by_driver_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `claimed_at` timestamp NULL DEFAULT NULL,
+  `delivered_at` timestamp NULL DEFAULT NULL,
+  `transaction_date` timestamp NOT NULL,
+  `scheduled_at` timestamp NULL DEFAULT NULL COMMENT 'Waktu pengiriman dijadwalkan oleh customer',
+  `alert_sent_at` timestamp NULL DEFAULT NULL COMMENT 'Waktu FCM alert terakhir dikirim ke driver',
+  `notes` text DEFAULT NULL,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `transaction_details`
+--
+
+CREATE TABLE `transaction_details` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `transaction_id` bigint(20) UNSIGNED NOT NULL,
+  `product_id` bigint(20) UNSIGNED NOT NULL,
+  `quantity` int(11) NOT NULL,
+  `unit_price` decimal(15,2) NOT NULL,
+  `total_price` decimal(15,2) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `users`
+--
+
+CREATE TABLE `users` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `name` varchar(191) NOT NULL,
+  `slug` varchar(191) DEFAULT NULL,
+  `username` varchar(191) DEFAULT NULL,
+  `email` varchar(191) NOT NULL,
+  `google_id` varchar(191) DEFAULT NULL,
+  `avatar` varchar(191) DEFAULT NULL,
+  `email_verified_at` timestamp NULL DEFAULT NULL,
+  `password` varchar(191) DEFAULT NULL,
+  `phone` varchar(191) DEFAULT NULL,
+  `fcm_token` varchar(255) DEFAULT NULL COMMENT 'Firebase Cloud Messaging token untuk push notification',
+  `address` text DEFAULT NULL,
+  `role` enum('admin','kasir','driver') NOT NULL DEFAULT 'kasir',
+  `permissions` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `created_by` bigint(20) UNSIGNED DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `transaction_limit` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `remember_token` varchar(100) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `shift_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `off_days` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`off_days`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `user_activity_logs`
+--
+
+CREATE TABLE `user_activity_logs` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `user_id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `action` varchar(191) NOT NULL,
+  `module` varchar(191) NOT NULL,
+  `details` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `user_permissions`
+--
+
+CREATE TABLE `user_permissions` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `user_id` bigint(20) UNSIGNED NOT NULL,
+  `module` varchar(191) NOT NULL,
+  `action` varchar(191) NOT NULL,
+  `is_allowed` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `user_roles`
+--
+
+CREATE TABLE `user_roles` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `user_id` bigint(20) UNSIGNED NOT NULL,
+  `role_id` bigint(20) UNSIGNED NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `user_sessions`
+--
+
+CREATE TABLE `user_sessions` (
+  `id` bigint(20) UNSIGNED NOT NULL,
+  `user_id` bigint(20) UNSIGNED NOT NULL,
+  `business_id` bigint(20) UNSIGNED DEFAULT NULL,
+  `role` enum('admin','kasir') NOT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `last_activity` timestamp NOT NULL,
+  `login_time` timestamp NOT NULL,
+  `logout_time` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Indeks untuk tabel yang dibuang
+--
+
+--
+-- Indeks untuk tabel `businesses`
+--
+ALTER TABLE `businesses`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `businesses_owner_id_foreign` (`owner_id`);
+
+--
+-- Indeks untuk tabel `cache`
+--
+ALTER TABLE `cache`
+  ADD PRIMARY KEY (`key`);
+
+--
+-- Indeks untuk tabel `cache_locks`
+--
+ALTER TABLE `cache_locks`
+  ADD PRIMARY KEY (`key`);
+
+--
+-- Indeks untuk tabel `capital_tracking`
+--
+ALTER TABLE `capital_tracking`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `capital_tracking_updated_by_foreign` (`updated_by`),
+  ADD KEY `capital_tracking_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `cash_flow`
+--
+ALTER TABLE `cash_flow`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `cash_flow_category_id_foreign` (`category_id`),
+  ADD KEY `cash_flow_created_by_foreign` (`created_by`),
+  ADD KEY `cash_flow_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `customers`
+--
+ALTER TABLE `customers`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `customers_created_by_foreign` (`created_by`),
+  ADD KEY `customers_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `customer_segments`
+--
+ALTER TABLE `customer_segments`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `customer_segments_created_by_foreign` (`created_by`);
+
+--
+-- Indeks untuk tabel `daily_delivery_targets`
+--
+ALTER TABLE `daily_delivery_targets`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `daily_delivery_targets_day_name_unique` (`day_name`);
+
+--
+-- Indeks untuk tabel `delivery_logs`
+--
+ALTER TABLE `delivery_logs`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `expense_categories`
+--
+ALTER TABLE `expense_categories`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `expense_categories_created_by_foreign` (`created_by`),
+  ADD KEY `expense_categories_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `failed_jobs`
+--
+ALTER TABLE `failed_jobs`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `failed_jobs_uuid_unique` (`uuid`);
+
+--
+-- Indeks untuk tabel `fund_allocation_history`
+--
+ALTER TABLE `fund_allocation_history`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fund_allocation_history_period_month_period_year_index` (`period_month`,`period_year`),
+  ADD KEY `fund_allocation_history_allocation_category_index` (`allocation_category`),
+  ADD KEY `fund_allocation_history_status_index` (`status`),
+  ADD KEY `fund_allocation_history_is_manual_index` (`is_manual`),
+  ADD KEY `fund_allocation_history_allocated_at_index` (`allocated_at`),
+  ADD KEY `fund_allocation_history_used_at_index` (`used_at`),
+  ADD KEY `fund_allocation_history_owner_profit_id_index` (`owner_profit_id`),
+  ADD KEY `fund_allocation_history_fund_allocation_setting_id_index` (`fund_allocation_setting_id`),
+  ADD KEY `fund_allocation_history_created_by_index` (`created_by`),
+  ADD KEY `idx_period_category` (`period_month`,`period_year`,`allocation_category`),
+  ADD KEY `fund_allocation_history_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `fund_allocation_settings`
+--
+ALTER TABLE `fund_allocation_settings`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `fund_allocation_settings_business_id_allocation_name_unique` (`business_id`,`allocation_name`),
+  ADD KEY `fund_allocation_settings_updated_by_foreign` (`updated_by`),
+  ADD KEY `fund_allocation_settings_is_active_index` (`is_active`),
+  ADD KEY `fund_allocation_settings_category_index` (`category`),
+  ADD KEY `fund_allocation_settings_sort_order_index` (`sort_order`),
+  ADD KEY `fund_allocation_settings_is_default_index` (`is_default`),
+  ADD KEY `fund_allocation_settings_created_by_index` (`created_by`);
+
+--
+-- Indeks untuk tabel `inventory`
+--
+ALTER TABLE `inventory`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `inventory_product_id_foreign` (`product_id`),
+  ADD KEY `inventory_updated_by_foreign` (`updated_by`),
+  ADD KEY `inventory_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `jobs`
+--
+ALTER TABLE `jobs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `jobs_queue_index` (`queue`);
+
+--
+-- Indeks untuk tabel `job_batches`
+--
+ALTER TABLE `job_batches`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `migrations`
+--
+ALTER TABLE `migrations`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `missions`
+--
+ALTER TABLE `missions`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `mission_winners`
+--
+ALTER TABLE `mission_winners`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `notifications`
+--
+ALTER TABLE `notifications`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `notifications_notifiable_type_notifiable_id_index` (`notifiable_type`,`notifiable_id`);
+
+--
+-- Indeks untuk tabel `owner_expenses`
+--
+ALTER TABLE `owner_expenses`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `owner_expenses_updated_by_foreign` (`updated_by`),
+  ADD KEY `owner_expenses_type_index` (`type`),
+  ADD KEY `owner_expenses_category_index` (`category`),
+  ADD KEY `owner_expenses_date_index` (`date`),
+  ADD KEY `owner_expenses_status_index` (`status`),
+  ADD KEY `owner_expenses_payment_method_index` (`payment_method`),
+  ADD KEY `owner_expenses_is_recurring_index` (`is_recurring`),
+  ADD KEY `owner_expenses_is_tax_deductible_index` (`is_tax_deductible`),
+  ADD KEY `owner_expenses_approved_at_index` (`approved_at`),
+  ADD KEY `owner_expenses_fund_allocation_history_id_index` (`fund_allocation_history_id`),
+  ADD KEY `owner_expenses_created_by_index` (`created_by`),
+  ADD KEY `owner_expenses_approved_by_index` (`approved_by`),
+  ADD KEY `idx_date_type` (`date`,`type`),
+  ADD KEY `idx_status_date` (`status`,`date`),
+  ADD KEY `idx_type_category` (`type`,`category`);
+
+--
+-- Indeks untuk tabel `owner_profits`
+--
+ALTER TABLE `owner_profits`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_business_period_profit` (`business_id`,`period_month`,`period_year`),
+  ADD KEY `owner_profits_period_month_period_year_index` (`period_month`,`period_year`),
+  ADD KEY `owner_profits_status_index` (`status`),
+  ADD KEY `owner_profits_allocated_at_index` (`allocated_at`);
+
+--
+-- Indeks untuk tabel `payments`
+--
+ALTER TABLE `payments`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `payments_transaction_id_foreign` (`transaction_id`);
+
+--
+-- Indeks untuk tabel `payment_methods`
+--
+ALTER TABLE `payment_methods`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `payment_methods_business_slug_unique` (`business_id`,`slug`),
+  ADD KEY `payment_methods_business_id_index` (`business_id`);
+
+--
+-- Indeks untuk tabel `permissions`
+--
+ALTER TABLE `permissions`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `permissions_name_unique` (`name`);
+
+--
+-- Indeks untuk tabel `personal_access_tokens`
+--
+ALTER TABLE `personal_access_tokens`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `personal_access_tokens_token_unique` (`token`),
+  ADD KEY `personal_access_tokens_tokenable_type_tokenable_id_index` (`tokenable_type`,`tokenable_id`);
+
+--
+-- Indeks untuk tabel `products`
+--
+ALTER TABLE `products`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `products_sku_unique` (`sku`),
+  ADD UNIQUE KEY `products_barcode_unique` (`barcode`),
+  ADD KEY `products_category_id_foreign` (`category_id`),
+  ADD KEY `products_created_by_foreign` (`created_by`),
+  ADD KEY `products_updated_by_foreign` (`updated_by`),
+  ADD KEY `products_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `product_categories`
+--
+ALTER TABLE `product_categories`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `product_categories_parent_id_foreign` (`parent_id`),
+  ADD KEY `product_categories_created_by_foreign` (`created_by`),
+  ADD KEY `product_categories_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `product_conversions`
+--
+ALTER TABLE `product_conversions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `product_conversions_business_id_foreign` (`business_id`),
+  ADD KEY `product_conversions_from_product_id_foreign` (`from_product_id`),
+  ADD KEY `product_conversions_to_product_id_foreign` (`to_product_id`);
+
+--
+-- Indeks untuk tabel `product_supplier`
+--
+ALTER TABLE `product_supplier`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `product_supplier_product_id_supplier_id_unique` (`product_id`,`supplier_id`),
+  ADD KEY `product_supplier_supplier_id_foreign` (`supplier_id`);
+
+--
+-- Indeks untuk tabel `product_variants`
+--
+ALTER TABLE `product_variants`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `product_variants_product_id_foreign` (`product_id`);
+
+--
+-- Indeks untuk tabel `roles`
+--
+ALTER TABLE `roles`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `roles_name_unique` (`name`),
+  ADD KEY `roles_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `sessions`
+--
+ALTER TABLE `sessions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `sessions_user_id_index` (`user_id`),
+  ADD KEY `sessions_last_activity_index` (`last_activity`);
+
+--
+-- Indeks untuk tabel `stock_movements`
+--
+ALTER TABLE `stock_movements`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `stock_movements_product_id_foreign` (`product_id`),
+  ADD KEY `stock_movements_created_by_foreign` (`created_by`),
+  ADD KEY `stock_movements_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `suppliers`
+--
+ALTER TABLE `suppliers`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `suppliers_created_by_foreign` (`created_by`),
+  ADD KEY `suppliers_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `transactions`
+--
+ALTER TABLE `transactions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `transactions_customer_id_foreign` (`customer_id`),
+  ADD KEY `transactions_created_by_foreign` (`created_by`),
+  ADD KEY `transactions_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `transaction_details`
+--
+ALTER TABLE `transaction_details`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `transaction_details_transaction_id_foreign` (`transaction_id`),
+  ADD KEY `transaction_details_product_id_foreign` (`product_id`);
+
+--
+-- Indeks untuk tabel `users`
+--
+ALTER TABLE `users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `users_email_unique` (`email`),
+  ADD UNIQUE KEY `users_google_id_unique` (`google_id`),
+  ADD UNIQUE KEY `username` (`username`),
+  ADD KEY `users_created_by_foreign` (`created_by`),
+  ADD KEY `users_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `user_activity_logs`
+--
+ALTER TABLE `user_activity_logs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `user_activity_logs_user_id_foreign` (`user_id`),
+  ADD KEY `user_activity_logs_business_id_foreign` (`business_id`);
+
+--
+-- Indeks untuk tabel `user_permissions`
+--
+ALTER TABLE `user_permissions`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `user_permissions_user_id_module_action_unique` (`user_id`,`module`,`action`);
+
+--
+-- Indeks untuk tabel `user_roles`
+--
+ALTER TABLE `user_roles`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `user_roles_user_id_role_id_unique` (`user_id`,`role_id`),
+  ADD KEY `user_roles_role_id_foreign` (`role_id`);
+
+--
+-- Indeks untuk tabel `user_sessions`
+--
+ALTER TABLE `user_sessions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `user_sessions_user_id_foreign` (`user_id`),
+  ADD KEY `user_sessions_business_id_foreign` (`business_id`);
+
+--
+-- AUTO_INCREMENT untuk tabel yang dibuang
+--
+
+--
+-- AUTO_INCREMENT untuk tabel `businesses`
+--
+ALTER TABLE `businesses`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `capital_tracking`
+--
+ALTER TABLE `capital_tracking`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `cash_flow`
+--
+ALTER TABLE `cash_flow`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `customers`
+--
+ALTER TABLE `customers`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `customer_segments`
+--
+ALTER TABLE `customer_segments`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `daily_delivery_targets`
+--
+ALTER TABLE `daily_delivery_targets`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `delivery_logs`
+--
+ALTER TABLE `delivery_logs`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `expense_categories`
+--
+ALTER TABLE `expense_categories`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `failed_jobs`
+--
+ALTER TABLE `failed_jobs`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `fund_allocation_history`
+--
+ALTER TABLE `fund_allocation_history`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `fund_allocation_settings`
+--
+ALTER TABLE `fund_allocation_settings`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `inventory`
+--
+ALTER TABLE `inventory`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `jobs`
+--
+ALTER TABLE `jobs`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `migrations`
+--
+ALTER TABLE `migrations`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `missions`
+--
+ALTER TABLE `missions`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `mission_winners`
+--
+ALTER TABLE `mission_winners`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `owner_expenses`
+--
+ALTER TABLE `owner_expenses`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `owner_profits`
+--
+ALTER TABLE `owner_profits`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `payments`
+--
+ALTER TABLE `payments`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `payment_methods`
+--
+ALTER TABLE `payment_methods`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `permissions`
+--
+ALTER TABLE `permissions`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `personal_access_tokens`
+--
+ALTER TABLE `personal_access_tokens`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `products`
+--
+ALTER TABLE `products`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `product_categories`
+--
+ALTER TABLE `product_categories`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `product_conversions`
+--
+ALTER TABLE `product_conversions`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `product_supplier`
+--
+ALTER TABLE `product_supplier`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `product_variants`
+--
+ALTER TABLE `product_variants`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `roles`
+--
+ALTER TABLE `roles`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `stock_movements`
+--
+ALTER TABLE `stock_movements`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `suppliers`
+--
+ALTER TABLE `suppliers`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `transactions`
+--
+ALTER TABLE `transactions`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `transaction_details`
+--
+ALTER TABLE `transaction_details`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `users`
+--
+ALTER TABLE `users`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `user_activity_logs`
+--
+ALTER TABLE `user_activity_logs`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `user_permissions`
+--
+ALTER TABLE `user_permissions`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `user_roles`
+--
+ALTER TABLE `user_roles`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `user_sessions`
+--
+ALTER TABLE `user_sessions`
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- Ketidakleluasaan untuk tabel pelimpahan (Dumped Tables)
+--
+
+--
+-- Ketidakleluasaan untuk tabel `businesses`
+--
+ALTER TABLE `businesses`
+  ADD CONSTRAINT `businesses_owner_id_foreign` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `capital_tracking`
+--
+ALTER TABLE `capital_tracking`
+  ADD CONSTRAINT `capital_tracking_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `capital_tracking_updated_by_foreign` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `cash_flow`
+--
+ALTER TABLE `cash_flow`
+  ADD CONSTRAINT `cash_flow_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `cash_flow_category_id_foreign` FOREIGN KEY (`category_id`) REFERENCES `expense_categories` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `cash_flow_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `customers`
+--
+ALTER TABLE `customers`
+  ADD CONSTRAINT `customers_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `customers_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `customer_segments`
+--
+ALTER TABLE `customer_segments`
+  ADD CONSTRAINT `customer_segments_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `expense_categories`
+--
+ALTER TABLE `expense_categories`
+  ADD CONSTRAINT `expense_categories_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `expense_categories_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `fund_allocation_history`
+--
+ALTER TABLE `fund_allocation_history`
+  ADD CONSTRAINT `fund_allocation_history_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fund_allocation_history_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fund_allocation_history_fund_allocation_setting_id_foreign` FOREIGN KEY (`fund_allocation_setting_id`) REFERENCES `fund_allocation_settings` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fund_allocation_history_owner_profit_id_foreign` FOREIGN KEY (`owner_profit_id`) REFERENCES `owner_profits` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `fund_allocation_settings`
+--
+ALTER TABLE `fund_allocation_settings`
+  ADD CONSTRAINT `fund_allocation_settings_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fund_allocation_settings_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fund_allocation_settings_updated_by_foreign` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `inventory`
+--
+ALTER TABLE `inventory`
+  ADD CONSTRAINT `inventory_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `inventory_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `inventory_updated_by_foreign` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `owner_expenses`
+--
+ALTER TABLE `owner_expenses`
+  ADD CONSTRAINT `owner_expenses_approved_by_foreign` FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `owner_expenses_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `owner_expenses_fund_allocation_history_id_foreign` FOREIGN KEY (`fund_allocation_history_id`) REFERENCES `fund_allocation_history` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `owner_expenses_updated_by_foreign` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `owner_profits`
+--
+ALTER TABLE `owner_profits`
+  ADD CONSTRAINT `owner_profits_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `payments`
+--
+ALTER TABLE `payments`
+  ADD CONSTRAINT `payments_transaction_id_foreign` FOREIGN KEY (`transaction_id`) REFERENCES `transactions` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `products`
+--
+ALTER TABLE `products`
+  ADD CONSTRAINT `products_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `products_category_id_foreign` FOREIGN KEY (`category_id`) REFERENCES `product_categories` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `products_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `products_updated_by_foreign` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `product_categories`
+--
+ALTER TABLE `product_categories`
+  ADD CONSTRAINT `product_categories_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `product_categories_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `product_categories_parent_id_foreign` FOREIGN KEY (`parent_id`) REFERENCES `product_categories` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `product_conversions`
+--
+ALTER TABLE `product_conversions`
+  ADD CONSTRAINT `product_conversions_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `product_conversions_from_product_id_foreign` FOREIGN KEY (`from_product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `product_conversions_to_product_id_foreign` FOREIGN KEY (`to_product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `product_supplier`
+--
+ALTER TABLE `product_supplier`
+  ADD CONSTRAINT `product_supplier_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `product_supplier_supplier_id_foreign` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `product_variants`
+--
+ALTER TABLE `product_variants`
+  ADD CONSTRAINT `product_variants_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `roles`
+--
+ALTER TABLE `roles`
+  ADD CONSTRAINT `roles_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `stock_movements`
+--
+ALTER TABLE `stock_movements`
+  ADD CONSTRAINT `stock_movements_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `stock_movements_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `stock_movements_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `suppliers`
+--
+ALTER TABLE `suppliers`
+  ADD CONSTRAINT `suppliers_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `suppliers_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `transactions`
+--
+ALTER TABLE `transactions`
+  ADD CONSTRAINT `transactions_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `transactions_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `transactions_customer_id_foreign` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `transaction_details`
+--
+ALTER TABLE `transaction_details`
+  ADD CONSTRAINT `transaction_details_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `transaction_details_transaction_id_foreign` FOREIGN KEY (`transaction_id`) REFERENCES `transactions` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `users`
+--
+ALTER TABLE `users`
+  ADD CONSTRAINT `users_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `users_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `user_activity_logs`
+--
+ALTER TABLE `user_activity_logs`
+  ADD CONSTRAINT `user_activity_logs_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `user_activity_logs_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `user_permissions`
+--
+ALTER TABLE `user_permissions`
+  ADD CONSTRAINT `user_permissions_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `user_roles`
+--
+ALTER TABLE `user_roles`
+  ADD CONSTRAINT `user_roles_role_id_foreign` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `user_roles_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `user_sessions`
+--
+ALTER TABLE `user_sessions`
+  ADD CONSTRAINT `user_sessions_business_id_foreign` FOREIGN KEY (`business_id`) REFERENCES `businesses` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `user_sessions_user_id_foreign` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+COMMIT;
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+"

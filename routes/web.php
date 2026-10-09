@@ -42,7 +42,7 @@ Route::middleware('auth')->group(function() {
     
     // 3. Rute Redirect setelah login
     Route::get('/redirect-dashboard', function() {
-        $user = Auth::user();
+        $user = Auth::user(); if ($user->role === 'ko') { Auth::logout(); request()->session()->invalidate(); request()->session()->regenerateToken(); return redirect('/login')->withErrors(['email' => 'Akun KO tidak dapat masuk ke sistem ini. Silakan gunakan aplikasi ACS.']); }
         if ($user->role === 'admin') {
             return redirect()->route('admin.dashboard');
         }
