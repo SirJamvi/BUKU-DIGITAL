@@ -58,18 +58,21 @@
             display: flex;
             min-height: 100vh;
             position: relative;
+            width: 100%;
+            overflow-x: hidden; /* Mencegah layar tergeser keluar (scroll horizontal) */
         }
 
         .main-content {
             flex: 1;
             margin-left: 0;
+            width: 100%;
+            max-width: 100%;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             background: #f7f9fc;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             min-width: 0;
-            /* PENTING: mencegah flex child melebar melewati parent */
         }
 
         .content-wrapper {
@@ -150,10 +153,17 @@
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Desktop specific: Sembunyikan overlay di desktop agar push content berfungsi tanpa menimpa layer hitam */
+        /* Desktop specific: Sembunyikan overlay & buat konten menyusut dinamis */
         @media (min-width: 992px) {
             .sidebar-overlay {
                 display: none !important; 
+            }
+            
+            /* INI KUNCI UTAMANYA: Mengurangi lebar konten saat sidebar terbuka */
+            .main-content.sidebar-open {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+                max-width: calc(100% - 280px) !important;
             }
         }
 
