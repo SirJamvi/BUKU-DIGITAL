@@ -17,6 +17,89 @@
     @include('components.alert')
 
     {{-- ================================================================= --}}
+    {{-- [BARU] KARTU PENGIRIMAN DRIVER BERJALAN (CONTAINER DI ATAS KASBON) --}}
+    {{-- ================================================================= --}}
+    @if(isset($activeTrips) && $activeTrips->isNotEmpty())
+    <div class="card border-0 mb-4 shadow-sm" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #fff; border-radius: 12px; overflow: hidden;">
+        <div class="card-header bg-transparent text-white d-flex justify-content-between align-items-center py-3 border-bottom border-secondary border-opacity-25">
+            <div>
+                <h5 class="mb-0 fw-bold">
+                    <i class="fas fa-truck-moving text-warning me-2"></i> PENGIRIMAN DRIVER BERJALAN
+                </h5>
+                <small class="text-white-50">Terdapat {{ $activeTrips->count() }} rombongan pengiriman driver sedang dalam perjalanan membawa pesanan.</small>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-warning text-dark px-3 py-2 fs-6 fw-bold">
+                    <i class="fas fa-spinner fa-spin me-1"></i> {{ $activeTrips->flatten()->count() }} Pesanan Belum Selesai
+                </span>
+            </div>
+        </div>
+        <div class="card-body p-3">
+            <div class="row g-3">
+                @foreach($activeTrips as $tripKey => $tripTrx)
+                @php
+                    $firstTrx = $tripTrx->first();
+                    $driverName = $firstTrx->driver->name ?? 'Driver';
+                    $driverPhone = $firstTrx->driver->phone ?? '-';
+                    $tripCode = $firstTrx->delivery_trip_code ?? $tripKey;
+                    $tripTotal = $tripTrx->sum('total_amount');
+                    $modalTripId = 'modalTrip_' . \Illuminate\Support\Str::slug($tripKey);
+                    $totalQtyInTrip = 0;
+                    foreach($tripTrx as $trxItem) {
+                        $totalQtyInTrip += $trxItem->details->sum('quantity');
+                    }
+                @endphp
+                <div class="col-lg-4 col-md-6">
+                    <div class="card h-100 border border-secondary border-opacity-50 shadow-sm" style="background-color: rgba(255, 255, 255, 0.05); color: #fff; border-radius: 10px;">
+                        <div class="card-header bg-transparent border-bottom border-secondary border-opacity-25 d-flex justify-content-between align-items-center py-2">
+                            <div>
+                                <span class="badge bg-primary text-white me-1">{{ $tripCode }}</span>
+                                <strong class="fs-6 text-white">{{ $driverName }}</strong>
+                            </div>
+                            <span class="badge bg-warning text-dark small">
+                                <i class="fas fa-motorcycle me-1"></i> Mengantar
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between text-white-50 small mb-2">
+                                <span><i class="far fa-clock me-1"></i>{{ $firstTrx->transaction_date->format('H:i') }} WIB</span>
+                                <span>{{ $firstTrx->transaction_date->diffForHumans() }}</span>
+                            </div>
+
+                            <div class="p-2 rounded mb-2" style="background: rgba(0,0,0,0.2); max-height: 120px; overflow-y: auto;">
+                                <small class="text-white-50 fw-bold d-block mb-1">Daftar Pelanggan ({{ $tripTrx->count() }} Toko):</small>
+                                <ul class="list-unstyled mb-0 small">
+                                    @foreach($tripTrx as $trx)
+                                    <li class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25">
+                                        <span class="text-truncate" style="max-width: 170px;">
+                                            <i class="fas fa-map-marker-alt text-danger me-1"></i><strong>{{ $trx->customer->name ?? 'Pelanggan Umum' }}</strong>
+                                        </span>
+                                        <span class="text-warning fw-bold">Rp {{ number_format($trx->total_amount, 0, ',', '.') }}</span>
+                                    </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center text-white small">
+                                <span>Total Muatan: <strong>{{ $totalQtyInTrip }} Item</strong></span>
+                                <span class="fw-bold fs-6 text-success">Total: Rp {{ number_format($tripTotal, 0, ',', '.') }}</span>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent border-top border-secondary border-opacity-25 p-2">
+                            <button type="button" class="btn btn-warning btn-sm w-100 fw-bold text-dark shadow-sm" data-bs-toggle="modal" data-bs-target="#{{ $modalTripId }}">
+                                <i class="fas fa-check-double me-1"></i> Selesaikan & Input Real Payment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+    @endif
+    {{-- ================================================================= --}}
+
+    {{-- ================================================================= --}}
     {{-- [BARU] KARTU PERINGATAN KASBON (DIPERKECIL / DIGRUP PER PELANGGAN) --}}
     {{-- ================================================================= --}}
     @if(isset($kasbonByCustomer) && $kasbonByCustomer->isNotEmpty())
@@ -248,6 +331,129 @@
         </div>
     </div>
 </div>
+{{-- ============================================================= --}}
+{{-- [BARU] MODAL PENYELESAIAN PENGIRIMAN DRIVER KOLEKTIF          --}}
+{{-- ============================================================= --}}
+@if(isset($activeTrips) && $activeTrips->isNotEmpty())
+@foreach($activeTrips as $tripKey => $tripTrx)
+@php
+    $firstTrx = $tripTrx->first();
+    $driverName = $firstTrx->driver->name ?? 'Driver';
+    $tripCode = $firstTrx->delivery_trip_code ?? $tripKey;
+    $modalTripId = 'modalTrip_' . \Illuminate\Support\Str::slug($tripKey);
+    $totalTripAmount = $tripTrx->sum('total_amount');
+@endphp
+<div class="modal fade" id="{{ $modalTripId }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <form action="{{ route('kasir.transactions.completeDeliveryTrip') }}" method="POST">
+                @csrf
+                <input type="hidden" name="trip_code" value="{{ $tripCode }}">
+
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-truck-loading text-warning me-2"></i>Penyelesaian Pengiriman: <strong>Driver {{ $driverName }}</strong> (<span class="text-warning">{{ $tripCode }}</span>)
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body p-0">
+                    <div class="bg-light p-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <span class="text-muted">Total <strong>{{ $tripTrx->count() }} pesanan</strong> dalam pengiriman ini.</span>
+                            <br><small class="text-muted">Pilih metode pembayaran riil (Cash, DANA, Transfer, atau Kasbon) untuk masing-masing pelanggan setelah driver kembali.</small>
+                        </div>
+                        <h4 class="mb-0 text-danger fw-bold">Total: Rp {{ number_format($totalTripAmount, 0, ',', '.') }}</h4>
+                    </div>
+
+                    <div class="table-responsive" style="max-height: 65vh; overflow-y: auto;">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th class="ps-3">No. Struk</th>
+                                    <th>Pelanggan / Toko</th>
+                                    <th>Detail Barang</th>
+                                    <th class="text-end">Nilai Tagihan</th>
+                                    <th style="min-width: 220px;">Metode Pembayaran Riil</th>
+                                    <th style="min-width: 160px;" class="pe-3">Catatan (Opsional)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($tripTrx as $trx)
+                                <tr>
+                                    <td class="ps-3 fw-bold text-primary">
+                                        #{{ str_pad($trx->id, 6, '0', STR_PAD_LEFT) }}
+                                    </td>
+                                    <td>
+                                        <strong class="fs-6 text-dark">{{ $trx->customer->name ?? 'Pelanggan Umum' }}</strong>
+                                        @if($trx->customer && $trx->customer->phone)
+                                        <br><small class="text-muted"><i class="fas fa-phone small me-1"></i>{{ $trx->customer->phone }}</small>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <ul class="list-unstyled mb-0 small text-muted">
+                                            @foreach($trx->details as $item)
+                                            <li>• {{ $item->product->name ?? 'Item' }} ({{ $item->quantity }} {{ $item->product->unit ?? 'pcs' }})</li>
+                                            @endforeach
+                                        </ul>
+                                    </td>
+                                    <td class="text-end fw-bold text-danger fs-6">
+                                        Rp {{ number_format($trx->total_amount, 0, ',', '.') }}
+                                    </td>
+                                    <td>
+                                        <select name="payments[{{ $trx->id }}]" class="form-select form-select-sm fw-bold border-primary" required>
+                                            <option value="" disabled>-- Pilih Pembayaran Riil --</option>
+                                            @if(isset($paymentMethods) && $paymentMethods->isNotEmpty())
+                                                @foreach($paymentMethods as $pm)
+                                                <option value="{{ $pm->slug }}" {{ strtolower($pm->slug) === 'cash' ? 'selected' : '' }}>
+                                                    @if(str_contains(strtolower($pm->slug), 'cash')) 💵
+                                                    @elseif(str_contains(strtolower($pm->slug), 'dana')) 📱
+                                                    @elseif(str_contains(strtolower($pm->slug), 'transfer')) 🏦
+                                                    @elseif(str_contains(strtolower($pm->slug), 'qris')) 📲
+                                                    @else 💳 @endif
+                                                    {{ $pm->name }} (Lunas)
+                                                </option>
+                                                @endforeach
+                                            @else
+                                                <option value="cash" selected>💵 Cash / Tunai (Lunas)</option>
+                                                <option value="transfer-bank">🏦 Transfer Bank (Lunas)</option>
+                                                <option value="dana">📱 DANA (Lunas)</option>
+                                            @endif
+                                            <option value="kasbon" class="text-danger fw-bold">
+                                                ⚠️ TETAP KASBON (Belum Lunas)
+                                            </option>
+                                        </select>
+                                    </td>
+                                    <td class="pe-3">
+                                        <input type="text" name="notes[{{ $trx->id }}]" class="form-control form-control-sm" placeholder="Ket...">
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light justify-content-between align-items-center">
+                    <div>
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i> Transaksi lunas otomatis tercatat ke <strong>Cash Flow</strong>. Transaksi 'Tetap Kasbon' masuk ke piutang kasbon di bawah.
+                        </small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                        <button type="submit" class="btn btn-success fw-bold px-4 shadow-sm">
+                            <i class="fas fa-check-circle me-1"></i> Simpan Semua Pelunasan & Selesaikan
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endforeach
+@endif
+
 {{-- ============================================================= --}}
 {{-- [BARU] MODAL RINCIAN STRUK PER PELANGGAN (DENGAN CHECKBOX) --}}
 {{-- ============================================================= --}}

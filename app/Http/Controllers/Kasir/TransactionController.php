@@ -178,4 +178,100 @@ class TransactionController extends Controller
             return back()->with('error', 'Gagal memproses pelunasan massal: ' . $e->getMessage());
         }
     }
+
+    /**
+     * [BARU] Memproses penyelesaian pengiriman driver kolektif dengan real payment per transaksi.
+     */
+    public function completeDeliveryTrip(\Illuminate\Http\Request $request): RedirectResponse
+    {
+        $request->validate([
+            'trip_code' => 'required|string',
+            'payments' => 'required|array',
+            'notes' => 'nullable|array',
+        ]);
+
+        $businessId = Auth::user()->business_id;
+        $tripCode = $request->trip_code;
+
+        $transactions = Transaction::with('customer')
+            ->where('business_id', $businessId)
+            ->where('delivery_trip_code', $tripCode)
+            ->get();
+
+        if ($transactions->isEmpty()) {
+            return back()->with('error', 'Tidak ditemukan transaksi valid untuk nomor pengiriman ini.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $paidCount = 0;
+            $kasbonCount = 0;
+
+            foreach ($transactions as $transaction) {
+                $chosenMethod = $request->payments[$transaction->id] ?? 'kasbon';
+                $orderNote = $request->notes[$transaction->id] ?? null;
+                $isKasbon = strtolower($chosenMethod) === 'kasbon';
+
+                $methodSlug = $isKasbon ? 'kasbon' : \Illuminate\Support\Str::slug($chosenMethod);
+
+                $updateData = [
+                    'payment_method' => $methodSlug,
+                    'payment_status' => $isKasbon ? 'pending' : 'paid',
+                    'order_status'   => 'delivered',
+                    'delivery_status'=> 'delivered',
+                    'delivered_at'   => now(),
+                ];
+
+                if (!empty($orderNote)) {
+                    $updateData['notes'] = ($transaction->notes ? $transaction->notes . ' | ' : '') . $orderNote;
+                }
+
+                $transaction->update($updateData);
+
+                if (!$isKasbon) {
+                    $paidCount++;
+
+                    // Catat ke CashFlow secara dinamis dengan metode pembayaran riil
+                    \App\Models\CashFlow::create([
+                        'business_id'    => $transaction->business_id,
+                        'type'           => 'income',
+                        'category_id'    => 1,
+                        'payment_method' => $methodSlug,
+                        'amount'         => $transaction->total_amount,
+                        'description'    => 'Pelunasan Pengiriman ' . $tripCode . ' #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT) . ' (' . ($transaction->customer->name ?? 'Pelanggan Umum') . ')',
+                        'date'           => now(),
+                        'reference_id'   => $transaction->id,
+                        'created_by'     => Auth::id(),
+                    ]);
+
+                    // Tambahkan akumulasi belanja customer
+                    if ($transaction->customer_id) {
+                        $customer = \App\Models\Customer::find($transaction->customer_id);
+                        if ($customer) {
+                            $customer->increment('total_purchases', $transaction->total_amount);
+                        }
+                    }
+                } else {
+                    $kasbonCount++;
+                }
+            }
+
+            DB::commit();
+
+            $msg = "Pengiriman #{$tripCode} berhasil diselesaikan! ";
+            if ($paidCount > 0) {
+                $msg .= "{$paidCount} transaksi lunas dicatat ke kasir. ";
+            }
+            if ($kasbonCount > 0) {
+                $msg .= "{$kasbonCount} transaksi tetap dicatat sebagai Kasbon/Piutang.";
+            }
+
+            return back()->with('success', $msg);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            logger()->error('completeDeliveryTrip error: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menyelesaikan pengiriman driver: ' . $e->getMessage());
+        }
+    }
 }

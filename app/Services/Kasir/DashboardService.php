@@ -76,11 +76,40 @@ class DashboardService
                 ->limit(5)
                 ->get();
 
-            // 3. Ambil Kasbon yang Belum Lunas & Grouping Berdasarkan Pelanggan
+            // 3. [BARU] Ambil Pengiriman Berjalan (Driver Delivery Trips yang sedang aktif)
+            $activeDeliveriesRaw = Transaction::with(['customer', 'driver', 'details.product'])
+                ->where('business_id', $businessId)
+                ->where('type', 'sale')
+                ->where(function ($q) {
+                    $q->where('order_status', 'delivering')
+                      ->orWhere('delivery_status', 'delivering');
+                })
+                ->orderBy('transaction_date', 'desc')
+                ->get();
+
+            $activeTrips = $activeDeliveriesRaw->groupBy(function ($item) {
+                return $item->delivery_trip_code ?: ('TRIP-' . ($item->driver_id ?: $item->claimed_by_driver_id) . '-' . $item->transaction_date->format('ymdHi'));
+            });
+
+            // 4. [BARU] Ambil Metode Pembayaran Dinamis untuk Dashboard (Modal Pelunasan)
+            $paymentMethods = \App\Models\PaymentMethod::where('business_id', $businessId)
+                ->where('is_active', true)
+                ->orderBy('name', 'asc')
+                ->get();
+
+            // 5. Ambil Kasbon yang Belum Lunas & Grouping Berdasarkan Pelanggan (Kecualikan yang sedang dibawa driver)
             $pendingKasbonRaw = Transaction::with('customer')
                 ->where('business_id', $businessId)
                 ->where('type', 'sale')
                 ->where('payment_status', 'pending')
+                ->where(function ($q) {
+                    $q->whereNull('order_status')
+                      ->orWhere('order_status', '!=', 'delivering');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('delivery_status')
+                      ->orWhere('delivery_status', '!=', 'delivering');
+                })
                 ->orderBy('transaction_date', 'asc')
                 ->get();
 
@@ -96,6 +125,8 @@ class DashboardService
                 'lowStockItems'       => $lowStockItems,
                 'balancesByMethod'    => $balancesByMethod, // <-- Gantikan salesByPaymentMethod
                 'productsSoldToday'   => $productsSoldToday,
+                'activeTrips'         => $activeTrips,      // <-- [BARU] Pengiriman Berjalan
+                'paymentMethods'      => $paymentMethods,   // <-- [BARU] Metode Pembayaran Dinamis
                 'kasbonByCustomer'    => $kasbonByCustomer,
                 'totalKasbonCount'    => $pendingKasbonRaw->count(),
                 'totalKasbonAmount'   => $pendingKasbonRaw->sum('total_amount'),
@@ -111,6 +142,8 @@ class DashboardService
                 'lowStockItems'       => 0,
                 'balancesByMethod'    => collect(),
                 'productsSoldToday'   => collect(),
+                'activeTrips'         => collect(),
+                'paymentMethods'      => collect(),
                 'kasbonByCustomer'    => collect(),
                 'totalKasbonCount'    => 0,
                 'totalKasbonAmount'   => 0,

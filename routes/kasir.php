@@ -20,6 +20,7 @@ Route::prefix('pos')->name('pos.')->group(function () {
     Route::post('/store', [PosController::class, 'store'])->name('store');
     Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
     Route::get('/receipt-unpaid/{transaction}', [PosController::class, 'receiptUnpaid'])->name('receiptUnpaid');
+    Route::get('/delivery-receipt/{trip_code}', [PosController::class, 'deliveryReceipt'])->name('deliveryReceipt');
 });
 
 // Transaction Management
@@ -28,6 +29,7 @@ Route::prefix('transactions')->name('transactions.')->group(function () {
     Route::get('/{transaction}', [TransactionController::class, 'show'])->name('show');
 
     Route::post('/bulk-mark-as-paid', [TransactionController::class, 'bulkMarkAsPaid'])->name('bulkMarkAsPaid');
+    Route::post('/delivery-trip/complete', [TransactionController::class, 'completeDeliveryTrip'])->name('completeDeliveryTrip');
 
     // RUTE EDIT
     Route::get('/{transaction}/edit', [TransactionController::class, 'edit'])->name('edit');

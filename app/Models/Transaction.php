@@ -16,12 +16,16 @@ class Transaction extends Model
         'business_id',
         'type',
         'customer_id',
+        'driver_id',
         'claimed_by_driver_id',
+        'delivery_trip_code',
         'total_amount',
         'payment_method',
         'payment_status',
+        'delivery_status',
         'order_status',
         'status',
+        'delivered_at',
         'transaction_date',
         'notes',
         'created_by',
@@ -30,6 +34,7 @@ class Transaction extends Model
 
     protected $casts = [
         'transaction_date' => 'datetime',
+        'delivered_at' => 'datetime',
     ];
 
     /**
@@ -42,10 +47,12 @@ class Transaction extends Model
     }
 
 
-    // Relasi ke kurir/driver
+    // Relasi ke kurir/driver (mendukung driver_id maupun claimed_by_driver_id)
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'claimed_by_driver_id');
+        return $this->belongsTo(User::class, 'driver_id')->withDefault(function () {
+            return $this->belongsTo(User::class, 'claimed_by_driver_id');
+        });
     }
 
     /**

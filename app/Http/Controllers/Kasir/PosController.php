@@ -8,6 +8,7 @@ use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
 use App\Http\Requests\Kasir\StoreTransactionRequest;
 
 class PosController extends Controller
@@ -34,7 +35,18 @@ class PosController extends Controller
     public function store(StoreTransactionRequest $request): RedirectResponse
     {
         try {
-            $transaction = $this->posService->processTransaction($request->validated());
+            $result = $this->posService->processTransaction($request->validated());
+
+            // ==========================================================
+            // Jika transaksi adalah Pengiriman Rombongan (Batch Delivery)
+            // ==========================================================
+            if (is_array($result) && !empty($result['is_batch'])) {
+                return redirect()
+                    ->route('kasir.pos.deliveryReceipt', $result['trip_code'])
+                    ->with('success', "Pengiriman #{$result['trip_code']} berhasil dibuat! " . count($result['transactions']) . " pesanan ditugaskan ke driver.");
+            }
+
+            $transaction = $result;
 
             // ==========================================================
             // Redirect ke struk yang sesuai berdasarkan status pembayaran
@@ -57,8 +69,25 @@ class PosController extends Controller
         } catch (\Exception $e) {
             // Jika ada error lain, kembali ke halaman POS dengan pesan error umum
             logger()->error('Error processing POS transaction: ' . $e->getMessage());
-            return back()->with('error', 'Terjadi kesalahan saat memproses transaksi.')->withInput();
+            return back()->with('error', 'Terjadi kesalahan saat memproses transaksi: ' . $e->getMessage())->withInput();
         }
+    }
+
+    /**
+     * Menampilkan Surat Jalan dan ringkasan pengiriman rombongan driver.
+     */
+    public function deliveryReceipt(string $tripCode): View
+    {
+        $transactions = Transaction::with(['customer', 'details.product', 'driver', 'createdBy'])
+            ->where('business_id', Auth::user()->business_id)
+            ->where('delivery_trip_code', $tripCode)
+            ->get();
+
+        if ($transactions->isEmpty()) {
+            abort(404, 'Data pengiriman tidak ditemukan.');
+        }
+
+        return view('kasir.pos.delivery_receipt', compact('tripCode', 'transactions'));
     }
 
     /**
