@@ -153,7 +153,7 @@
                                 <span class="text-dark">{{ $oldestDate->format('d/m/Y') }}</span><br>
                                 @if($oldestDate->diffInDays(now()) > 0)
                                 <small class="badge bg-warning text-dark">
-                                    Sejak {{ $oldestDate->diffInDays(now()) }} hari lalu
+                                    Sejak {{ (int) $oldestDate->diffInDays(now()) }} hari lalu
                                 </small>
                                 @else
                                 <small class="text-info fw-bold">Hari Ini</small>
@@ -467,6 +467,8 @@
 @php
 $firstTx = $transactions->first();
 $customerName = $firstTx->customer->name ?? 'Pelanggan Umum';
+$totalTagihanCust = $transactions->sum('total_amount');
+$oldestDate = $firstTx ? $firstTx->transaction_date : now();
 $modalId = 'modalGroup_' . $groupKey;
 @endphp
 <div class="modal fade" id="{{ $modalId }}" tabindex="-1" aria-hidden="true">
@@ -563,6 +565,11 @@ $modalId = 'modalGroup_' . $groupKey;
 {{-- ============================================================= --}}
 {{-- MODAL STRUK REKAP TAGIHAN PER PELANGGAN (KASAE, DLL) --}}
 {{-- ============================================================= --}}
+@php
+    $rekapTotal = $transactions->sum('total_amount');
+    $rekapOldest = $transactions->first() ? $transactions->first()->transaction_date : now();
+    $rekapNewest = $transactions->last() ? $transactions->last()->transaction_date : now();
+@endphp
 <div class="modal fade" id="modalRekap_{{ $groupKey }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-md modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -607,7 +614,7 @@ $modalId = 'modalGroup_' . $groupKey;
                             </tr>
                             <tr>
                                 <td style="font-weight: 600;">Periode</td>
-                                <td>: {{ $oldestDate->format('d/m/Y') }} s/d {{ $transactions->last()->transaction_date->format('d/m/Y') }}</td>
+                                <td>: {{ $rekapOldest->format('d/m/Y') }} s/d {{ $rekapNewest->format('d/m/Y') }}</td>
                             </tr>
                         </table>
                     </div>
@@ -642,7 +649,7 @@ $modalId = 'modalGroup_' . $groupKey;
                     <div class="pt-1">
                         <div class="d-flex justify-content-between align-items-center fs-6 fw-bold border-top border-2 border-dark pt-1">
                             <span>TOTAL TAGIHAN:</span>
-                            <span class="text-danger fs-5">Rp {{ number_format($totalTagihanCust, 0, ',', '.') }}</span>
+                            <span class="text-danger fs-5">Rp {{ number_format($rekapTotal, 0, ',', '.') }}</span>
                         </div>
                     </div>
 
@@ -663,7 +670,7 @@ $modalId = 'modalGroup_' . $groupKey;
                 </button>
                 <div class="d-flex justify-content-between w-100 gap-2">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Tutup</button>
-                    <button type="button" class="btn btn-outline-success btn-sm fw-semibold" onclick="sendChatWAText('{{ $groupKey }}', '{{ $customerName }}', '{{ $firstTx->customer->phone ?? '' }}', {{ $totalTagihanCust }})">
+                    <button type="button" class="btn btn-outline-success btn-sm fw-semibold" onclick="sendChatWAText('{{ $groupKey }}', '{{ $customerName }}', '{{ $firstTx->customer->phone ?? '' }}', {{ $rekapTotal }})">
                         <i class="fab fa-whatsapp me-1"></i> Kirim Chat Teks WA
                     </button>
                     <button type="button" class="btn btn-outline-dark btn-sm" onclick="printStrukRekap('rekap-area-{{ $groupKey }}')">
