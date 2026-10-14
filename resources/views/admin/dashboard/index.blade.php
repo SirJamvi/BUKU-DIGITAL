@@ -533,9 +533,17 @@
                                         <td>
                                             <ul class="list-unstyled mb-0 small">
                                                 @foreach($trx->details as $item)
+                                                @php
+                                                    $pName = $item->product->name ?? 'Produk';
+                                                    $isOngkir = str_contains(strtolower($pName), 'ongkos kirim') || str_contains(strtolower($pName), 'ongkir');
+                                                @endphp
                                                 <li>
-                                                    • <strong>{{ $item->product->name ?? 'Produk' }}</strong>
+                                                    • <strong>{{ $pName }}</strong>
+                                                    @if($isOngkir)
+                                                    <span class="badge bg-warning bg-opacity-25 text-dark border ms-1">Biaya Kirim</span>
+                                                    @else
                                                     <span class="badge bg-light text-dark border ms-1">{{ $item->quantity }} {{ $item->product->unit ?? 'Ball' }}</span>
+                                                    @endif
                                                 </li>
                                                 @endforeach
                                             </ul>

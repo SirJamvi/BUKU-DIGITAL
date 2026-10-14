@@ -69,12 +69,17 @@ class DashboardService
         $salesChangePercentage = $this->calculatePercentageChange($salesToday, $salesYesterday);
         $profitChangePercentage = $this->calculatePercentageChange($netProfitThisMonth, $netProfitLastMonth);
 
-        // 4. Metrik Operasional Harian Pabrik Es
+        // 4. Metrik Operasional Harian Pabrik Es (Abaikan Ongkos Kirim / Ongkir)
         $totalBallSoldToday = (int) TransactionDetail::whereHas('transaction', function ($q) use ($businessId, $today) {
             $q->where('business_id', $businessId)
               ->where('type', 'sale')
               ->whereDate('transaction_date', $today);
-        })->sum('quantity');
+        })
+        ->whereHas('product', function ($q) {
+            $q->where('name', 'NOT LIKE', '%ongkos kirim%')
+              ->where('name', 'NOT LIKE', '%ongkir%');
+        })
+        ->sum('quantity');
 
         $cashInToday = (float) Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
@@ -88,16 +93,30 @@ class DashboardService
             ->whereDate('transaction_date', $today)
             ->sum('total_amount');
 
-        $totalReadyStock = (int) Inventory::where('business_id', $businessId)->sum('current_stock');
+        // Sisa Stok Cold Storage Hanya untuk Produk Fisik Es Kristal (Abaikan Ongkos Kirim)
+        $totalReadyStock = (int) Inventory::where('business_id', $businessId)
+            ->whereHas('product', function ($q) {
+                $q->where('name', 'NOT LIKE', '%ongkos kirim%')
+                  ->where('name', 'NOT LIKE', '%ongkir%');
+            })
+            ->sum('current_stock');
 
         $readyStockItems = Inventory::with('product')
             ->where('business_id', $businessId)
+            ->whereHas('product', function ($q) {
+                $q->where('name', 'NOT LIKE', '%ongkos kirim%')
+                  ->where('name', 'NOT LIKE', '%ongkir%');
+            })
             ->where('current_stock', '>', 0)
             ->orderBy('current_stock', 'desc')
             ->get();
 
         // 5. Metrik Pendukung (Stock Warning, User, Activity, Allocation)
         $lowStockItems = Inventory::where('business_id', $businessId)
+            ->whereHas('product', function ($q) {
+                $q->where('name', 'NOT LIKE', '%ongkos kirim%')
+                  ->where('name', 'NOT LIKE', '%ongkir%');
+            })
             ->whereColumn('current_stock', '<=', 'min_stock')
             ->count();
 

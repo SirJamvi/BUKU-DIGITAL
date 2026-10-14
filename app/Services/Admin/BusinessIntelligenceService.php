@@ -27,6 +27,8 @@ class BusinessIntelligenceService
             ->select('products.name', DB::raw('SUM(transaction_details.quantity) as total_sold'))
             ->where('transactions.type', 'sale')
             ->where('transactions.business_id', $businessId)
+            ->where('products.name', 'NOT LIKE', '%ongkos kirim%')
+            ->where('products.name', 'NOT LIKE', '%ongkir%')
             ->groupBy('products.name')
             ->orderByDesc('total_sold')
             ->limit(5)
@@ -34,6 +36,8 @@ class BusinessIntelligenceService
 
         $profitMargin = Product::where('business_id', $businessId)
             ->where('base_price', '>', 0)
+            ->where('name', 'NOT LIKE', '%ongkos kirim%')
+            ->where('name', 'NOT LIKE', '%ongkir%')
             ->select('name', DB::raw('((base_price - cost_price) / base_price) * 100 as margin'))
             ->orderByDesc('margin')
             ->limit(5)

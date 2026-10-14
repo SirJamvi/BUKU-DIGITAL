@@ -39,8 +39,13 @@ class DashboardController extends Controller
             $dashboardData['isToday'] = $filterDate->isToday();
             $dashboardData['formattedDate'] = $filterDate->isoFormat('D MMMM Y');
 
-            // Mengambil stok realtime (tidak terpengaruh filter tanggal, selalu stok saat ini)
-            $dashboardData['realtimeStocks'] = \App\Models\Inventory::with('product')->get();
+            // Mengambil stok realtime (tidak terpengaruh filter tanggal, selalu stok saat ini - abaikan ongkos kirim)
+            $dashboardData['realtimeStocks'] = \App\Models\Inventory::with('product')
+                ->whereHas('product', function ($q) {
+                    $q->where('name', 'NOT LIKE', '%ongkos kirim%')
+                      ->where('name', 'NOT LIKE', '%ongkir%');
+                })
+                ->get();
 
             // Mengambil data pergerakan stok (miss opname) berdasarkan tanggal filter
             $dashboardData['missedOpnames'] = \App\Models\StockMovement::with(['product', 'createdBy'])
@@ -131,6 +136,10 @@ class DashboardController extends Controller
                 foreach ($trxs as $trx) {
                     foreach ($trx->details as $detail) {
                         $pName = $detail->product->name ?? 'Produk';
+                        $isOngkir = str_contains(strtolower($pName), 'ongkos kirim') || str_contains(strtolower($pName), 'ongkir');
+                        if ($isOngkir) {
+                            continue; // Abaikan ongkos kirim dari hitungan muatan fisik ball
+                        }
                         $qty = (int) $detail->quantity;
                         $totalQty += $qty;
                         $productQuantities[$pName] = ($productQuantities[$pName] ?? 0) + $qty;
@@ -159,6 +168,10 @@ class DashboardController extends Controller
                     foreach ($tripItems as $tItem) {
                         foreach ($tItem->details as $d) {
                             $pName = $d->product->name ?? 'Produk';
+                            $isOngkir = str_contains(strtolower($pName), 'ongkos kirim') || str_contains(strtolower($pName), 'ongkir');
+                            if ($isOngkir) {
+                                continue; // Abaikan ongkos kirim dari hitungan muatan ritase
+                            }
                             $qty = (int) $d->quantity;
                             $tripQty += $qty;
                             $tripProductBreakdown[$pName] = ($tripProductBreakdown[$pName] ?? 0) + $qty;
