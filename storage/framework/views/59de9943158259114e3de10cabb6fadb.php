@@ -1,0 +1,766 @@
+
+<!DOCTYPE html>
+<html lang="<?php echo e(str_replace('_', '-', app()->getLocale())); ?>">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
+
+    <title><?php echo $__env->yieldContent('title', 'Dashboard Kasir'); ?> - <?php echo e(config('app.name', 'Laravel')); ?></title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+    <style>
+        :root {
+            --kasir-primary: #667eea;
+            --kasir-secondary: #764ba2;
+            --kasir-accent: #f59e0b;
+            --kasir-success: #10b981;
+            --kasir-danger: #ef4444;
+            --kasir-warning: #f59e0b;
+            --kasir-info: #06b6d4;
+            --kasir-dark: #1e293b;
+            --kasir-light: #f8fafc;
+            --kasir-muted: #64748b;
+            --kasir-border: #e2e8f0;
+            --kasir-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --kasir-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --kasir-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            overflow-x: hidden;
+            max-width: 100%;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f7f9fc;
+            line-height: 1.6;
+            color: var(--kasir-dark);
+        }
+
+        /* Layout Container */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            width: 100%;
+            overflow-x: hidden; /* Mencegah layar tergeser keluar (scroll horizontal) */
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 0;
+            width: 100%;
+            max-width: 100%;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background: #f7f9fc;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            padding: 2rem;
+            max-width: 100%;
+            min-width: 0;
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6) !important; /* Warna transparan biasa */
+            backdrop-filter: none !important; /* Membunuh bug blur total */
+            -webkit-backdrop-filter: none !important;
+            z-index: 1054 !important;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .sidebar-overlay.show {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Cards */
+        .card {
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.08);
+            background-color: white;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        .card:hover {
+            box-shadow: 0 8px 35px rgba(0, 0, 0, 0.12);
+            transform: translateY(-4px);
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+            border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+            border-radius: 16px 16px 0 0 !important;
+            padding: 1.5rem;
+            font-weight: 600;
+            color: var(--kasir-dark);
+        }
+
+        .card-body {
+            padding: 2rem;
+            min-width: 0;
+        }
+
+        /* Mobile Menu Button - Dipaksa aktif di semua layar (Desktop & Mobile) */
+        .mobile-menu-btn {
+            display: flex !important; 
+            align-items: center;
+            justify-content: center;
+            position: fixed;
+            top: 1.5rem;
+            left: 1.5rem;
+            z-index: 1061;
+            background: var(--kasir-gradient);
+            border: none;
+            border-radius: 12px;
+            padding: 0.875rem;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+            color: white;
+            font-size: 1.25rem;
+            width: 3.5rem;
+            height: 3.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Desktop specific: Sembunyikan overlay & buat konten menyusut dinamis */
+        @media (min-width: 992px) {
+            .sidebar-overlay {
+                display: none !important; 
+            }
+            
+            /* INI KUNCI UTAMANYA: Mengurangi lebar konten saat sidebar terbuka */
+            .main-content.sidebar-open {
+                margin-left: 280px !important;
+                width: calc(100% - 280px) !important;
+                max-width: calc(100% - 280px) !important;
+            }
+        }
+
+        .mobile-menu-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .mobile-menu-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Buttons */
+        .btn {
+            border-radius: 10px;
+            font-weight: 500;
+            padding: 0.75rem 1.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            font-size: 0.95rem;
+            white-space: nowrap;
+        }
+
+        /* FIX UTAMA: pastikan btn-sm & btn-lg TIDAK ke-override oleh .btn di atas */
+        .btn-sm {
+            padding: 0.4rem 0.9rem !important;
+            font-size: 0.8rem !important;
+            border-radius: 8px !important;
+        }
+
+        .btn-lg {
+            padding: 1rem 2rem !important;
+            font-size: 1.05rem !important;
+        }
+
+        .btn-primary {
+            background: var(--kasir-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+            color: white;
+        }
+
+        /* Kelompok tombol aksi di dalam tabel: beri jarak rapi, boleh wrap di layar sempit */
+        td .btn+.btn,
+        td a.btn+a.btn,
+        td a.btn+.btn {
+            margin-left: 0.35rem;
+        }
+
+        /* Alerts */
+        .alert {
+            border-radius: 12px;
+            border: none;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(10px);
+        }
+
+        .alert-success {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05));
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+
+        .alert-danger {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05));
+            color: #7f1d1d;
+            border-left: 4px solid #ef4444;
+        }
+
+        .alert-warning {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.05));
+            color: #78350f;
+            border-left: 4px solid #f59e0b;
+        }
+
+        .alert-info {
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.1), rgba(8, 145, 178, 0.05));
+            color: #0c4a6e;
+            border-left: 4px solid #06b6d4;
+        }
+
+        /* Form Controls */
+        .form-control,
+        .form-select {
+            border-radius: 10px;
+            border: 2px solid #e5e7eb;
+            padding: 0.875rem 1.25rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 0.95rem;
+            background-color: #fafbfc;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: var(--kasir-primary);
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+            background-color: white;
+            transform: translateY(-1px);
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: var(--kasir-dark);
+            margin-bottom: 0.75rem;
+        }
+
+        /* Tables */
+        .table-responsive {
+            border-radius: 12px;
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.08);
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table {
+            margin-bottom: 0;
+        }
+
+        .table thead th {
+            background: var(--kasir-gradient);
+            color: white;
+            border: none;
+            font-weight: 600;
+            padding: 1rem 1.25rem;
+            white-space: nowrap;
+        }
+
+        .table tbody tr {
+            transition: all 0.3s ease;
+        }
+
+        .table tbody tr:hover {
+            background-color: rgba(102, 126, 234, 0.05);
+        }
+
+        .table tbody td {
+            padding: 0.9rem 1.25rem;
+            border-color: rgba(102, 126, 234, 0.1);
+            vertical-align: middle;
+        }
+
+        /* Page Header */
+        .page-header {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.08);
+            border-left: 4px solid var(--kasir-primary);
+        }
+
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--kasir-dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .page-subtitle {
+            color: var(--kasir-muted);
+            font-size: 1.1rem;
+        }
+
+        /* ===================== RESPONSIVE ===================== */
+        @media (max-width: 992px) {
+            .main-content {
+                margin-left: 0;
+            }
+
+            .mobile-menu-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .content-wrapper {
+                padding: 1.5rem;
+                padding-top: 6rem;
+            }
+
+            .page-header {
+                padding: 1.5rem;
+            }
+
+            .page-title {
+                font-size: 1.75rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .mobile-menu-btn {
+                top: 1rem;
+                left: 1rem;
+                width: 3rem;
+                height: 3rem;
+                padding: 0.75rem;
+            }
+
+            .content-wrapper {
+                padding: 1rem;
+                padding-top: 5rem;
+            }
+
+            .card-body {
+                padding: 1.25rem;
+            }
+
+            .card-header {
+                padding: 1rem 1.25rem;
+            }
+
+            .page-header {
+                padding: 1.25rem;
+            }
+
+            .page-title {
+                font-size: 1.5rem;
+            }
+
+            /* Tabel jadi lebih ringkas di HP */
+            .table thead th {
+                padding: 0.65rem 0.75rem;
+                font-size: 0.8rem;
+            }
+
+            .table tbody td {
+                padding: 0.65rem 0.75rem;
+                font-size: 0.85rem;
+            }
+
+            /* Tombol di kolom aksi jadi lebih kecil & tidak dorong tabel melebar */
+            .table .btn-sm {
+                padding: 0.3rem 0.6rem !important;
+                font-size: 0.75rem !important;
+            }
+
+            .table td.text-center .btn,
+            .table td.text-center a.btn {
+                margin-bottom: 0.25rem;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .content-wrapper {
+                padding: 0.75rem;
+                padding-top: 5rem;
+            }
+
+            .card-body {
+                padding: 1rem;
+            }
+
+            .card-header {
+                padding: 0.85rem 1rem;
+            }
+
+            .page-header {
+                padding: 1rem;
+            }
+
+            /* Di layar sangat sempit, kolom aksi ditumpuk vertikal biar tidak perlu zoom/scroll */
+            .table td.text-center {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.35rem;
+            }
+
+            .table td.text-center .btn+.btn {
+                margin-left: 0;
+            }
+        }
+
+        /* Loading States */
+        .loading-spinner {
+            display: inline-block;
+            width: 1.5rem;
+            height: 1.5rem;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--kasir-primary);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Focus States */
+        .btn:focus,
+        .form-control:focus,
+        .form-select:focus,
+        a:focus {
+            outline: 3px solid rgba(102, 126, 234, 0.3);
+            outline-offset: 2px;
+        }
+
+        /* Badges */
+        .badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 500;
+            font-size: 0.8rem;
+        }
+
+        .badge.bg-primary {
+            background: var(--kasir-gradient) !important;
+        }
+
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .slide-up {
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+
+    <?php echo $__env->yieldPushContent('styles'); ?>
+</head>
+
+<body>
+    <!-- Mobile Menu Button -->
+    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" title="Toggle Menu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-container">
+        <?php echo $__env->make('kasir.layouts.sidebar', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+
+        <div class="main-content">
+            <?php if(View::exists('kasir.layouts.header')): ?>
+            <?php echo $__env->make('kasir.layouts.header', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
+            <?php endif; ?>
+
+            <div class="content-wrapper">
+                <!-- Success/Error Messages -->
+                <?php if(session('success')): ?>
+                <div class="alert alert-success alert-dismissible fade show slide-up" role="alert">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Berhasil!</strong> <?php echo e(session('success')); ?>
+
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                <?php endif; ?>
+
+                <?php if(session('error')): ?>
+                <div class="alert alert-danger alert-dismissible fade show slide-up" role="alert">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>Error!</strong> <?php echo e(session('error')); ?>
+
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                <?php endif; ?>
+
+                <?php if(session('warning')): ?>
+                <div class="alert alert-warning alert-dismissible fade show slide-up" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Peringatan!</strong> <?php echo e(session('warning')); ?>
+
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                <?php endif; ?>
+
+                <?php if(session('info')): ?>
+                <div class="alert alert-info alert-dismissible fade show slide-up" role="alert">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Info!</strong> <?php echo e(session('info')); ?>
+
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                <?php endif; ?>
+
+                <main class="fade-in">
+                    <?php echo $__env->yieldContent('content'); ?>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // Enhanced Mobile Menu Toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            const sidebar = document.getElementById('sidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+            sidebar.classList.toggle('show');
+
+            // Icon animation
+            const icon = mobileMenuBtn.querySelector('i');
+            const mainContent = document.querySelector('.main-content');
+            
+            if (sidebar.classList.contains('show')) {
+                icon.className = 'fas fa-times';
+                mobileMenuBtn.style.transform = 'rotate(90deg)';
+                
+                if (window.innerWidth >= 992) {
+                    // MODE DESKTOP: Geser konten, JANGAN panggil overlay
+                    if (mainContent) mainContent.classList.add('sidebar-open');
+                    sidebarOverlay.classList.remove('show');
+                } else {
+                    // MODE MOBILE: Tampilkan overlay
+                    sidebarOverlay.classList.add('show');
+                }
+            } else {
+                icon.className = 'fas fa-bars';
+                mobileMenuBtn.style.transform = 'rotate(0deg)';
+                
+                if (window.innerWidth >= 992) {
+                    // MODE DESKTOP: Kembalikan posisi konten
+                    if (mainContent) mainContent.classList.remove('sidebar-open');
+                }
+                // Sembunyikan overlay di semua ukuran layar
+                sidebarOverlay.classList.remove('show');
+                 }
+            }
+
+            if (mobileMenuBtn) {
+                mobileMenuBtn.addEventListener('click', toggleSidebar);
+            }
+
+            if (sidebarOverlay) {
+                sidebarOverlay.addEventListener('click', toggleSidebar);
+            }
+
+            // Close sidebar when clicking on a link (mobile)
+            if (sidebar) {
+                const sidebarLinks = sidebar.querySelectorAll('a:not(.dropdown-toggle)');
+                sidebarLinks.forEach(link => {
+                    link.addEventListener('click', function() {
+                        if (window.innerWidth <= 992) {
+                            setTimeout(() => {
+                                toggleSidebar();
+                            }, 100);
+                        }
+                    });
+                });
+            }
+
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                // Desktop behavior is now consistent with mobile, no auto-closing or icon reset required on resize
+            });
+
+            // Enhanced keyboard navigation
+            document.addEventListener('keydown', function(e) {
+                // Close sidebar with Escape key
+                if (e.key === 'Escape' && sidebar && sidebar.classList.contains('show')) {
+                    toggleSidebar();
+                }
+
+                // Toggle sidebar with Ctrl/Cmd + M
+                if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
+                    e.preventDefault();
+                    toggleSidebar();
+                }
+            });
+        });
+
+        // Enhanced Auto-hide alerts
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
+            alerts.forEach(function(alert, index) {
+                setTimeout(function() {
+                    if (bootstrap && bootstrap.Alert) {
+                        const bsAlert = new bootstrap.Alert(alert);
+                        if (bsAlert) {
+                            alert.style.transform = 'translateX(100%)';
+                            alert.style.opacity = '0';
+                            setTimeout(() => {
+                                bsAlert.close();
+                            }, 300);
+                        }
+                    }
+                }, 5000 + (index * 500)); // Stagger the hiding
+            });
+        });
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Enhanced button interactions
+        document.addEventListener('DOMContentLoaded', function() {
+            const buttons = document.querySelectorAll('.btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('mousedown', function() {
+                    this.style.transform = 'scale(0.95)';
+                });
+
+                btn.addEventListener('mouseup', function() {
+                    this.style.transform = '';
+                });
+
+                btn.addEventListener('mouseleave', function() {
+                    this.style.transform = '';
+                });
+            });
+        });
+
+        // Add loading state to forms
+        document.addEventListener('DOMContentLoaded', function() {
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function() {
+                    const submitBtn = this.querySelector('button[type="submit"], input[type="submit"]');
+                    if (submitBtn) {
+                        const originalText = submitBtn.innerHTML;
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Memproses...';
+                        submitBtn.disabled = true;
+
+                        // Re-enable after 10 seconds as fallback
+                        setTimeout(() => {
+                            submitBtn.innerHTML = originalText;
+                            submitBtn.disabled = false;
+                        }, 10000);
+                    }
+                });
+            });
+        });
+    </script>
+
+    <?php echo $__env->yieldPushContent('scripts'); ?>
+</body>
+
+</html><?php /**PATH /home/resdigaz/pb.resdigaza.my.id/resources/views/kasir/layouts/app.blade.php ENDPATH**/ ?>

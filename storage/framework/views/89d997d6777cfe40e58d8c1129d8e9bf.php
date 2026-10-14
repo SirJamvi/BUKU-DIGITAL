@@ -1,0 +1,209 @@
+<div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="d-flex align-items-center justify-content-center">
+                <i class="fas fa-crown me-2" style="color: var(--luxury-gold);"></i>
+                <h4 class="mb-0">Buku Digital Aza</h4>
+            </div>
+        </div>
+
+        <div class="sidebar-menu">
+            <a href="<?php echo e(route('admin.dashboard')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.dashboard') ? 'active' : ''); ?>">
+                <i class="fas fa-tachometer-alt"></i>
+                <span>Dashboard</span>
+            </a>
+
+            
+            <div class="sidebar-group">
+                <div class="sidebar-group-header">
+                    <i class="fas fa-database"></i>
+                    <span>Master Data</span>
+                </div>
+                
+                <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'products.read')): ?>
+                <a href="<?php echo e(route('admin.products.index')); ?>" class="sidebar-item sub-item <?php echo e(request()->routeIs('admin.products.*') ? 'active' : ''); ?>">
+                    <i class="fas fa-box-open"></i>
+                    <span>Produk</span>
+                </a>
+                <?php endif; ?>
+
+                <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'categories.read')): ?>
+                <a href="<?php echo e(route('admin.categories.index')); ?>" class="sidebar-item sub-item <?php echo e(request()->routeIs('admin.categories.*') ? 'active' : ''); ?>">
+                    <i class="fas fa-tags"></i>
+                    <span>Kategori</span>
+                </a>
+                <?php endif; ?>
+
+                <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'suppliers.read')): ?>
+                <a href="<?php echo e(route('admin.suppliers.index')); ?>" class="sidebar-item sub-item <?php echo e(request()->routeIs('admin.suppliers.*') ? 'active' : ''); ?>">
+                    <i class="fas fa-truck"></i>
+                    <span>Supplier</span>
+                </a>
+                <?php endif; ?>
+            </div>
+
+            <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'inventory.read')): ?>
+            <a href="<?php echo e(route('admin.inventory.index')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.inventory.*') ? 'active' : ''); ?>">
+                <i class="fas fa-warehouse"></i>
+                <span>Inventaris</span>
+            </a>
+            <?php endif; ?>
+
+            <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'transactions.read')): ?>
+            <a href="<?php echo e(route('admin.transactions.index')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.transactions.*') ? 'active' : ''); ?>">
+                <i class="fas fa-cash-register"></i>
+                <span>Transaksi</span>
+            </a>
+            <?php endif; ?>
+
+            <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'customers.read')): ?>
+            <a href="<?php echo e(route('admin.customers.index')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.customers.*') ? 'active' : ''); ?>">
+                <i class="fas fa-users"></i>
+                <span>Pelanggan</span>
+            </a>
+            <?php endif; ?>
+
+            <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'financial.view_all')): ?>
+            <a href="<?php echo e(route('admin.financial.expenses')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.financial.expenses*') ? 'active' : ''); ?>">
+                <i class="fas fa-receipt"></i>
+                <span>Pengeluaran</span>
+            </a>
+            <?php endif; ?>
+
+            <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'financial.view_all')): ?>
+            <a href="<?php echo e(route('admin.financial.index')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.financial.*') ? 'active' : ''); ?>">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <span>Finansial</span>
+            </a>
+            <?php endif; ?>
+
+            
+            <div class="sidebar-group">
+                <div class="sidebar-group-header">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Analisis & Laporan</span>
+                </div>
+
+                <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'reports.view_all')): ?>
+                <a href="<?php echo e(route('admin.reports.index')); ?>" class="sidebar-item sub-item <?php echo e(request()->routeIs('admin.reports.*') ? 'active' : ''); ?>">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Laporan</span>
+                </a>
+                <?php endif; ?>
+
+                <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'business_intelligence.view')): ?>
+                <a href="<?php echo e(route('admin.bi.index')); ?>" class="sidebar-item sub-item <?php echo e(request()->routeIs('admin.bi.*') ? 'active' : ''); ?>">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Business Intelligence</span>
+                </a>
+                <?php endif; ?>
+
+                
+            </div>
+
+            <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'fund_allocation.view')): ?>
+            <a href="<?php echo e(route('admin.fund-allocation.index')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.fund-allocation.*') ? 'active' : ''); ?>">
+                <i class="fas fa-money-bill-wave"></i>
+                <span>Alokasi Dana</span>
+            </a>
+            <?php endif; ?>
+
+            <div class="sidebar-divider"></div>
+
+            <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'users.read')): ?>
+            <a href="<?php echo e(route('admin.users.index')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.users.*') ? 'active' : ''); ?>">
+                <i class="fas fa-user-cog"></i>
+                <span>Manajemen User</span>
+            </a>
+            <?php endif; ?>
+
+            <?php if (\Illuminate\Support\Facades\Blade::check('permission', 'settings.view')): ?>
+            <a href="<?php echo e(route('admin.settings.index')); ?>" class="sidebar-item <?php echo e(request()->routeIs('admin.settings.*') ? 'active' : ''); ?>">
+                <i class="fas fa-cogs"></i>
+                <span>Pengaturan</span>
+            </a>
+            <?php endif; ?>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Quick Stats or Additional Info -->
+            
+        </div>
+    </div>
+
+    <style>
+        .progress {
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 2px;
+        }
+        
+        .progress-bar {
+            border-radius: 2px;
+        }
+        
+        .sidebar-item span {
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar-item.active span {
+            font-weight: 600;
+            color: var(--gold-light);
+        }
+        
+        .sidebar-item:hover span {
+            color: var(--gold-light);
+        }
+        
+        .sidebar-item i {
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .sidebar-item.active i {
+            color: var(--luxury-gold);
+        }
+        
+        .sidebar-item:hover i {
+            color: var(--luxury-gold);
+        }
+
+        .sidebar-group {
+            margin-bottom: 1rem;
+        }
+
+        .sidebar-group-header {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--luxury-gold);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar-group-header i {
+            margin-right: 0.5rem;
+            color: var(--luxury-gold);
+        }
+
+        .sidebar-item.sub-item {
+            padding-left: 3rem;
+            font-size: 0.9rem;
+        }
+
+        .sidebar-item.sub-item:before {
+            content: '';
+            position: absolute;
+            left: 2rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 4px;
+            background: rgba(255,255,255,0.5);
+            border-radius: 50%;
+        }
+
+        .sidebar-item.sub-item.active:before {
+            background: var(--luxury-gold);
+        }
+    </style><?php /**PATH /home/resdigaz/pb.resdigaza.my.id/resources/views/admin/layouts/sidebar.blade.php ENDPATH**/ ?>
