@@ -50,9 +50,7 @@ class Transaction extends Model
     // Relasi ke kurir/driver (mendukung driver_id maupun claimed_by_driver_id)
     public function driver(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'driver_id')->withDefault(function () {
-            return $this->belongsTo(User::class, 'claimed_by_driver_id');
-        });
+        return $this->belongsTo(User::class, 'driver_id');
     }
 
     /**
