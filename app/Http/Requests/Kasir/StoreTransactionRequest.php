@@ -88,8 +88,15 @@ class StoreTransactionRequest extends FormRequest
             });
         }
 
-        $this->merge([
+        $mergeData = [
             'total_amount' => $totalAmount,
-        ]);
+        ];
+
+        // Jika single order ditugaskan ke driver, otomatis payment_method kasbon
+        if ($this->filled('driver_id')) {
+            $mergeData['payment_method'] = 'kasbon';
+        }
+
+        $this->merge($mergeData);
     }
 }

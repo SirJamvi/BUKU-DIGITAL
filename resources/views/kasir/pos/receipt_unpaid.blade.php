@@ -312,9 +312,13 @@
             </div>
         </div>
 
-        {{-- Badge Kasbon --}}
+        {{-- Badge Kasbon / Pengiriman --}}
         <div class="kasbon-badge">
-            ⚠️ STRUK TAGIHAN (KASBON)
+            @if($transaction->driver)
+                🛵 PENGIRIMAN DRIVER (BELUM LUNAS)
+            @else
+                ⚠️ STRUK TAGIHAN (KASBON)
+            @endif
         </div>
 
         {{-- ========================================= --}}
@@ -338,6 +342,18 @@
                     <td>Pelanggan</td>
                     <td>: {{ $transaction->customer->name ?? 'Umum' }}</td>
                 </tr>
+                @if($transaction->driver)
+                <tr>
+                    <td>Driver Pengantar</td>
+                    <td>: 🛵 {{ $transaction->driver->name }}</td>
+                </tr>
+                @endif
+                @if($transaction->delivery_trip_code)
+                <tr>
+                    <td>No. Pengiriman</td>
+                    <td>: {{ $transaction->delivery_trip_code }}</td>
+                </tr>
+                @endif
             </table>
         </div>
 
@@ -396,13 +412,18 @@
     {{-- TOMBOL AKSI (Tidak Tercetak) --}}
     {{-- ========================================= --}}
     <div class="no-print">
-        <div style="margin-bottom: 15px;">
+        <div style="margin-bottom: 15px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
             <a href="{{ route('kasir.pos.index') }}" class="btn btn-primary">
                 ← Kembali ke POS
             </a>
             <button onclick="window.print()" class="btn btn-secondary">
                 🖨️ Cetak Struk
             </button>
+            @if($transaction->delivery_trip_code)
+            <a href="{{ route('kasir.pos.deliveryReceipt', $transaction->delivery_trip_code) }}" target="_blank" class="btn btn-warning" style="background-color: #ffc107; color: #000; font-weight: 600; text-decoration: none;">
+                📋 Cetak Surat Jalan Driver
+            </a>
+            @endif
         </div>
 
         <div class="wa-input-container" style="display: flex; flex-direction: column; gap: 10px; align-items: center;">

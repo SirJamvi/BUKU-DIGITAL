@@ -194,9 +194,15 @@ class PosService
                 }
             }
 
-            // Cek apakah ini transaksi kasbon
-            $isKasbon = $data['payment_method'] === 'kasbon';
-            $driverId = $data['driver_id'] ?? null;
+            // Cek apakah ada driver yang ditugaskan (Pengiriman)
+            $driverId = !empty($data['driver_id']) ? (int) $data['driver_id'] : null;
+
+            // Berdasarkan kesepakatan: Jika ada driver, otomatis Kasbon / Pending sampai driver kembali
+            $isDelivery = !empty($driverId);
+            $isKasbon = $isDelivery || (($data['payment_method'] ?? '') === 'kasbon');
+
+            // Generate trip_code jika pengiriman driver (baik 1 pesanan maupun rombongan)
+            $tripCode = $isDelivery ? $this->generateTripCode(Auth::user()->business_id) : null;
 
             // 2. Buat transaksi utama
             $transaction = Transaction::create([
@@ -205,8 +211,8 @@ class PosService
                 'customer_id' => $data['customer_id'] ?? null,
                 'driver_id' => $driverId,
                 'claimed_by_driver_id' => $driverId,
+                'delivery_trip_code' => $tripCode,
                 'total_amount' => $data['total_amount'],
-                // PERBAIKAN: Masukkan string 'kasbon' alih-alih null
                 'payment_method' => $isKasbon ? 'kasbon' : $data['payment_method'],
                 'payment_status' => $isKasbon ? 'pending' : 'paid',
                 'order_status' => $driverId ? 'delivering' : null,
@@ -266,7 +272,8 @@ class PosService
         return Transaction::with([
             'details.product',
             'customer',
-            'createdBy'
+            'createdBy',
+            'driver'
         ])->findOrFail($transactionId);
     }
 }

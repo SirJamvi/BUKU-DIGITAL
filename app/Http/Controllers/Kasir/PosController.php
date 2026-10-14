@@ -52,9 +52,12 @@ class PosController extends Controller
             // Redirect ke struk yang sesuai berdasarkan status pembayaran
             // ==========================================================
             if ($transaction->payment_status === 'pending') {
+                $msg = $transaction->driver_id
+                    ? "Pesanan Pengiriman Driver (#{$transaction->delivery_trip_code}) dicatat! Struk tagihan & surat jalan siap dicetak."
+                    : 'Transaksi Kasbon dicatat! Struk tagihan akan dicetak.';
                 return redirect()
                     ->route('kasir.pos.receiptUnpaid', $transaction->id)
-                    ->with('success', 'Transaksi Kasbon dicatat! Struk tagihan akan dicetak.');
+                    ->with('success', $msg);
             }
 
             return redirect()

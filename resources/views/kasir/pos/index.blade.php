@@ -258,13 +258,14 @@
 
                     <hr>
 
-                    {{-- Dropdown Driver Pengantar (Muncul jika mode pengiriman / >= 2 pesanan) --}}
-                    <div class="mb-3 d-none" id="driver-select-container">
-                        <label for="driver_id" class="form-label fw-bold">
-                            <i class="fas fa-motorcycle text-primary me-1"></i> Driver Pengantar <span class="text-danger">*</span>
+                    {{-- Dropdown Driver Pengantar (Selalu ada, opsional untuk 1 order, wajib untuk multi-order) --}}
+                    <div class="mb-3" id="driver-select-container">
+                        <label for="driver_id" class="form-label fw-bold d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-motorcycle text-primary me-1"></i> Driver Pengantar <span class="text-danger d-none" id="driver-required-star">*</span></span>
+                            <span class="badge bg-light text-muted border fw-normal" id="driver-badge-status" style="font-size: 0.72rem;">Opsional</span>
                         </label>
                         <select name="driver_id" id="driver_id" class="form-select border-primary">
-                            <option value="" disabled selected>-- Pilih Driver yang Mengantar --</option>
+                            <option value="">-- Tanpa Driver (Beli Langsung di Tempat) --</option>
                             @if(isset($drivers) && $drivers->isNotEmpty())
                                 @foreach($drivers as $driver)
                                 <option value="{{ $driver->id }}">{{ $driver->name }} ({{ $driver->phone ?? 'Driver' }})</option>
@@ -273,10 +274,10 @@
                                 <option value="" disabled>Belum ada user role Driver</option>
                             @endif
                         </select>
-                        <small class="text-muted">Pilih supir yang membawa pesanan ini</small>
+                        <small class="text-muted" id="driver-help-text">Pilih driver jika pesanan ingin diantar, atau biarkan kosong jika beli langsung di toko</small>
                     </div>
 
-                    {{-- Dropdown Metode Pembayaran (Hanya untuk 1 order / beli langsung) --}}
+                    {{-- Dropdown Metode Pembayaran (Hanya untuk 1 order beli langsung) --}}
                     <div class="mb-3" id="payment-method-container">
                         <label for="payment_method" class="form-label fw-bold">Metode Pembayaran</label>
                         <select name="payment_method" id="payment_method" class="form-select" required>
@@ -290,10 +291,13 @@
                         </select>
                     </div>
 
-                    {{-- Badge Status Kasbon saat Multi-Order Aktif --}}
+                    {{-- Badge Status Kasbon saat Mode Pengiriman Driver Aktif --}}
                     <div id="multi-order-payment-badge" class="d-none mb-3 text-center">
-                        <div class="badge bg-danger bg-opacity-10 text-danger border border-danger w-100 py-2 fs-6">
-                            <i class="fas fa-clock me-1"></i> METODE: KASBON / TAGIHAN PENDING
+                        <div class="badge bg-danger bg-opacity-10 text-danger border border-danger w-100 py-2 fs-6 text-wrap text-start px-3">
+                            <div class="fw-bold" id="delivery-badge-title"><i class="fas fa-motorcycle me-1"></i> STATUS: DIKIRIM VIA DRIVER</div>
+                            <small class="text-dark d-block mt-1" id="delivery-badge-subtitle" style="font-size: 0.78rem;">
+                                Pembayaran diset sementara sebagai <strong>Kasbon / Pending</strong>. Kasir menginput pembayaran riil (Cash/DANA/Transfer) di Dashboard saat Driver kembali.
+                            </small>
                         </div>
                     </div>
 
@@ -535,6 +539,24 @@
                     safeSetVisible(multiPaymentBadge, true);
                     safeSetVisible(multiSummaryBox, true);
 
+                    const driverStar = safeEl('driver-required-star');
+                    if (driverStar) driverStar.classList.remove('d-none');
+
+                    const driverBadge = safeEl('driver-badge-status');
+                    if (driverBadge) {
+                        driverBadge.innerText = 'Wajib Diisi';
+                        driverBadge.className = 'badge bg-danger bg-opacity-10 text-danger border border-danger fw-bold';
+                    }
+
+                    const driverHelp = safeEl('driver-help-text');
+                    if (driverHelp) driverHelp.innerText = 'Pilih supir yang membawa pesanan rombongan ini';
+
+                    const badgeTitle = safeEl('delivery-badge-title');
+                    if (badgeTitle) badgeTitle.innerHTML = '<i class="fas fa-truck me-1"></i> STATUS: PENGIRIMAN ROMBONGAN';
+
+                    const badgeSubtitle = safeEl('delivery-badge-subtitle');
+                    if (badgeSubtitle) badgeSubtitle.innerHTML = 'Semua pesanan diset sementara sebagai <strong>Kasbon / Pending</strong>. Kasir menginput pembayaran riil masing-masing toko di Dashboard saat Driver kembali.';
+
                     if (orderModeBadge) {
                         orderModeBadge.className = 'badge bg-primary ms-2 small';
                         orderModeBadge.innerHTML = `<i class="fas fa-truck me-1"></i> Rombongan Driver (${orders.length} Toko)`;
@@ -580,24 +602,66 @@
                 } else {
                     safeSetVisible(multiBanner, false);
                     safeSetVisible(tabsWrapper, false);
-                    safeSetVisible(driverContainer, false);
-                    safeSetRequired(driverSelect, false);
-                    safeSetVisible(paymentContainer, true);
-                    safeSetRequired(paymentSelect, true);
-                    safeSetVisible(multiPaymentBadge, false);
                     safeSetVisible(multiSummaryBox, false);
 
-                    if (orderModeBadge) {
-                        orderModeBadge.className = 'badge bg-secondary ms-2 small';
-                        orderModeBadge.innerText = 'Pesanan Langsung';
+                    // Driver select selalu aktif di single order mode sebagai opsi pengiriman
+                    safeSetVisible(driverContainer, true);
+                    safeSetRequired(driverSelect, false);
+
+                    const driverStar = safeEl('driver-required-star');
+                    if (driverStar) driverStar.classList.add('d-none');
+
+                    const driverBadge = safeEl('driver-badge-status');
+                    if (driverBadge) {
+                        driverBadge.innerText = 'Opsional';
+                        driverBadge.className = 'badge bg-light text-muted border fw-normal';
                     }
+
+                    const driverHelp = safeEl('driver-help-text');
+                    if (driverHelp) driverHelp.innerText = 'Pilih driver jika pesanan ingin diantar, atau biarkan kosong jika beli langsung di toko';
 
                     if (btnAddDelivery) {
                         btnAddDelivery.innerHTML = `<i class="fas fa-plus-circle me-1"></i> + Tambah Transaksi ke Pengiriman`;
                     }
 
-                    if (btnSubmit) {
-                        btnSubmit.innerHTML = `<i class="fas fa-check-circle me-2"></i> PROSES PEMBAYARAN`;
+                    const hasDriver = driverSelect && driverSelect.value !== '';
+
+                    if (hasDriver) {
+                        // 1 Pesanan DIKIRIM via Driver (Kasbon/Pending otomatis)
+                        safeSetVisible(paymentContainer, false);
+                        safeSetRequired(paymentSelect, false);
+                        safeSetVisible(multiPaymentBadge, true);
+
+                        const badgeTitle = safeEl('delivery-badge-title');
+                        if (badgeTitle) badgeTitle.innerHTML = '<i class="fas fa-motorcycle me-1"></i> STATUS: DIKIRIM VIA DRIVER';
+
+                        const badgeSubtitle = safeEl('delivery-badge-subtitle');
+                        if (badgeSubtitle) badgeSubtitle.innerHTML = 'Pesanan diset sementara sebagai <strong>Kasbon / Pending</strong>. Kasir menginput pembayaran riil (Cash/DANA/Transfer) di Dashboard saat Driver kembali.';
+
+                        const driverName = driverSelect.options[driverSelect.selectedIndex]?.text || 'Driver';
+
+                        if (orderModeBadge) {
+                            orderModeBadge.className = 'badge bg-primary ms-2 small';
+                            orderModeBadge.innerHTML = `<i class="fas fa-motorcycle me-1"></i> Dikirim: ${driverName.split('(')[0]}`;
+                        }
+
+                        if (btnSubmit) {
+                            btnSubmit.innerHTML = `<i class="fas fa-truck-moving me-2"></i> PROSES PENGIRIMAN DRIVER`;
+                        }
+                    } else {
+                        // 1 Pesanan BELI LANGSUNG DI TEMPAT
+                        safeSetVisible(paymentContainer, true);
+                        safeSetRequired(paymentSelect, true);
+                        safeSetVisible(multiPaymentBadge, false);
+
+                        if (orderModeBadge) {
+                            orderModeBadge.className = 'badge bg-secondary ms-2 small';
+                            orderModeBadge.innerText = 'Beli Langsung di Tempat';
+                        }
+
+                        if (btnSubmit) {
+                            btnSubmit.innerHTML = `<i class="fas fa-check-circle me-2"></i> PROSES PEMBAYARAN`;
+                        }
                     }
                 }
 
@@ -861,6 +925,7 @@
                     driverId: this.value,
                     driverName: optText
                 });
+                renderCart();
             });
         }
 
@@ -907,12 +972,17 @@
                         return false;
                     }
 
-                    const pmSel = safeEl('payment_method');
-                    if (!pmSel || !pmSel.value) {
-                        e.preventDefault();
-                        alert('Silakan pilih Metode Pembayaran!');
-                        if (pmSel) pmSel.focus();
-                        return false;
+                    const dSelect = safeEl('driver_id');
+                    const hasDriver = dSelect && dSelect.value !== '';
+
+                    if (!hasDriver) {
+                        const pmSel = safeEl('payment_method');
+                        if (!pmSel || !pmSel.value) {
+                            e.preventDefault();
+                            alert('Silakan pilih Metode Pembayaran!');
+                            if (pmSel) pmSel.focus();
+                            return false;
+                        }
                     }
                 }
 

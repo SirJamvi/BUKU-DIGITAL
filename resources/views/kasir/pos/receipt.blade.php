@@ -341,6 +341,18 @@
                     <td>Pelanggan</td>
                     <td>: {{ $transaction->customer->name ?? 'Umum' }}</td>
                 </tr>
+                @if($transaction->driver)
+                <tr>
+                    <td>Driver Pengantar</td>
+                    <td>: 🛵 {{ $transaction->driver->name }}</td>
+                </tr>
+                @endif
+                @if($transaction->delivery_trip_code)
+                <tr>
+                    <td>No. Pengiriman</td>
+                    <td>: {{ $transaction->delivery_trip_code }}</td>
+                </tr>
+                @endif
             </table>
         </div>
 
