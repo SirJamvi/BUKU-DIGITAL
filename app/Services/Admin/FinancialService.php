@@ -729,7 +729,7 @@ class FinancialService
             ->where('business_id', $businessId)
             ->where('status', 'completed')
             ->select('id', 'total_amount', 'transaction_date')
-            ->with(['details:id,transaction_id,product_id,cost_price,unit_cost,purchase_price,quantity', 'details.product:id,cost_price']);
+            ->with(['details:id,transaction_id,product_id,quantity,unit_price,total_price', 'details.product:id,cost_price']);
 
         $this->applyDateFilters($transactions, $filters, 'transaction_date');
         $transactions = $transactions->lazy();
