@@ -17,18 +17,26 @@
             <h1 class="dashboard-title">Selamat Datang, {{ Auth::user()->name ?? 'Admin' }}</h1>
             <p class="dashboard-subtitle">Berikut adalah ringkasan performa bisnis Anda hari ini</p>
         </div>
-        <div class="col-md-4 text-end">
+        <div class="col-md-4 text-end d-flex flex-column align-items-md-end gap-2">
             <div class="dashboard-date">
-                <i class="fas fa-calendar-alt"></i>
+                <i class="fas fa-calendar-alt me-1"></i>
                 <span>{{ \Carbon\Carbon::now()->format('l, d F Y') }}</span>
+            </div>
+            <div class="d-inline-flex align-items-center gap-2 bg-white bg-opacity-25 px-3 py-1 rounded-pill text-white shadow-sm" style="font-size: 0.8rem; backdrop-filter: blur(10px);">
+                <span class="spinner-border spinner-border-sm text-warning" id="autoReloadSpinner" style="display: none; width: 0.75rem; height: 0.75rem;" role="status"></span>
+                <span class="badge bg-success rounded-circle p-1" id="livePulseDot" style="width: 8px; height: 8px; box-shadow: 0 0 8px #28a745;"> </span>
+                <span>Auto-Refresh: <strong id="reloadCountdown">60s</strong></span>
+                <button type="button" class="btn btn-sm btn-link text-white p-0 text-decoration-none ms-1" onclick="manualTriggerRefresh()" title="Perbarui Data Sekarang">
+                    <i class="fas fa-rotate" id="manualRefreshIcon"></i>
+                </button>
             </div>
         </div>
     </div>
 </div>
 
 {{-- Performance Metrics Cards --}}
-<div class="row g-4 mb-4">
-    {{-- Penjualan Hari Ini --}}
+<div class="row g-4 mb-4" id="dashboard-kpi-row">
+    {{-- 1. Penjualan Hari Ini (Omset & Fisik Ball) --}}
     <div class="col-xl-3 col-md-6">
         <div class="metric-card metric-card-sales">
             <div class="metric-icon">
@@ -37,24 +45,24 @@
             <div class="metric-content">
                 <h3 class="metric-title">Penjualan Hari Ini</h3>
                 <div class="metric-value">Rp {{ number_format($salesToday ?? 0, 0, ',', '.') }}</div>
-                @if(isset($salesChangePercentage))
-                @if($salesChangePercentage >= 0)
-                <div class="metric-change positive">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>{{ $salesChangePercentage }}% dari kemarin</span>
+                <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
+                    <span class="badge bg-primary text-white py-1 px-2 fw-bold">
+                        <i class="fas fa-boxes-stacked me-1"></i>{{ number_format($totalBallSoldToday ?? 0) }} Ball
+                    </span>
+                    @if(isset($salesChangePercentage))
+                        @if($salesChangePercentage >= 0)
+                        <div class="metric-change positive py-0 px-2" style="font-size: 0.78rem;">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+{{ $salesChangePercentage }}% vs kemarin</span>
+                        </div>
+                        @else
+                        <div class="metric-change negative py-0 px-2" style="font-size: 0.78rem;">
+                            <i class="fas fa-arrow-down"></i>
+                            <span>{{ abs($salesChangePercentage) }}% vs kemarin</span>
+                        </div>
+                        @endif
+                    @endif
                 </div>
-                @else
-                <div class="metric-change negative">
-                    <i class="fas fa-arrow-down"></i>
-                    <span>{{ abs($salesChangePercentage) }}% dari kemarin</span>
-                </div>
-                @endif
-                @else
-                <div class="metric-change positive">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>+12% dari kemarin</span>
-                </div>
-                @endif
             </div>
             <div class="metric-progress">
                 <div class="progress-bar" style="width: 75%"></div>
@@ -62,7 +70,64 @@
         </div>
     </div>
 
-    {{-- Laba Bersih --}}
+    {{-- 2. Arus Kas Riil Hari Ini (Uang Masuk vs Kasbon) --}}
+    <div class="col-xl-3 col-md-6">
+        <div class="metric-card metric-card-cash">
+            <div class="metric-icon" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%) !important;">
+                <i class="fas fa-wallet"></i>
+            </div>
+            <div class="metric-content">
+                <h3 class="metric-title">Arus Kas Riil Hari Ini</h3>
+                <div class="metric-value text-success">Rp {{ number_format($cashInToday ?? 0, 0, ',', '.') }}</div>
+                <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
+                    <span class="badge py-1 px-2" style="background-color: #d1e7dd !important; color: #0f5132 !important; border: 1px solid #badbcc !important; font-size: 0.78rem; font-weight: 600;">
+                        <i class="fas fa-check-circle me-1 text-success"></i>Lunas: Rp {{ number_format($cashInToday ?? 0, 0, ',', '.') }}
+                    </span>
+                    @if(($pendingToday ?? 0) > 0)
+                    <span class="badge py-1 px-2" style="background-color: #f8d7da !important; color: #842029 !important; border: 1px solid #f5c2c7 !important; font-size: 0.78rem; font-weight: 600;" title="Total Kasbon / Tempo Baru Hari Ini">
+                        <i class="fas fa-clock me-1 text-danger"></i>Kasbon: Rp {{ number_format($pendingToday, 0, ',', '.') }}
+                    </span>
+                    @else
+                    <span class="badge py-1 px-2" style="background-color: #f8f9fa !important; color: #6c757d !important; border: 1px solid #dee2e6 !important; font-size: 0.78rem; font-weight: 600;">
+                        <i class="fas fa-check me-1 text-secondary"></i>Nol Kasbon
+                    </span>
+                    @endif
+                </div>
+            </div>
+            <div class="metric-progress">
+                <div class="progress-bar" style="width: 85%; background: linear-gradient(90deg, #11998e, #38ef7d);"></div>
+            </div>
+        </div>
+    </div>
+
+    {{-- 3. Stok Ready di Cold Storage --}}
+    <div class="col-xl-3 col-md-6">
+        <div class="metric-card metric-card-storage">
+            <div class="metric-icon" style="background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%) !important;">
+                <i class="fas fa-snowflake"></i>
+            </div>
+            <div class="metric-content">
+                <h3 class="metric-title">Stok Cold Storage (Ready)</h3>
+                <div class="metric-value text-info">{{ number_format($totalReadyStock ?? 0) }} <span class="metric-unit">Ball / Karung</span></div>
+                <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
+                    @forelse(($readyStockItems ?? [])->take(3) as $stk)
+                    <span class="badge bg-light text-dark border py-1 px-2" style="font-size: 0.75rem;">
+                        {{ $stk->product->name ?? 'Es' }}: <strong>{{ $stk->current_stock }}</strong>
+                    </span>
+                    @empty
+                    <span class="badge bg-warning text-dark py-1 px-2">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Gudang Kosong
+                    </span>
+                    @endforelse
+                </div>
+            </div>
+            <div class="metric-progress">
+                <div class="progress-bar" style="width: 65%; background: linear-gradient(90deg, #2193b0, #6dd5ed);"></div>
+            </div>
+        </div>
+    </div>
+
+    {{-- 4. Laba Bersih Bulan Ini --}}
     <div class="col-xl-3 col-md-6">
         <div class="metric-card metric-card-profit">
             <div class="metric-icon">
@@ -71,67 +136,27 @@
             <div class="metric-content">
                 <h3 class="metric-title">Laba Bersih Bulan Ini</h3>
                 <div class="metric-value">Rp {{ number_format($netProfitThisMonth ?? 0, 0, ',', '.') }}</div>
-                @if(isset($profitChangePercentage))
-                @if($profitChangePercentage >= 0)
-                <div class="metric-change positive">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>{{ $profitChangePercentage }}% dari bulan lalu</span>
+                <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
+                    @if(isset($profitChangePercentage))
+                        @if($profitChangePercentage >= 0)
+                        <div class="metric-change positive py-0 px-2" style="font-size: 0.78rem;">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+{{ $profitChangePercentage }}% vs bln lalu</span>
+                        </div>
+                        @else
+                        <div class="metric-change negative py-0 px-2" style="font-size: 0.78rem;">
+                            <i class="fas fa-arrow-down"></i>
+                            <span>{{ abs($profitChangePercentage) }}% vs bln lalu</span>
+                        </div>
+                        @endif
+                    @endif
+                    <span class="badge bg-light text-dark border py-1 px-2" style="font-size: 0.75rem;">
+                        Margin: <strong>{{ $profitMargin ?? 0 }}%</strong>
+                    </span>
                 </div>
-                @else
-                <div class="metric-change negative">
-                    <i class="fas fa-arrow-down"></i>
-                    <span>{{ abs($profitChangePercentage) }}% dari bulan lalu</span>
-                </div>
-                @endif
-                @else
-                <div class="metric-change positive">
-                    <i class="fas fa-arrow-up"></i>
-                    <span>+8% dari bulan lalu</span>
-                </div>
-                @endif
             </div>
             <div class="metric-progress">
                 <div class="progress-bar" style="width: 85%"></div>
-            </div>
-        </div>
-    </div>
-
-    {{-- Stok Rendah --}}
-    <div class="col-xl-3 col-md-6">
-        <div class="metric-card metric-card-inventory">
-            <div class="metric-icon">
-                <i class="fas fa-box-open"></i>
-            </div>
-            <div class="metric-content">
-                <h3 class="metric-title">Stok Menipis</h3>
-                <div class="metric-value">{{ $lowStockItems ?? 0 }} <span class="metric-unit">Item</span></div>
-                <div class="metric-action">
-                    <a href="{{ route('admin.inventory.index') }}" class="btn btn-warning btn-sm">
-                        <i class="fas fa-eye"></i> Lihat Detail
-                    </a>
-                </div>
-            </div>
-            <div class="metric-progress warning">
-                <div class="progress-bar" style="width: 30%"></div>
-            </div>
-        </div>
-    </div>
-
-    {{-- Total Pengguna --}}
-    <div class="col-xl-3 col-md-6">
-        <div class="metric-card metric-card-users">
-            <div class="metric-icon">
-                <i class="fas fa-users"></i>
-            </div>
-            <div class="metric-content">
-                <h3 class="metric-title">Total Pengguna</h3>
-                <div class="metric-value">{{ $totalUsers ?? 0 }} <span class="metric-unit">User</span></div>
-                <div class="metric-info">
-                    <span class="badge badge-info">{{ $activeUsers ?? 0 }} sedang online</span>
-                </div>
-            </div>
-            <div class="metric-progress">
-                <div class="progress-bar" style="width: 65%"></div>
             </div>
         </div>
     </div>
@@ -163,6 +188,7 @@
 {{-- ================================================================= --}}
 {{-- [BARU] MONITORING & REKAP PENGIRIMAN DRIVER                       --}}
 {{-- ================================================================= --}}
+<div id="driver-monitoring-container">
 <div class="row mb-4">
     <div class="col-12">
         <div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden;">
@@ -271,8 +297,10 @@
         </div>
     </div>
 </div>
+</div>
 
 {{-- MONITORING STOCK OPNAME & SELISIH (MISS) --}}
+<div id="opname-container">
 <div class="row mb-4">
     <div class="col-12">
         <div class="card border-{{ (isset($missedOpnames) && $missedOpnames->count() > 0) ? 'danger' : 'success' }} shadow-sm">
@@ -343,8 +371,10 @@
         </div>
     </div>
 </div>
+</div>
 
 {{-- MONITORING HISTORY PECAH BALL --}}
+<div id="pecah-ball-container">
 <div class="row mb-4">
     <div class="col-12">
         <div class="card border-primary shadow-sm">
@@ -399,9 +429,10 @@
         </div>
     </div>
 </div>
-
+</div>
 
 {{-- MODAL POP-UP DETAIL PENGIRIMAN PER DRIVER --}}
+<div id="driver-modals-wrapper">
 @if(isset($driverRecap) && count($driverRecap) > 0)
 @foreach($driverRecap as $d)
 <div class="modal fade" id="modalDriverDetail_{{ $d['driver_id'] }}" tabindex="-1" aria-hidden="true">
@@ -563,6 +594,7 @@
 </div>
 @endforeach
 @endif
+</div>
 
 {{-- Main Content Row --}}
 <div class="row g-4">
@@ -794,4 +826,130 @@
 
 {{-- Panggil File JS Utama --}}
 @vite(['resources/js/admin/dashboard.js'])
+
+{{-- SCRIPT AUTO-REFRESH REALTIME 60 DETIK (SEAMLESS TANPA WHITE-FLASH) --}}
+<script>
+    let reloadCountdownSeconds = 60;
+    let reloadTimerInterval = null;
+    let isRefreshing = false;
+
+    function startReloadCountdown() {
+        clearInterval(reloadTimerInterval);
+        reloadCountdownSeconds = 60;
+        updateCountdownUI();
+
+        reloadTimerInterval = setInterval(() => {
+            reloadCountdownSeconds--;
+            updateCountdownUI();
+
+            if (reloadCountdownSeconds <= 0) {
+                reloadCountdownSeconds = 60;
+                autoFetchDashboardData();
+            }
+        }, 1000);
+    }
+
+    function updateCountdownUI() {
+        const el = document.getElementById('reloadCountdown');
+        if (el) {
+            el.textContent = reloadCountdownSeconds + 's';
+        }
+    }
+
+    async function autoFetchDashboardData(manual = false) {
+        if (isRefreshing) return;
+        
+        // Cek jika user sedang membuka modal Bootstrap (agar tidak tertutup/rusak)
+        const activeModal = document.querySelector('.modal.show');
+        if (activeModal && !manual) {
+            // Tunda 15 detik lagi jika modal sedang aktif dibaca user
+            reloadCountdownSeconds = 15;
+            return;
+        }
+
+        isRefreshing = true;
+        const spinner = document.getElementById('autoReloadSpinner');
+        const liveDot = document.getElementById('livePulseDot');
+        const manualIcon = document.getElementById('manualRefreshIcon');
+
+        if (spinner) spinner.style.display = 'inline-block';
+        if (liveDot) liveDot.style.display = 'none';
+        if (manualIcon) manualIcon.classList.add('fa-spin');
+
+        try {
+            const url = new URL(window.location.href);
+            const response = await fetch(url.toString(), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            if (response.ok) {
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                // 1. Perbarui 4 Kartu KPI Atas (Omset, Kas Riil, Cold Storage, Laba)
+                const newKpi = doc.querySelector('#dashboard-kpi-row');
+                const currKpi = document.querySelector('#dashboard-kpi-row');
+                if (newKpi && currKpi) {
+                    currKpi.innerHTML = newKpi.innerHTML;
+                }
+
+                // 2. Perbarui Monitoring Driver Container
+                const newDriver = doc.querySelector('#driver-monitoring-container');
+                const currDriver = document.querySelector('#driver-monitoring-container');
+                if (newDriver && currDriver) {
+                    currDriver.innerHTML = newDriver.innerHTML;
+                }
+
+                // 3. Perbarui Modal Driver (Hanya jika tidak ada modal yang sedang aktif)
+                if (!activeModal) {
+                    const newModals = doc.querySelector('#driver-modals-wrapper');
+                    const currModals = document.querySelector('#driver-modals-wrapper');
+                    if (newModals && currModals) {
+                        currModals.innerHTML = newModals.innerHTML;
+                    }
+                }
+
+                // 4. Perbarui Opname Stok & Realtime Stock Badges
+                const newOpname = doc.querySelector('#opname-container');
+                const currOpname = document.querySelector('#opname-container');
+                if (newOpname && currOpname) {
+                    currOpname.innerHTML = newOpname.innerHTML;
+                }
+
+                // 5. Perbarui Riwayat Pecah Ball
+                const newPecah = doc.querySelector('#pecah-ball-container');
+                const currPecah = document.querySelector('#pecah-ball-container');
+                if (newPecah && currPecah) {
+                    currPecah.innerHTML = newPecah.innerHTML;
+                }
+
+                // Efek denyut hijau tanda data baru sukses masuk
+                if (liveDot) {
+                    liveDot.style.boxShadow = '0 0 15px #00ff00';
+                    setTimeout(() => {
+                        liveDot.style.boxShadow = '0 0 8px #28a745';
+                    }, 1500);
+                }
+            }
+        } catch (err) {
+            console.warn('Auto refresh error:', err);
+        } finally {
+            isRefreshing = false;
+            if (spinner) spinner.style.display = 'none';
+            if (liveDot) liveDot.style.display = 'inline-block';
+            if (manualIcon) manualIcon.classList.remove('fa-spin');
+            reloadCountdownSeconds = 60;
+            updateCountdownUI();
+        }
+    }
+
+    function manualTriggerRefresh() {
+        autoFetchDashboardData(true);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        startReloadCountdown();
+    });
+</script>
 @endpush

@@ -52,7 +52,9 @@
 }
 
 .metric-card-sales::before { background: linear-gradient(90deg, #4facfe, #00f2fe); }
-.metric-card-profit::before { background: linear-gradient(90deg, #43e97b, #38f9d7); }
+.metric-card-cash::before { background: linear-gradient(90deg, #11998e, #38ef7d); }
+.metric-card-storage::before { background: linear-gradient(90deg, #2193b0, #6dd5ed); }
+.metric-card-profit::before { background: linear-gradient(90deg, #f7971e, #ffd200); }
 .metric-card-inventory::before { background: linear-gradient(90deg, #fa709a, #fee140); }
 .metric-card-users::before { background: linear-gradient(90deg, #a8edea, #fed6e3); }
 
@@ -70,7 +72,9 @@
 }
 
 .metric-card-sales .metric-icon { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-.metric-card-profit .metric-icon { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.metric-card-cash .metric-icon { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+.metric-card-storage .metric-icon { background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%); }
+.metric-card-profit .metric-icon { background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%); }
 .metric-card-inventory .metric-icon { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
 .metric-card-users .metric-icon { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
 
