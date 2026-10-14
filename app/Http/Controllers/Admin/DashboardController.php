@@ -6,7 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Services\Admin\DashboardService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
-use Carbon\Carbon; // Pastikan Carbon di-import
+use Carbon\Carbon;
+use App\Models\Transaction;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
 {
@@ -88,6 +91,109 @@ class DashboardController extends Controller
             }
 
             $dashboardData['breakUnitHistory'] = $breakUnitHistory;
+
+            // --- REKAP PENGIRIMAN DRIVER BERDASARKAN FILTER TANGGAL ---
+            $businessId = Auth::user()->business_id;
+
+            $driverTransactions = Transaction::with([
+                    'customer',
+                    'driver',
+                    'details.product'
+                ])
+                ->where('business_id', $businessId)
+                ->where('type', 'sale')
+                ->where(function ($q) {
+                    $q->whereNotNull('driver_id')
+                      ->orWhereNotNull('claimed_by_driver_id');
+                })
+                ->whereDate('transaction_date', $filterDate)
+                ->orderBy('transaction_date', 'asc')
+                ->get();
+
+            $driverRecap = [];
+            $groupedByDriver = $driverTransactions->groupBy(function ($item) {
+                return $item->driver_id ?: ($item->claimed_by_driver_id ?: 'unknown');
+            });
+
+            foreach ($groupedByDriver as $driverId => $trxs) {
+                $driver = $trxs->first()->driver ?? User::find($driverId);
+                $driverName = $driver ? $driver->name : 'Driver #' . $driverId;
+                $driverPhone = $driver ? $driver->phone : '-';
+
+                // Kelompokkan per Surat Jalan / Ritase (Trip)
+                $trips = $trxs->groupBy(function ($t) {
+                    return $t->delivery_trip_code ?: ('TRX-' . str_pad($t->id, 6, '0', STR_PAD_LEFT));
+                });
+
+                $totalQty = 0;
+                $productQuantities = [];
+
+                foreach ($trxs as $trx) {
+                    foreach ($trx->details as $detail) {
+                        $pName = $detail->product->name ?? 'Produk';
+                        $qty = (int) $detail->quantity;
+                        $totalQty += $qty;
+                        $productQuantities[$pName] = ($productQuantities[$pName] ?? 0) + $qty;
+                    }
+                }
+
+                $totalAmount = $trxs->sum('total_amount');
+                $totalPaid = $trxs->where('payment_status', 'paid')->sum('total_amount');
+                $totalPending = $trxs->where('payment_status', 'pending')->sum('total_amount');
+
+                // Breakdown metode pembayaran riil
+                $paymentMethodsSummary = [];
+                foreach ($trxs as $trx) {
+                    if ($trx->payment_status === 'pending') {
+                        $methodName = 'Kasbon / Pending';
+                    } else {
+                        $methodName = strtoupper(str_replace('-', ' ', $trx->payment_method ?: 'Cash'));
+                    }
+                    $paymentMethodsSummary[$methodName] = ($paymentMethodsSummary[$methodName] ?? 0) + $trx->total_amount;
+                }
+
+                $tripList = [];
+                foreach ($trips as $tripCode => $tripItems) {
+                    $tripQty = 0;
+                    $tripProductBreakdown = [];
+                    foreach ($tripItems as $tItem) {
+                        foreach ($tItem->details as $d) {
+                            $pName = $d->product->name ?? 'Produk';
+                            $qty = (int) $d->quantity;
+                            $tripQty += $qty;
+                            $tripProductBreakdown[$pName] = ($tripProductBreakdown[$pName] ?? 0) + $qty;
+                        }
+                    }
+
+                    $tripList[] = [
+                        'trip_code' => $tripCode,
+                        'is_batch' => str_starts_with($tripCode, 'TRIP-'),
+                        'time' => $tripItems->first()->transaction_date,
+                        'total_orders' => $tripItems->count(),
+                        'total_qty' => $tripQty,
+                        'product_breakdown' => $tripProductBreakdown,
+                        'total_amount' => $tripItems->sum('total_amount'),
+                        'transactions' => $tripItems,
+                    ];
+                }
+
+                $driverRecap[] = [
+                    'driver_id' => $driverId,
+                    'driver_name' => $driverName,
+                    'driver_phone' => $driverPhone,
+                    'total_trips' => $trips->count(),
+                    'total_orders' => $trxs->count(),
+                    'total_qty' => $totalQty,
+                    'product_quantities' => $productQuantities,
+                    'total_amount' => $totalAmount,
+                    'total_paid' => $totalPaid,
+                    'total_pending' => $totalPending,
+                    'payment_methods_summary' => $paymentMethodsSummary,
+                    'trips' => $tripList,
+                ];
+            }
+
+            $dashboardData['driverRecap'] = $driverRecap;
 
             return view('admin.dashboard.index', $dashboardData);
         } catch (\Exception $e) {

@@ -144,7 +144,7 @@
             <div class="card-body py-2 px-3 d-flex align-items-center bg-light rounded">
                 <form action="{{ route('admin.dashboard') }}" method="GET" class="d-flex align-items-center w-100">
                     <label for="filter_date" class="form-label mb-0 me-3 fw-bold text-dark">
-                        <i class="fas fa-filter text-primary me-1"></i> Filter Aktivitas Stok:
+                        <i class="fas fa-filter text-primary me-1"></i> Filter Aktivitas Stok & Pengiriman Driver:
                     </label>
                     <input type="date" name="filter_date" id="filter_date" class="form-control w-auto me-2 border-primary" value="{{ $filterDate }}">
                     <button type="submit" class="btn btn-primary btn-sm px-3">Tampilkan</button>
@@ -155,6 +155,118 @@
                     </a>
                     @endif
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ================================================================= --}}
+{{-- [BARU] MONITORING & REKAP PENGIRIMAN DRIVER                       --}}
+{{-- ================================================================= --}}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden;">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-truck-fast text-warning me-2"></i> Monitoring Pengiriman Driver ({{ $isToday ? 'Hari Ini' : $formattedDate }})
+                    </h5>
+                    <small class="text-white-50">Rekap ritase surat jalan, total muatan ball es kristal, dan rincian penagihan toko per driver.</small>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="badge bg-secondary px-3 py-2 fs-6">
+                        <i class="fas fa-user-tie me-1"></i> {{ count($driverRecap ?? []) }} Driver Bertugas
+                    </span>
+                    <span class="badge bg-warning text-dark px-3 py-2 fs-6 fw-bold">
+                        <i class="fas fa-boxes-stacked me-1"></i> {{ collect($driverRecap ?? [])->sum('total_qty') }} Ball / Pack
+                    </span>
+                    <span class="badge bg-success px-3 py-2 fs-6 fw-bold">
+                        Rp {{ number_format(collect($driverRecap ?? [])->sum('total_amount'), 0, ',', '.') }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                @if(isset($driverRecap) && count($driverRecap) > 0)
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3 py-3">Nama Driver</th>
+                                <th class="text-center">Ritase (Trip)</th>
+                                <th class="text-center">Total Pesanan</th>
+                                <th>Total Muatan (Semua Produk)</th>
+                                <th class="text-end">Total Tagihan</th>
+                                <th>Status Pembayaran</th>
+                                <th class="text-center pe-3">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($driverRecap as $d)
+                            <tr>
+                                <td class="ps-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning me-3">
+                                            <i class="fas fa-motorcycle fa-lg"></i>
+                                        </div>
+                                        <div>
+                                            <strong class="fs-6 text-dark">{{ $d['driver_name'] }}</strong>
+                                            @if($d['driver_phone'] && $d['driver_phone'] !== '-')
+                                             <br><small class="text-muted"><i class="fas fa-phone small me-1"></i>{{ $d['driver_phone'] }}</small>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-dark rounded-pill px-3 py-2 fs-6">
+                                        {{ $d['total_trips'] }} Ritase
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-light text-dark border px-3 py-2 fw-semibold">
+                                        {{ $d['total_orders'] }} Toko / Struk
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-primary fs-6">{{ $d['total_qty'] }} Ball / Qty</div>
+                                    <div class="small text-muted mt-1">
+                                        @foreach($d['product_quantities'] as $pName => $qty)
+                                        <span class="badge bg-light text-dark border me-1 mb-1">{{ $pName }}: <strong>{{ $qty }}</strong></span>
+                                        @endforeach
+                                    </div>
+                                </td>
+                                <td class="text-end fw-bold fs-6 text-dark">
+                                    Rp {{ number_format($d['total_amount'], 0, ',', '.') }}
+                                </td>
+                                <td>
+                                    <div class="small">
+                                        <span class="text-success fw-bold">
+                                            <i class="fas fa-check-circle me-1"></i>Lunas: Rp {{ number_format($d['total_paid'], 0, ',', '.') }}
+                                        </span>
+                                        @if($d['total_pending'] > 0)
+                                        <br>
+                                        <span class="text-danger fw-bold">
+                                            <i class="fas fa-clock me-1"></i>Kasbon: Rp {{ number_format($d['total_pending'], 0, ',', '.') }}
+                                        </span>
+                                        @endif
+                                    </div>
+                                </td>
+                                <td class="text-center pe-3">
+                                    <button type="button" class="btn btn-sm btn-primary fw-bold px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalDriverDetail_{{ $d['driver_id'] }}">
+                                        <i class="fas fa-list-check me-1"></i> Lihat Detail
+                                    </button>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @else
+                <div class="text-center py-5 text-muted">
+                    <i class="fas fa-truck-ramp-box fa-3x mb-2 text-secondary opacity-50"></i>
+                    <h6 class="fw-bold text-secondary">Belum Ada Pengiriman Driver</h6>
+                    <p class="small mb-0">Tidak ada pesanan yang ditugaskan ke driver pada tanggal {{ $formattedDate }}.</p>
+                </div>
+                @endif
             </div>
         </div>
     </div>
@@ -287,6 +399,170 @@
         </div>
     </div>
 </div>
+
+
+{{-- MODAL POP-UP DETAIL PENGIRIMAN PER DRIVER --}}
+@if(isset($driverRecap) && count($driverRecap) > 0)
+@foreach($driverRecap as $d)
+<div class="modal fade" id="modalDriverDetail_{{ $d['driver_id'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white py-3">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="fas fa-motorcycle text-warning me-2"></i> Rincian Pengiriman Driver: <span class="text-warning">{{ $d['driver_name'] }}</span>
+                    </h5>
+                    <small class="text-white-50">
+                        Tanggal: <strong>{{ $formattedDate }}</strong> | Total Muatan: <strong>{{ $d['total_qty'] }} Ball</strong> | Total Tagihan: <strong>Rp {{ number_format($d['total_amount'], 0, ',', '.') }}</strong>
+                    </small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                {{-- Kartu Ringkasan Atas Modal --}}
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm">
+                            <div class="text-muted small fw-semibold">TOTAL RITASE / TRIP</div>
+                            <h4 class="fw-bold mb-0 text-dark">{{ $d['total_trips'] }} Trip</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm">
+                            <div class="text-muted small fw-semibold">TOTAL TOKO DIKIRIM</div>
+                            <h4 class="fw-bold mb-0 text-primary">{{ $d['total_orders'] }} Toko</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm">
+                            <div class="text-muted small fw-semibold">TOTAL MUATAN FISIK</div>
+                            <h4 class="fw-bold mb-0 text-success">{{ $d['total_qty'] }} Ball</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm">
+                            <div class="text-muted small fw-semibold">TOTAL NILAI TRANSAKSI</div>
+                            <h4 class="fw-bold mb-0 text-danger">Rp {{ number_format($d['total_amount'], 0, ',', '.') }}</h4>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Perulangan per Trip / Surat Jalan --}}
+                @foreach($d['trips'] as $tIdx => $trip)
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="badge bg-dark fs-6 px-3 py-2">
+                                <i class="fas fa-file-invoice text-warning me-1"></i> Surat Jalan: {{ $trip['trip_code'] }}
+                            </span>
+                            <span class="badge bg-secondary">
+                                <i class="fas fa-clock me-1"></i> {{ $trip['time']->format('H:i') }} WIB
+                            </span>
+                            <span class="badge bg-primary">
+                                Muatan: {{ $trip['total_qty'] }} Ball
+                            </span>
+                            @foreach($trip['product_breakdown'] as $pName => $qty)
+                            <span class="badge bg-light text-dark border">{{ $pName }}: {{ $qty }}</span>
+                            @endforeach
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fw-bold text-dark me-2">Subtotal Trip: <span class="text-danger">Rp {{ number_format($trip['total_amount'], 0, ',', '.') }}</span></span>
+                            @if($trip['is_batch'])
+                            <a href="{{ route('kasir.pos.deliveryReceipt', $trip['trip_code']) }}" target="_blank" class="btn btn-sm btn-outline-warning text-dark bg-warning bg-opacity-25 fw-bold">
+                                <i class="fas fa-print me-1"></i> Cetak Surat Jalan
+                            </a>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3" style="width: 50px;">No</th>
+                                        <th>No. Struk</th>
+                                        <th>Nama Pelanggan / Toko</th>
+                                        <th>Rincian Barang</th>
+                                        <th class="text-end">Nilai Tagihan</th>
+                                        <th>Metode & Status Bayar</th>
+                                        <th class="pe-3">Catatan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($trip['transactions'] as $idx => $trx)
+                                    <tr>
+                                        <td class="ps-3 fw-bold text-muted">{{ $idx + 1 }}</td>
+                                        <td class="fw-bold text-primary">#{{ str_pad($trx->id, 6, '0', STR_PAD_LEFT) }}</td>
+                                        <td>
+                                            <strong class="text-dark fs-6">{{ $trx->customer->name ?? 'Pelanggan Umum' }}</strong>
+                                            @if($trx->customer && $trx->customer->phone)
+                                            <br><small class="text-muted"><i class="fas fa-phone small me-1"></i>{{ $trx->customer->phone }}</small>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <ul class="list-unstyled mb-0 small">
+                                                @foreach($trx->details as $item)
+                                                <li>
+                                                    • <strong>{{ $item->product->name ?? 'Produk' }}</strong>
+                                                    <span class="badge bg-light text-dark border ms-1">{{ $item->quantity }} {{ $item->product->unit ?? 'Ball' }}</span>
+                                                </li>
+                                                @endforeach
+                                            </ul>
+                                        </td>
+                                        <td class="text-end fw-bold text-dark fs-6">
+                                            Rp {{ number_format($trx->total_amount, 0, ',', '.') }}
+                                        </td>
+                                        <td>
+                                            @if($trx->payment_status === 'paid')
+                                                @php
+                                                    $pm = strtolower($trx->payment_method ?? 'cash');
+                                                    $badgeClass = 'bg-success';
+                                                    $icon = '💵 Cash';
+                                                    if (str_contains($pm, 'transfer')) {
+                                                        $badgeClass = 'bg-primary';
+                                                        $icon = '🏦 Transfer';
+                                                    } elseif (str_contains($pm, 'dana')) {
+                                                        $badgeClass = 'bg-info text-dark';
+                                                        $icon = '📱 DANA';
+                                                    }
+                                                @endphp
+                                                <span class="badge {{ $badgeClass }} px-2 py-1">
+                                                    {{ $icon }} (Lunas)
+                                                </span>
+                                            @else
+                                                <span class="badge bg-danger px-2 py-1">
+                                                    ⚠️ Kasbon / Pending
+                                                </span>
+                                            @endif
+                                        </td>
+                                        <td class="pe-3 small text-muted fst-italic">
+                                            {{ $trx->notes ?: '-' }}
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+            <div class="modal-footer bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <span class="text-muted small fw-bold">Rekapitulasi Pembayaran Driver:</span>
+                    @foreach($d['payment_methods_summary'] as $mName => $mAmount)
+                    <span class="badge bg-light text-dark border ms-1 py-1 px-2">
+                        {{ $mName }}: <strong>Rp {{ number_format($mAmount, 0, ',', '.') }}</strong>
+                    </span>
+                    @endforeach
+                </div>
+                <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endforeach
+@endif
 
 {{-- Main Content Row --}}
 <div class="row g-4">
