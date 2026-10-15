@@ -208,6 +208,9 @@ class DashboardController extends Controller
 
             $dashboardData['driverRecap'] = $driverRecap;
 
+            // --- MONITORING CASH ON HAND REAL PER KASIR (PRIORITAS) ---
+            $dashboardData['cashierMonitoring'] = $this->dashboardService->getCashierCashOnHandData($businessId, $filterDate);
+
             return view('admin.dashboard.index', $dashboardData);
         } catch (\Exception $e) {
             logger()->error('Error fetching dashboard data: ' . $e->getMessage());

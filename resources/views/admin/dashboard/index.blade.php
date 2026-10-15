@@ -162,14 +162,14 @@
     </div>
 </div>
 
-{{-- FILTER TANGGAL UNTUK OPNAME & PECAH BALL --}}
+{{-- FILTER TANGGAL UNTUK AKTIVITAS HARIAN --}}
 <div class="row mb-3">
     <div class="col-12">
         <div class="card shadow-sm border-0">
             <div class="card-body py-2 px-3 d-flex align-items-center bg-light rounded">
                 <form action="{{ route('admin.dashboard') }}" method="GET" class="d-flex align-items-center w-100">
                     <label for="filter_date" class="form-label mb-0 me-3 fw-bold text-dark">
-                        <i class="fas fa-filter text-primary me-1"></i> Filter Aktivitas Stok & Pengiriman Driver:
+                        <i class="fas fa-filter text-primary me-1"></i> Filter Aktivitas Harian (Kasir, Driver & Stok):
                     </label>
                     <input type="date" name="filter_date" id="filter_date" class="form-control w-auto me-2 border-primary" value="{{ $filterDate }}">
                     <button type="submit" class="btn btn-primary btn-sm px-3">Tampilkan</button>
@@ -183,6 +183,139 @@
             </div>
         </div>
     </div>
+</div>
+
+{{-- ================================================================= --}}
+{{-- [PRIORITAS] MONITORING CASH ON HAND REAL PER AKUN KASIR           --}}
+{{-- ================================================================= --}}
+<div id="cashier-priority-container">
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden; border-top: 4px solid #10b981 !important;">
+            <div class="card-header text-white d-flex justify-content-between align-items-center py-3 flex-wrap gap-2" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;">
+                <div>
+                    <h5 class="mb-0 fw-bold d-flex align-items-center">
+                        <span class="badge bg-success bg-opacity-25 text-success border border-success me-2 px-2 py-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">PRIORITAS</span>
+                        <i class="fas fa-hand-holding-dollar text-warning me-2"></i> Cash on Hand Real per Kasir ({{ $isToday ? 'Hari Ini' : $formattedDate }})
+                    </h5>
+                    <small class="text-white-50">Monitoring uang tunai fisik laci kasir setelah dipotong HPP Modal Es (COGS) dan pengeluaran operasional.</small>
+                </div>
+                @php
+                    $allCashiers = collect($cashierMonitoring ?? []);
+                    $totalAllCashIn = $allCashiers->sum('total_cash_in');
+                    $totalAllCogs = $allCashiers->sum('cogs');
+                    $totalAllExpenses = $allCashiers->sum('expenses');
+                    $totalAllRealCash = $allCashiers->sum('real_cash_on_hand');
+                    $totalAllDrawer = $allCashiers->sum('physical_drawer');
+                @endphp
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="badge bg-secondary px-3 py-2 fs-6">
+                        <i class="fas fa-users me-1"></i> {{ $allCashiers->count() }} Akun Kasir
+                    </span>
+                    <span class="badge bg-light text-dark px-3 py-2 fs-6" title="Total Uang Tunai Masuk">
+                        <i class="fas fa-arrow-down text-success me-1"></i> Tunai: <strong>Rp {{ number_format($totalAllCashIn, 0, ',', '.') }}</strong>
+                    </span>
+                    <span class="badge bg-danger bg-opacity-75 text-white px-3 py-2 fs-6" title="Total Modal Es (COGS)">
+                        <i class="fas fa-cubes-stacked me-1"></i> COGS: <strong>- Rp {{ number_format($totalAllCogs, 0, ',', '.') }}</strong>
+                    </span>
+                    <span class="badge bg-warning text-dark px-3 py-2 fs-6" title="Total Pengeluaran Kasir">
+                        <i class="fas fa-receipt me-1"></i> Beban: <strong>- Rp {{ number_format($totalAllExpenses, 0, ',', '.') }}</strong>
+                    </span>
+                    <span class="badge bg-success px-3 py-2 fs-6 fw-bold shadow-sm" title="Grand Total Cash On Hand Real Semua Kasir">
+                        <i class="fas fa-wallet me-1"></i> Net Real: <strong>Rp {{ number_format($totalAllRealCash, 0, ',', '.') }}</strong>
+                    </span>
+                </div>
+            </div>
+            <div class="card-body bg-light p-3">
+                @if(count($cashierMonitoring ?? []) > 0)
+                <div class="row g-3">
+                    @foreach($cashierMonitoring as $c)
+                    <div class="col-xl-4 col-md-6">
+                        <div class="card h-100 border-0 shadow-sm" style="border-radius: 10px; transition: transform 0.2s, box-shadow 0.2s;">
+                            {{-- Header Card Kasir --}}
+                            <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center">
+                                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2 me-2 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+                                        <i class="fas fa-user-tie"></i>
+                                    </div>
+                                    <div>
+                                        <strong class="text-dark fs-6">{{ $c['name'] }}</strong>
+                                        @if($c['phone'] && $c['phone'] !== '-')
+                                        <br><small class="text-muted"><i class="fas fa-phone small me-1"></i>{{ $c['phone'] }}</small>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div>
+                                    @if($c['has_activity'])
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
+                                        <i class="fas fa-circle-dot me-1"></i>Aktif
+                                    </span>
+                                    @else
+                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border px-2 py-1">
+                                        Standby
+                                    </span>
+                                    @endif
+                                </div>
+                            </div>
+
+                            {{-- Body Card Kasir: Hero Cash On Hand Real --}}
+                            <div class="card-body p-3">
+                                <div class="text-center p-3 rounded mb-3" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.12) 100%); border: 1px solid rgba(16, 185, 129, 0.25);">
+                                    <span class="text-uppercase fw-bold text-muted small" style="letter-spacing: 0.5px;">CASH ON HAND REAL</span>
+                                    <h3 class="fw-bold mb-0 mt-1 {{ $c['real_cash_on_hand'] >= 0 ? 'text-success' : 'text-danger' }}">
+                                        Rp {{ number_format($c['real_cash_on_hand'], 0, ',', '.') }}
+                                    </h3>
+                                    <small class="text-muted" style="font-size: 0.73rem;">(Sisa uang riil setelah dipotong COGS & Beban)</small>
+                                </div>
+
+                                {{-- Rincian Waterfall Perhitungan --}}
+                                <div class="bg-white rounded border p-2 mb-3">
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                        <span class="small text-muted"><i class="fas fa-money-bill-wave text-success me-1"></i> Kas Tunai Masuk:</span>
+                                        <span class="fw-bold text-success">+ Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                        <span class="small text-muted"><i class="fas fa-snowflake text-info me-1"></i> Modal Es (COGS):</span>
+                                        <span class="fw-bold text-danger">- Rp {{ number_format($c['cogs'], 0, ',', '.') }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                        <span class="small text-muted"><i class="fas fa-receipt text-warning me-1"></i> Pengeluaran Kasir:</span>
+                                        <span class="fw-bold text-danger">- Rp {{ number_format($c['expenses'], 0, ',', '.') }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center pt-2">
+                                        <span class="small fw-bold text-dark"><i class="fas fa-cash-register text-primary me-1"></i> Saldo Laci Fisik:</span>
+                                        <span class="fw-bold text-primary">Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}</span>
+                                    </div>
+                                </div>
+
+                                {{-- Info Tambahan: Non-Tunai & Kasbon --}}
+                                <div class="d-flex justify-content-between align-items-center small text-muted px-1">
+                                    <span><i class="fas fa-building-columns me-1"></i>Transfer: <strong>Rp {{ number_format($c['non_cash_sales'], 0, ',', '.') }}</strong></span>
+                                    <span><i class="fas fa-clock text-danger me-1"></i>Kasbon: <strong>Rp {{ number_format($c['kasbon'], 0, ',', '.') }}</strong></span>
+                                </div>
+                            </div>
+
+                            {{-- Footer Card Kasir: Tombol Detail --}}
+                            <div class="card-footer bg-white border-top p-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalCashierDetail_{{ $c['user_id'] }}">
+                                    <i class="fas fa-file-invoice-dollar me-1"></i> Rincian Transaksi & Modal
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+                @else
+                <div class="text-center py-4 text-muted bg-white rounded border">
+                    <i class="fas fa-cash-register fa-3x mb-2 text-secondary opacity-50"></i>
+                    <h6 class="fw-bold text-secondary">Belum Ada Aktivitas Kasir</h6>
+                    <p class="small mb-0">Tidak ada transaksi tunai maupun pengeluaran pada tanggal {{ $formattedDate }}.</p>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
 </div>
 
 {{-- ================================================================= --}}
@@ -604,6 +737,154 @@
 @endif
 </div>
 
+{{-- ================================================================= --}}
+{{-- MODAL DETAIL CASH ON HAND PER KASIR                              --}}
+{{-- ================================================================= --}}
+<div id="cashier-modals-wrapper">
+@foreach($cashierMonitoring ?? [] as $c)
+<div class="modal fade" id="modalCashierDetail_{{ $c['user_id'] }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <div class="modal-header bg-dark text-white py-3" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="fas fa-user-circle text-warning me-2"></i> Rincian Keuangan Kasir: <span class="text-warning">{{ $c['name'] }}</span>
+                    </h5>
+                    <small class="text-white-50">Tanggal: <strong>{{ $formattedDate }}</strong> | Cash on Hand Real: <strong class="text-success">Rp {{ number_format($c['real_cash_on_hand'], 0, ',', '.') }}</strong></small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                {{-- 4 Stat Boxes Atas Modal --}}
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3 col-6">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm">
+                            <div class="text-muted small fw-semibold">KAS TUNAI MASUK</div>
+                            <h5 class="fw-bold mb-0 text-success">Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</h5>
+                            <small class="text-muted" style="font-size: 0.7rem;">{{ $c['cash_orders_count'] }} Struk Tunai</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm">
+                            <div class="text-muted small fw-semibold">MODAL ES (COGS)</div>
+                            <h5 class="fw-bold mb-0 text-danger">- Rp {{ number_format($c['cogs'], 0, ',', '.') }}</h5>
+                            <small class="text-muted" style="font-size: 0.7rem;">Total Biaya Pokok</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm">
+                            <div class="text-muted small fw-semibold">BEBAN PENGELUARAN</div>
+                            <h5 class="fw-bold mb-0 text-danger">- Rp {{ number_format($c['expenses'], 0, ',', '.') }}</h5>
+                            <small class="text-muted" style="font-size: 0.7rem;">{{ count($c['expenses_list']) }} Catatan Beban</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm" style="border: 2px solid #10b981 !important;">
+                            <div class="text-success small fw-bold">CASH ON HAND REAL</div>
+                            <h5 class="fw-bold mb-0 text-success">Rp {{ number_format($c['real_cash_on_hand'], 0, ',', '.') }}</h5>
+                            <small class="text-muted" style="font-size: 0.7rem;">Laci Fisik: Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}</small>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Tabel 1: Rincian Modal Es (COGS) per Produk Terjual --}}
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-bold text-dark">
+                            <i class="fas fa-boxes-stacked text-primary me-2"></i> Rincian Modal Es (COGS) Produk Terjual Tunai
+                        </h6>
+                        <span class="badge bg-danger text-white">Total COGS: Rp {{ number_format($c['cogs'], 0, ',', '.') }}</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Nama Produk</th>
+                                        <th class="text-center">Jumlah Keluar</th>
+                                        <th class="text-end">Modal / HPP Satuan</th>
+                                        <th class="text-end pe-3">Subtotal Modal (COGS)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($c['items_sold'] as $item)
+                                    <tr>
+                                        <td class="ps-3 fw-bold text-dark">{{ $item['name'] }}</td>
+                                        <td class="text-center">
+                                            <span class="badge bg-light text-dark border px-2 py-1">{{ $item['qty'] }} {{ $item['unit'] }}</span>
+                                        </td>
+                                        <td class="text-end text-muted">Rp {{ number_format($item['cost_price'], 0, ',', '.') }}</td>
+                                        <td class="text-end pe-3 fw-bold text-danger">Rp {{ number_format($item['total_cogs'], 0, ',', '.') }}</td>
+                                    </tr>
+                                    @empty
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted py-3">Tidak ada produk es terjual tunai pada tanggal ini.</td>
+                                    </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Tabel 2: Rincian Beban / Pengeluaran yang Dibayar dari Laci --}}
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-bold text-dark">
+                            <i class="fas fa-receipt text-warning me-2"></i> Rincian Pengeluaran dari Laci Kasir
+                        </h6>
+                        <span class="badge bg-warning text-dark">Total Beban: Rp {{ number_format($c['expenses'], 0, ',', '.') }}</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Kategori</th>
+                                        <th>Keterangan / Deskripsi</th>
+                                        <th class="text-end pe-3">Jumlah Pengeluaran</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($c['expenses_list'] as $exp)
+                                    <tr>
+                                        <td class="ps-3">
+                                            <span class="badge bg-secondary bg-opacity-25 text-dark border">{{ $exp->category->name ?? 'Operasional' }}</span>
+                                        </td>
+                                        <td class="text-dark small">{{ $exp->description ?? '-' }}</td>
+                                        <td class="text-end pe-3 fw-bold text-danger">Rp {{ number_format($exp->amount, 0, ',', '.') }}</td>
+                                    </tr>
+                                    @empty
+                                    <tr>
+                                        <td colspan="3" class="text-center text-muted py-3">Tidak ada pengeluaran kas yang dicatat oleh kasir ini.</td>
+                                    </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Alert Info Transaksi Non-Tunai & Kasbon --}}
+                <div class="alert alert-secondary py-2 px-3 mb-0 d-flex justify-content-between align-items-center small">
+                    <div>
+                        <i class="fas fa-info-circle me-1 text-primary"></i>
+                        Transaksi Non-Tunai (Transfer/QRIS): <strong>Rp {{ number_format($c['non_cash_sales'], 0, ',', '.') }}</strong>
+                    </div>
+                    <div>
+                        Kasbon / Belum Bayar: <strong class="text-danger">Rp {{ number_format($c['kasbon'], 0, ',', '.') }}</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-white py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endforeach
+</div>
+
 {{-- Main Content Row --}}
 <div class="row g-4">
     {{-- Smart Fund Allocation (UPDATED WITH CUSTOM LEGEND) --}}
@@ -902,7 +1183,23 @@
                     currKpi.innerHTML = newKpi.innerHTML;
                 }
 
-                // 2. Perbarui Monitoring Driver Container
+                // 2. Perbarui Container Prioritas Cash on Hand Real Kasir
+                const newCashier = doc.querySelector('#cashier-priority-container');
+                const currCashier = document.querySelector('#cashier-priority-container');
+                if (newCashier && currCashier) {
+                    currCashier.innerHTML = newCashier.innerHTML;
+                }
+
+                // 3. Perbarui Modal Kasir (Hanya jika tidak ada modal yang sedang aktif)
+                if (!activeModal) {
+                    const newCashierModals = doc.querySelector('#cashier-modals-wrapper');
+                    const currCashierModals = document.querySelector('#cashier-modals-wrapper');
+                    if (newCashierModals && currCashierModals) {
+                        currCashierModals.innerHTML = newCashierModals.innerHTML;
+                    }
+                }
+
+                // 4. Perbarui Monitoring Driver Container
                 const newDriver = doc.querySelector('#driver-monitoring-container');
                 const currDriver = document.querySelector('#driver-monitoring-container');
                 if (newDriver && currDriver) {

@@ -8,6 +8,7 @@ use App\Models\Inventory;
 use App\Models\User;
 use App\Models\UserActivityLog;
 use App\Models\FundAllocationSetting;
+use App\Models\CashFlow;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use App\Services\Admin\FinancialService;
@@ -285,5 +286,141 @@ class DashboardService
                 'profits' => $profitData,
             ];
         });
+    }
+
+    /**
+     * Menghitung Cash on Hand Real per Akun Kasir setelah dikurangi COGS dan Pengeluaran.
+     * Rumus: [Uang Tunai Lunas Masuk] - [COGS/Modal Es] - [Pengeluaran Kasir]
+     */
+    public function getCashierCashOnHandData(int $businessId, Carbon $filterDate): array
+    {
+        // Ambil semua user kasir atau user yang punya aktivitas transaksi / kas masuk-keluar di tanggal ini
+        $users = User::where('business_id', $businessId)
+            ->where(function ($q) use ($filterDate) {
+                $q->where('role', 'kasir')
+                  ->orWhereHas('transactions', function ($tq) use ($filterDate) {
+                      $tq->whereDate('transaction_date', $filterDate);
+                  })
+                  ->orWhereIn('id', function ($cq) use ($filterDate) {
+                      $cq->select('created_by')->from('cash_flow')->whereDate('date', $filterDate);
+                  });
+            })
+            ->orderBy('name', 'asc')
+            ->get();
+
+        $cashierData = [];
+
+        foreach ($users as $user) {
+            // 1. Transaksi Penjualan Tunai Lunas
+            $cashTransactions = Transaction::with(['details.product'])
+                ->where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'sale')
+                ->where('payment_status', 'paid')
+                ->where('payment_method', 'cash')
+                ->whereDate('transaction_date', $filterDate)
+                ->get();
+
+            $cashSalesAmount = (float) $cashTransactions->sum('total_amount');
+            $cashOrdersCount = $cashTransactions->count();
+
+            // 2. Pelunasan Kasbon Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
+            $pelunasanCashAmount = (float) CashFlow::where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'income')
+                ->where('payment_method', 'cash')
+                ->whereDate('date', $filterDate)
+                ->where('description', 'LIKE', '%Pelunasan%')
+                ->sum('amount');
+
+            $totalCashIn = $cashSalesAmount + $pelunasanCashAmount;
+
+            // 3. Hitung COGS / HPP (Modal Es Kristal) dari Penjualan Tunai Kasir Ini
+            $cogsAmount = 0;
+            $itemsSoldBreakdown = [];
+
+            foreach ($cashTransactions as $trx) {
+                foreach ($trx->details as $detail) {
+                    $pName = optional($detail->product)->name ?? 'Produk';
+                    // Abaikan ongkos kirim dari hitungan COGS
+                    $isOngkir = str_contains(strtolower($pName), 'ongkos kirim') || str_contains(strtolower($pName), 'ongkir');
+                    if ($isOngkir) {
+                        continue;
+                    }
+
+                    $qty = (float) $detail->quantity;
+                    $costPrice = (float) ($detail->cost_price ?? optional($detail->product)->cost_price ?? 0);
+                    $subCogs = $costPrice * $qty;
+                    $cogsAmount += $subCogs;
+
+                    if (!isset($itemsSoldBreakdown[$pName])) {
+                        $itemsSoldBreakdown[$pName] = [
+                            'name' => $pName,
+                            'qty' => 0,
+                            'unit' => optional($detail->product)->unit ?? 'Ball',
+                            'cost_price' => $costPrice,
+                            'total_cogs' => 0,
+                        ];
+                    }
+                    $itemsSoldBreakdown[$pName]['qty'] += $qty;
+                    $itemsSoldBreakdown[$pName]['total_cogs'] += $subCogs;
+                }
+            }
+
+            // 4. Pengeluaran Kasir (Expenses) yang dibayar dari laci kasir pada tanggal filter
+            $cashExpensesQuery = CashFlow::with('category')
+                ->where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'expense')
+                ->whereDate('date', $filterDate);
+
+            $cashExpensesAmount = (float) $cashExpensesQuery->sum('amount');
+            $expensesList = $cashExpensesQuery->get();
+
+            // 5. Saldo Fisik Laci vs Cash On Hand Real
+            $physicalCashDrawer = $totalCashIn - $cashExpensesAmount; // Uang fisik di laci
+            $realCashOnHand = $totalCashIn - $cogsAmount - $cashExpensesAmount; // Cash on hand riil setelah HPP & Expenses
+
+            // 6. Transaksi Non-Tunai & Kasbon (sebagai data pendukung)
+            $nonCashSalesAmount = (float) Transaction::where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'sale')
+                ->where('payment_status', 'paid')
+                ->where('payment_method', '!=', 'cash')
+                ->whereDate('transaction_date', $filterDate)
+                ->sum('total_amount');
+
+            $kasbonAmount = (float) Transaction::where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'sale')
+                ->where('payment_status', 'pending')
+                ->whereDate('transaction_date', $filterDate)
+                ->sum('total_amount');
+
+            // Masukkan jika user adalah role kasir atau memiliki aktivitas pada tanggal filter
+            if ($user->role === 'kasir' || $totalCashIn > 0 || $cashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashSalesAmount > 0) {
+                $cashierData[] = [
+                    'user_id' => $user->id,
+                    'name' => $user->name,
+                    'role' => $user->role,
+                    'phone' => $user->phone ?? '-',
+                    'total_cash_in' => $totalCashIn,
+                    'cash_sales' => $cashSalesAmount,
+                    'pelunasan_cash' => $pelunasanCashAmount,
+                    'cash_orders_count' => $cashOrdersCount,
+                    'cogs' => $cogsAmount,
+                    'items_sold' => array_values($itemsSoldBreakdown),
+                    'expenses' => $cashExpensesAmount,
+                    'expenses_list' => $expensesList,
+                    'physical_drawer' => $physicalCashDrawer,
+                    'real_cash_on_hand' => $realCashOnHand,
+                    'non_cash_sales' => $nonCashSalesAmount,
+                    'kasbon' => $kasbonAmount,
+                    'has_activity' => ($totalCashIn > 0 || $cashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashSalesAmount > 0)
+                ];
+            }
+        }
+
+        return $cashierData;
     }
 }
