@@ -108,19 +108,6 @@
 @section('content')
 <form action="{{ route('kasir.pos.store') }}" method="POST" id="pos-form">
     @csrf
-
-    @if ($errors->any())
-    <div class="alert alert-danger alert-dismissible fade show mb-3 shadow-sm" role="alert">
-        <h6 class="fw-bold mb-1"><i class="fas fa-exclamation-triangle me-1"></i> Gagal Memproses Transaksi</h6>
-        <ul class="mb-0 ps-3">
-            @foreach ($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-    @endif
-
     <div class="row g-4">
         {{-- Kolom Kiri: Daftar Produk --}}
         <div class="col-lg-7">
@@ -206,58 +193,34 @@
 
                 {{-- Custom search untuk pelanggan pada pesanan aktif --}}
                 <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label for="customer_search" class="form-label fw-semibold small mb-0">
-                            <i class="fas fa-store text-primary me-1"></i>Pelanggan / Toko (<span id="active-order-label">Pesanan 1</span>)
-                            <span class="text-danger fw-bold d-none" id="customer-required-badge" title="Wajib diisi jika Kasbon atau Pengiriman Driver">*</span>
-                        </label>
-                        <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 fw-semibold" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#quickAddCustomerModal">
-                            <i class="fas fa-plus me-1"></i>+ Toko Baru
-                        </button>
-                    </div>
-                    <div class="customer-dropdown position-relative">
+                    <label for="customer_search" class="form-label fw-semibold small mb-1">
+                        <i class="fas fa-user text-primary me-1"></i>Pelanggan (<span id="active-order-label">Pesanan 1</span>)
+                    </label>
+                    <div class="customer-dropdown">
                         <div class="input-group">
-                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <span class="input-group-text"><i class="fas fa-user"></i></span>
                             <input type="text"
                                 id="customer_search"
                                 class="form-control"
-                                placeholder="Cari nama toko / ketik nama toko baru..."
+                                placeholder="Cari pelanggan berdasarkan nama..."
                                 autocomplete="off">
-                            <button type="button" class="btn btn-outline-secondary" id="clear-customer" title="Reset Pelanggan">
+                            <button type="button" class="btn btn-outline-secondary" id="clear-customer">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
                         <input type="hidden" name="customer_id" id="customer_id" value="">
-                        <input type="hidden" name="customer_name" id="customer_name_input" value="">
-                        <div class="customer-search-results shadow-sm" id="customer-results">
-                            {{-- Shortcut cepat jika mengetik nama toko baru --}}
-                            <div class="customer-item text-primary fw-bold bg-light d-none" id="quick-add-from-search" style="border-bottom: 2px dashed #0d6efd;">
-                                <i class="fas fa-plus-circle me-1"></i> Daftarkan "<span id="typed-customer-name"></span>" sebagai Toko Baru
-                            </div>
-                            <div class="customer-item" data-id="" data-name="Pelanggan Umum" id="opt-pelanggan-umum">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <strong>Pelanggan Umum</strong>
-                                    <span class="badge bg-secondary" style="font-size: 0.65rem;">Khusus Tunai Lunas</span>
-                                </div>
+                        <div class="customer-search-results" id="customer-results">
+                            <div class="customer-item" data-id="" data-name="Pelanggan Umum">
+                                <strong>Pelanggan Umum</strong>
                             </div>
                             @foreach ($customers as $customer)
-                            <div class="customer-item" data-id="{{ $customer->id }}" data-name="{{ $customer->name }}" data-phone="{{ $customer->phone ?? '' }}">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span>{{ $customer->name }}</span>
-                                    @if($customer->phone)
-                                    <small class="text-muted"><i class="fas fa-phone small me-1"></i>{{ $customer->phone }}</small>
-                                    @endif
-                                </div>
+                            <div class="customer-item" data-id="{{ $customer->id }}" data-name="{{ $customer->name }}">
+                                {{ $customer->name }}
                             </div>
                             @endforeach
                         </div>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mt-1">
-                        <small class="text-muted" id="customer-helper-text">Pilih toko penerima untuk pesanan yang aktif</small>
-                        <small class="text-danger fw-semibold d-none" id="customer-kasbon-warning">
-                            <i class="fas fa-exclamation-triangle me-1"></i>Kasbon / Pengiriman dilarang 'Pelanggan Umum'
-                        </small>
-                    </div>
+                    <small class="text-muted">Pilih pelanggan untuk pesanan yang sedang aktif</small>
                 </div>
 
                 <div class="cart-items mb-2 table-responsive">
@@ -348,60 +311,6 @@
         </div>
     </div>
 </form>
-
-{{-- ======================================================== --}}
-{{-- MODAL QUICK ADD PELANGGAN / TOKO BARU (TANPA RELOAD)     --}}
-{{-- ======================================================== --}}
-<div class="modal fade" id="quickAddCustomerModal" tabindex="-1" aria-labelledby="quickAddCustomerModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-primary text-white py-2 px-3">
-                <h6 class="modal-title fw-bold" id="quickAddCustomerModalLabel">
-                    <i class="fas fa-store me-2"></i> Tambah Pelanggan / Toko Baru
-                </h6>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="quickAddCustomerForm">
-                <div class="modal-body p-3">
-                    <div class="alert alert-info py-2 px-3 small border-0 mb-3 d-flex align-items-center">
-                        <i class="fas fa-info-circle me-2 fs-5 text-info"></i>
-                        <span>Toko akan langsung tersimpan ke data pelanggan & otomatis terpilih untuk <strong id="quick-add-order-target">Pesanan Aktif</strong>.</span>
-                    </div>
-
-                    <div id="quick-customer-alert" class="alert alert-danger py-2 px-3 small d-none mb-3"></div>
-
-                    <div class="mb-3">
-                        <label for="quick_customer_name" class="form-label fw-bold small mb-1">
-                            Nama Toko / Pelanggan <span class="text-danger">*</span>
-                        </label>
-                        <input type="text" class="form-control" id="quick_customer_name" name="name" required placeholder="Contoh: Toko Berkah / Warung Bu Siti" autocomplete="off">
-                    </div>
-                    <div class="mb-3">
-                        <label for="quick_customer_phone" class="form-label fw-bold small mb-1">
-                            No. WhatsApp / HP <span class="text-muted fw-normal">(Disarankan untuk Kasbon)</span>
-                        </label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="fab fa-whatsapp text-success"></i></span>
-                            <input type="tel" class="form-control" id="quick_customer_phone" name="phone" placeholder="Contoh: 081234567890" autocomplete="off">
-                        </div>
-                        <small class="text-muted" style="font-size: 0.75rem;">Sangat penting untuk tracking & follow-up penagihan kasbon.</small>
-                    </div>
-                    <div class="mb-2">
-                        <label for="quick_customer_address" class="form-label fw-bold small mb-1">Alamat / Patokan Pengiriman</label>
-                        <textarea class="form-control" id="quick_customer_address" name="address" rows="2" placeholder="Contoh: Jl. Ahmad Yani No. 12 (Dekat Indomaret)"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer bg-light py-2 px-3 d-flex justify-content-between">
-                    <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold" id="btn-save-quick-customer">
-                        <span class="spinner-border spinner-border-sm me-1 d-none" id="quick-customer-spinner" role="status"></span>
-                        <i class="fas fa-save me-1" id="quick-customer-save-icon"></i> Simpan & Pilih Toko
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 @endsection
 
 @push('scripts')
@@ -666,16 +575,14 @@
                         tabsList.innerHTML = '';
                         orders.forEach((ord, idx) => {
                             const itemCount = Object.values(ord.items || {}).reduce((sum, item) => sum + item.quantity, 0);
-                            const isCustEmpty = !ord.customerName || ord.customerName.toLowerCase() === 'pelanggan umum';
-                            const custLabel = ord.customerName ? ord.customerName : `Toko ${idx + 1}`;
-                            const warnBadge = isCustEmpty ? '<i class="fas fa-exclamation-circle text-warning ms-1" title="Nama toko wajib ditentukan!"></i>' : '';
+                            const custLabel = ord.customerName ? ord.customerName : `Pesanan ${idx + 1}`;
                             const isActive = idx === activeOrderIndex;
 
                             const btnGroup = document.createElement('div');
                             btnGroup.className = 'btn-group';
                             btnGroup.innerHTML = `
                                 <button type="button" class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-outline-secondary'} text-nowrap fw-semibold" onclick="switchOrder(${idx})">
-                                    <i class="fas fa-store me-1"></i> ${escapeHtml(custLabel)} ${warnBadge} <span class="badge ${isActive ? 'bg-light text-dark' : 'bg-secondary'} ms-1">${itemCount}</span>
+                                    <i class="fas fa-store me-1"></i> ${custLabel} <span class="badge ${isActive ? 'bg-light text-dark' : 'bg-secondary'} ms-1">${itemCount}</span>
                                 </button>
                                 <button type="button" class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-outline-secondary'} text-danger" onclick="removeOrder(${idx})" title="Hapus pesanan ini">
                                     &times;
@@ -762,29 +669,8 @@
                 // 2. Sinkronkan Customer Input dengan Order Aktif
                 const customerSearch = safeEl('customer_search');
                 const customerIdInput = safeEl('customer_id');
-                const customerNameInput = safeEl('customer_name_input');
                 if (customerSearch) customerSearch.value = currentOrder.customerName || '';
                 if (customerIdInput) customerIdInput.value = currentOrder.customerId || '';
-                if (customerNameInput) customerNameInput.value = currentOrder.customerName || '';
-
-                // Deteksi Kasbon & Pengiriman untuk Warning Visual
-                const hasDriver = driverSelect && driverSelect.value !== '';
-                const isKasbon = isMultiOrder || hasDriver || (paymentSelect && paymentSelect.value === 'kasbon');
-
-                const customerReqBadge = safeEl('customer-required-badge');
-                if (customerReqBadge) {
-                    customerReqBadge.classList.toggle('d-none', !isKasbon);
-                }
-
-                const isCurrentCustEmpty = !currentOrder.customerName || currentOrder.customerName.toLowerCase() === 'pelanggan umum';
-                const kasbonWarningEl = safeEl('customer-kasbon-warning');
-                if (kasbonWarningEl) {
-                    if (isKasbon && isCurrentCustEmpty) {
-                        kasbonWarningEl.classList.remove('d-none');
-                    } else {
-                        kasbonWarningEl.classList.add('d-none');
-                    }
-                }
 
                 const customerResults = safeEl('customer-results');
                 if (customerResults) {
@@ -874,7 +760,6 @@
                         orders.forEach((ord, ordIdx) => {
                             hiddenItemsDiv.innerHTML += `
                                 <input type="hidden" name="orders[${ordIdx}][customer_id]" value="${ord.customerId || ''}">
-                                <input type="hidden" name="orders[${ordIdx}][customer_name]" value="${escapeHtml(ord.customerName || '')}">
                             `;
                             let itemIdx = 0;
                             let ordSubtotal = 0;
@@ -898,7 +783,6 @@
                     } else {
                         hiddenItemsDiv.innerHTML += `
                             <input type="hidden" name="customer_id" value="${orders[0].customerId || ''}">
-                            <input type="hidden" name="customer_name" value="${escapeHtml(orders[0].customerName || '')}">
                         `;
                         let itemIdx = 0;
                         Object.values(orders[0].items || {}).forEach(it => {
@@ -955,35 +839,16 @@
         const customerIdInput = document.getElementById('customer_id');
         const clearCustomerBtn = document.getElementById('clear-customer');
 
-        function escapeHtml(str) {
-            if (!str) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
-        }
-
-        // ==============================================
-        // SEARCH PELANGGAN
-        // ==============================================
-        const customerSearch = document.getElementById('customer_search');
-        const customerResults = document.getElementById('customer-results');
-        const customerIdInput = document.getElementById('customer_id');
-        const clearCustomerBtn = document.getElementById('clear-customer');
-
         customerSearch.addEventListener('focus', function() {
             customerResults.classList.add('show');
         });
 
         customerSearch.addEventListener('input', function() {
-            const rawVal = this.value.trim();
-            const filter = rawVal.toLowerCase();
-            const items = customerResults.querySelectorAll('.customer-item:not(#quick-add-from-search)');
+            const filter = this.value.toLowerCase();
+            const items = customerResults.querySelectorAll('.customer-item');
 
             items.forEach(item => {
-                const name = (item.dataset.name || '').toLowerCase();
+                const name = item.dataset.name.toLowerCase();
                 if (name.includes(filter)) {
                     item.style.display = '';
                 } else {
@@ -991,54 +856,11 @@
                 }
             });
 
-            const quickSearchBtn = document.getElementById('quick-add-from-search');
-            const typedSpan = document.getElementById('typed-customer-name');
-            if (quickSearchBtn && typedSpan) {
-                if (rawVal.length > 0 && filter !== 'pelanggan umum') {
-                    typedSpan.textContent = rawVal;
-                    quickSearchBtn.classList.remove('d-none');
-                } else {
-                    quickSearchBtn.classList.add('d-none');
-                }
-            }
-
-            orders[activeOrderIndex].customerName = rawVal;
-            orders[activeOrderIndex].customerId = '';
-            if (customerIdInput) customerIdInput.value = '';
-            const cNameInput = safeEl('customer_name_input');
-            if (cNameInput) cNameInput.value = rawVal;
-
             customerResults.classList.add('show');
-            renderCart();
         });
-
-        // Klik shortcut tambah toko dari pencarian
-        const quickSearchBtn = document.getElementById('quick-add-from-search');
-        if (quickSearchBtn) {
-            quickSearchBtn.addEventListener('click', function() {
-                const typedName = (customerSearch.value || '').trim();
-                const quickNameInput = document.getElementById('quick_customer_name');
-                if (quickNameInput) {
-                    quickNameInput.value = typedName;
-                }
-                customerResults.classList.remove('show');
-                const modalEl = document.getElementById('quickAddCustomerModal');
-                if (modalEl) {
-                    const modalInstance = new bootstrap.Modal(modalEl);
-                    modalInstance.show();
-                    setTimeout(() => {
-                        const phoneInput = document.getElementById('quick_customer_phone');
-                        if (phoneInput) phoneInput.focus();
-                    }, 400);
-                }
-            });
-        }
 
         if (customerResults) {
             customerResults.addEventListener('click', function(e) {
-                if (e.target.closest('#quick-add-from-search')) {
-                    return;
-                }
                 const item = e.target.closest('.customer-item');
                 if (item) {
                     const customerId = item.dataset.id;
@@ -1049,8 +871,6 @@
 
                     if (customerSearch) customerSearch.value = customerName;
                     if (customerIdInput) customerIdInput.value = customerId;
-                    const cNameInput = safeEl('customer_name_input');
-                    if (cNameInput) cNameInput.value = customerName;
 
                     customerResults.querySelectorAll('.customer-item').forEach(i => i.classList.remove('selected'));
                     item.classList.add('selected');
@@ -1073,15 +893,11 @@
                 orders[activeOrderIndex].customerName = '';
                 if (customerSearch) customerSearch.value = '';
                 if (customerIdInput) customerIdInput.value = '';
-                const cNameInput = safeEl('customer_name_input');
-                if (cNameInput) cNameInput.value = '';
                 if (customerResults) {
                     customerResults.querySelectorAll('.customer-item').forEach(item => {
                         item.classList.remove('selected');
                         item.style.display = '';
                     });
-                    const qSearch = document.getElementById('quick-add-from-search');
-                    if (qSearch) qSearch.classList.add('d-none');
                     customerResults.classList.remove('show');
                 }
                 if (customerSearch) customerSearch.focus();
@@ -1099,140 +915,6 @@
                 customerResults.classList.remove('show');
             }
         });
-
-        // ==============================================
-        // QUICK ADD CUSTOMER MODAL (AJAX HANDLER)
-        // ==============================================
-        const quickModal = document.getElementById('quickAddCustomerModal');
-        if (quickModal) {
-            quickModal.addEventListener('show.bs.modal', function() {
-                const targetLabel = document.getElementById('quick-add-order-target');
-                if (targetLabel) {
-                    targetLabel.textContent = `Pesanan ${activeOrderIndex + 1}`;
-                }
-                const typedName = customerSearch ? customerSearch.value.trim() : '';
-                const nameInput = document.getElementById('quick_customer_name');
-                if (nameInput && typedName && typedName.toLowerCase() !== 'pelanggan umum') {
-                    nameInput.value = typedName;
-                }
-            });
-        }
-
-        const quickCustForm = document.getElementById('quickAddCustomerForm');
-        if (quickCustForm) {
-            quickCustForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-
-                const nameInput = document.getElementById('quick_customer_name');
-                const phoneInput = document.getElementById('quick_customer_phone');
-                const addressInput = document.getElementById('quick_customer_address');
-                const alertBox = document.getElementById('quick-customer-alert');
-                const spinner = document.getElementById('quick-customer-spinner');
-                const saveIcon = document.getElementById('quick-customer-save-icon');
-                const saveBtn = document.getElementById('btn-save-quick-customer');
-
-                const nameVal = nameInput ? nameInput.value.trim() : '';
-                const phoneVal = phoneInput ? phoneInput.value.trim() : '';
-                const addressVal = addressInput ? addressInput.value.trim() : '';
-
-                if (!nameVal || nameVal.toLowerCase() === 'pelanggan umum') {
-                    if (alertBox) {
-                        alertBox.textContent = 'Nama toko/pelanggan tidak boleh kosong atau "Pelanggan Umum".';
-                        alertBox.classList.remove('d-none');
-                    }
-                    return;
-                }
-
-                if (alertBox) alertBox.classList.add('d-none');
-                if (spinner) spinner.classList.remove('d-none');
-                if (saveIcon) saveIcon.classList.add('d-none');
-                if (saveBtn) saveBtn.disabled = true;
-
-                try {
-                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || 
-                                      document.querySelector('input[name="_token"]')?.value;
-
-                    const res = await fetch("{{ route('kasir.customers.store') }}", {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRF-TOKEN': csrfToken
-                        },
-                        body: JSON.stringify({
-                            name: nameVal,
-                            phone: phoneVal || null,
-                            address: addressVal || null
-                        })
-                    });
-
-                    const data = await res.json();
-
-                    if (res.ok && data.success && data.customer) {
-                        const newCustomer = data.customer;
-
-                        // Tambahkan item toko ke dropdown pencarian
-                        if (customerResults) {
-                            const newDiv = document.createElement('div');
-                            newDiv.className = 'customer-item';
-                            newDiv.dataset.id = newCustomer.id;
-                            newDiv.dataset.name = newCustomer.name;
-                            newDiv.dataset.phone = newCustomer.phone || '';
-                            newDiv.innerHTML = `
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span>${escapeHtml(newCustomer.name)}</span>
-                                    ${newCustomer.phone ? `<small class="text-muted"><i class="fas fa-phone small me-1"></i>${escapeHtml(newCustomer.phone)}</small>` : ''}
-                                </div>
-                            `;
-                            const optUmum = document.getElementById('opt-pelanggan-umum');
-                            if (optUmum && optUmum.nextSibling) {
-                                customerResults.insertBefore(newDiv, optUmum.nextSibling);
-                            } else {
-                                customerResults.appendChild(newDiv);
-                            }
-                        }
-
-                        // Langsung pilih untuk pesanan aktif
-                        orders[activeOrderIndex].customerId = newCustomer.id;
-                        orders[activeOrderIndex].customerName = newCustomer.name;
-
-                        if (customerSearch) customerSearch.value = newCustomer.name;
-                        if (customerIdInput) customerIdInput.value = newCustomer.id;
-                        const cNameInput = safeEl('customer_name_input');
-                        if (cNameInput) cNameInput.value = newCustomer.name;
-
-                        quickCustForm.reset();
-                        const modalEl = document.getElementById('quickAddCustomerModal');
-                        if (modalEl) {
-                            const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-                            modalInstance.hide();
-                        }
-
-                        renderCart();
-                    } else {
-                        let errorMsg = data.message || 'Gagal menyimpan pelanggan baru.';
-                        if (data.errors) {
-                            errorMsg = Object.values(data.errors).flat().join('<br>');
-                        }
-                        if (alertBox) {
-                            alertBox.innerHTML = errorMsg;
-                            alertBox.classList.remove('d-none');
-                        }
-                    }
-                } catch (err) {
-                    console.error("Error saving quick customer:", err);
-                    if (alertBox) {
-                        alertBox.textContent = 'Terjadi kesalahan saat menyimpan pelanggan baru.';
-                        alertBox.classList.remove('d-none');
-                    }
-                } finally {
-                    if (spinner) spinner.classList.add('d-none');
-                    if (saveIcon) saveIcon.classList.remove('d-none');
-                    if (saveBtn) saveBtn.disabled = false;
-                }
-            });
-        }
 
         // D. Driver & Payment change logging
         const driverSelect = safeEl('driver_id');
@@ -1255,7 +937,6 @@
                     paymentMethod: this.value,
                     label: optText
                 });
-                renderCart();
             });
         }
 
@@ -1263,43 +944,23 @@
         const posForm = safeEl('pos-form');
         if (posForm) {
             posForm.addEventListener('submit', function(e) {
-                const isMulti = orders.length > 1;
-                const dSelect = safeEl('driver_id');
-                const hasDriver = dSelect && dSelect.value !== '';
-                const pmSel = safeEl('payment_method');
-                const isKasbon = hasDriver || (pmSel && pmSel.value === 'kasbon');
-
-                if (isMulti) {
+                if (orders.length > 1) {
                     // Mode Multi-Order: Cek driver
-                    if (!hasDriver) {
+                    const dSelect = safeEl('driver_id');
+                    if (!dSelect || !dSelect.value) {
                         e.preventDefault();
                         alert('Silakan pilih Driver Pengantar yang bertugas terlebih dahulu!');
                         if (dSelect) dSelect.focus();
                         return false;
                     }
 
-                    // Cek apakah setiap pesanan memiliki produk & nama pelanggan
+                    // Cek apakah setiap pesanan memiliki produk
                     for (let i = 0; i < orders.length; i++) {
                         if (Object.keys(orders[i].items || {}).length === 0) {
                             e.preventDefault();
                             const cName = orders[i].customerName || `Pesanan ${i + 1}`;
                             alert(`${cName} masih kosong! Silakan pilih minimal 1 produk.`);
                             switchOrder(i);
-                            return false;
-                        }
-
-                        // Cek nama customer (TIDAK BOLEH Pelanggan Umum atau kosong)
-                        const ordCustName = (orders[i].customerName || '').trim();
-                        const isPelangganUmum = !ordCustName || ['pelanggan umum', 'umum'].includes(ordCustName.toLowerCase());
-
-                        if (isPelangganUmum) {
-                            e.preventDefault();
-                            alert(`⚠️ PERHATIAN: Pesanan ${i + 1} masih berstatus 'Pelanggan Umum'!\n\nSemua pesanan pengiriman driver wajib mencantumkan Nama Toko / Pelanggan yang jelas agar surat jalan dan kasbon dapat di-tracking.\n\nSilakan tentukan nama toko untuk Pesanan ${i + 1}.`);
-                            switchOrder(i);
-                            if (customerSearch) {
-                                customerSearch.focus();
-                                customerSearch.select();
-                            }
                             return false;
                         }
                     }
@@ -1311,7 +972,11 @@
                         return false;
                     }
 
+                    const dSelect = safeEl('driver_id');
+                    const hasDriver = dSelect && dSelect.value !== '';
+
                     if (!hasDriver) {
+                        const pmSel = safeEl('payment_method');
                         if (!pmSel || !pmSel.value) {
                             e.preventDefault();
                             alert('Silakan pilih Metode Pembayaran!');
@@ -1319,26 +984,10 @@
                             return false;
                         }
                     }
-
-                    // Jika kasbon atau pengiriman driver, WAJIB pelanggan spesifik
-                    if (isKasbon) {
-                        const custName = (orders[0].customerName || (customerSearch ? customerSearch.value : '')).trim();
-                        const isPelangganUmum = !custName || ['pelanggan umum', 'umum'].includes(custName.toLowerCase());
-
-                        if (isPelangganUmum) {
-                            e.preventDefault();
-                            alert('⚠️ PERHATIAN: Transaksi Kasbon / Pengiriman Driver WAJIB mencantumkan Nama Toko atau Pelanggan asli (tidak boleh Pelanggan Umum)!\n\nHal ini agar kasbon tidak lupa ditagih dan dapat di-tracking dengan jelas.\n\nSilakan pilih toko atau klik tombol "+ Toko Baru".');
-                            if (customerSearch) {
-                                customerSearch.focus();
-                                customerSearch.select();
-                            }
-                            return false;
-                        }
-                    }
                 }
 
                 posLog("🚀 FORM DISUBMIT KE SERVER", {
-                    mode: isMulti ? "Multi-Order Pengiriman Driver" : "Single-Order Reguler",
+                    mode: orders.length > 1 ? "Multi-Order Pengiriman Driver" : "Single-Order Reguler",
                     totalPesanan: orders.length,
                     grandTotal: safeEl('total_amount_hidden')?.value,
                     driverId: safeEl('driver_id')?.value || '-'

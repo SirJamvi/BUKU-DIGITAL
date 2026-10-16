@@ -28,10 +28,7 @@ class StoreTransactionRequest extends FormRequest
             return [
                 'driver_id' => ['required', 'integer', 'exists:users,id'],
                 'orders' => ['required', 'array', 'min:1'],
-                'orders.*.customer_id' => ['nullable'],
-                'orders.*.customer_name' => ['nullable', 'string', 'max:255'],
-                'orders.*.customer_phone' => ['nullable', 'string', 'max:50'],
-                'orders.*.customer_address' => ['nullable', 'string'],
+                'orders.*.customer_id' => ['nullable', 'integer', 'exists:customers,id'],
                 'orders.*.total_amount' => ['required', 'numeric', 'min:0'],
                 'orders.*.notes' => ['nullable', 'string'],
                 'orders.*.items' => ['required', 'array', 'min:1'],
@@ -44,10 +41,7 @@ class StoreTransactionRequest extends FormRequest
         }
 
         return [
-            'customer_id' => ['nullable'],
-            'customer_name' => ['nullable', 'string', 'max:255'],
-            'customer_phone' => ['nullable', 'string', 'max:50'],
-            'customer_address' => ['nullable', 'string'],
+            'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'driver_id' => ['nullable', 'integer', 'exists:users,id'],
             'payment_method' => ['required', 'string', 'max:50'],
             'total_amount' => ['required', 'numeric', 'min:0'],
@@ -78,9 +72,6 @@ class StoreTransactionRequest extends FormRequest
                     });
                 }
                 $orders[$index]['total_amount'] = $orderTotal;
-                if (empty($order['customer_id'])) {
-                    $orders[$index]['customer_id'] = null;
-                }
             }
             $this->merge([
                 'orders' => $orders,
@@ -99,7 +90,6 @@ class StoreTransactionRequest extends FormRequest
 
         $mergeData = [
             'total_amount' => $totalAmount,
-            'customer_id' => $this->filled('customer_id') ? $this->customer_id : null,
         ];
 
         // Jika single order ditugaskan ke driver, otomatis payment_method kasbon
@@ -109,63 +99,4 @@ class StoreTransactionRequest extends FormRequest
 
         $this->merge($mergeData);
     }
-
-    /**
-     * Konfigurasi validator setelah aturan dasar dijalankan.
-     *
-     * @param \Illuminate\Validation\Validator $validator
-     * @return void
-     */
-    public function withValidator($validator)
-    {
-        $validator->after(function ($validator) {
-            $isMulti = $this->has('orders');
-            $hasDriver = !empty($this->driver_id);
-            $isKasbon = $hasDriver || (($this->payment_method ?? '') === 'kasbon');
-
-            if ($isMulti) {
-                $orders = $this->orders ?? [];
-                foreach ($orders as $index => $order) {
-                    $cId = $order['customer_id'] ?? null;
-                    $cName = trim($order['customer_name'] ?? '');
-
-                    if (!empty($cId)) {
-                        $cust = \App\Models\Customer::find($cId);
-                        if ($cust) {
-                            $cName = trim($cust->name);
-                        }
-                    }
-
-                    $isInvalid = empty($cName) || in_array(strtolower($cName), ['pelanggan umum', 'umum']);
-                    if ($isInvalid) {
-                        $validator->errors()->add(
-                            "orders.{$index}.customer_id",
-                            "Pesanan " . ($index + 1) . " pengiriman driver wajib mencantumkan Nama Toko / Pelanggan spesifik (tidak boleh kosong atau Pelanggan Umum)."
-                        );
-                    }
-                }
-            } else {
-                if ($isKasbon) {
-                    $cId = $this->customer_id;
-                    $cName = trim($this->customer_name ?? '');
-
-                    if (!empty($cId)) {
-                        $cust = \App\Models\Customer::find($cId);
-                        if ($cust) {
-                            $cName = trim($cust->name);
-                        }
-                    }
-
-                    $isInvalid = empty($cName) || in_array(strtolower($cName), ['pelanggan umum', 'umum']);
-                    if ($isInvalid) {
-                        $validator->errors()->add(
-                            'customer_id',
-                            'Transaksi Kasbon / Pengiriman Driver wajib mencantumkan Nama Toko atau Pelanggan spesifik (tidak boleh kosong atau Pelanggan Umum).'
-                        );
-                    }
-                }
-            }
-        });
-    }
 }
-
