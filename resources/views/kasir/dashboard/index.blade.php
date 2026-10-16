@@ -510,6 +510,7 @@ $modalId = 'modalGroup_' . $groupKey;
                                     </th>
                                     <th>No. Struk</th>
                                     <th>Tanggal Order</th>
+                                    <th>Kasir</th>
                                     <th>Catatan</th>
                                     <th class="text-end pe-4">Nominal</th>
                                 </tr>
@@ -527,6 +528,14 @@ $modalId = 'modalGroup_' . $groupKey;
                                     <td>
                                         <span>{{ $kasbon->transaction_date->format('d/m/Y') }}</span><br>
                                         <small class="text-muted">{{ $kasbon->transaction_date->format('H:i') }} WIB</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border fw-semibold" style="font-size: 0.8rem;">
+                                            <i class="fas fa-user text-primary me-1"></i>{{ $kasbon->createdBy->name ?? 'Kasir' }}
+                                        </span>
+                                        @if($kasbon->driver)
+                                            <br><small class="text-muted" style="font-size: 0.72rem;"><i class="fas fa-motorcycle text-info me-1"></i>{{ $kasbon->driver->name }}</small>
+                                        @endif
                                     </td>
                                     <td>
                                         <small class="text-muted fst-italic">{{ $kasbon->notes ?? '-' }}</small>
@@ -627,6 +636,10 @@ $modalId = 'modalGroup_' . $groupKey;
                                 <span>{{ $tIdx + 1 }}. Struk #{{ str_pad($t->id, 6, '0', STR_PAD_LEFT) }}</span>
                                 <span>{{ $t->transaction_date->format('d/m/Y H:i') }}</span>
                             </div>
+                            <div class="text-muted" style="font-size: 8pt; padding-left: 10px;">
+                                Kasir: <strong>{{ $t->createdBy->name ?? 'Kasir' }}</strong>
+                                @if($t->driver) | Driver: {{ $t->driver->name }} @endif
+                            </div>
                             @if($t->details && $t->details->isNotEmpty())
                                 @foreach($t->details as $det)
                                 <div class="d-flex justify-content-between text-muted" style="padding-left: 10px;">
@@ -708,6 +721,7 @@ $modalId = 'modalGroup_' . $groupKey;
                 {
                     id: '{{ str_pad($tx->id, 6, "0", STR_PAD_LEFT) }}',
                     date: '{{ $tx->transaction_date->format("d/m/Y H:i") }}',
+                    cashier: @json($tx->createdBy->name ?? 'Kasir'),
                     amount: {{ $tx->total_amount }},
                     notes: @json($tx->notes ?? ''),
                     products: [
@@ -908,6 +922,9 @@ $modalId = 'modalGroup_' . $groupKey;
 
         data.items.forEach((item, idx) => {
             msg += `${idx + 1}. *Struk #${item.id}* (${item.date})\n`;
+            if (item.cashier) {
+                msg += `   Kasir: ${item.cashier}\n`;
+            }
             if (item.products && item.products.length > 0) {
                 const prodList = item.products.map(p => `${p.name} (${p.quantity})`).join(', ');
                 msg += `   Item: ${prodList}\n`;

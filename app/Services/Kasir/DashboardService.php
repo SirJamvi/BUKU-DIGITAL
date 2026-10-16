@@ -98,7 +98,7 @@ class DashboardService
                 ->get();
 
             // 5. Ambil Kasbon yang Belum Lunas & Grouping Berdasarkan Pelanggan (Kecualikan yang sedang dibawa driver)
-            $pendingKasbonRaw = Transaction::with(['customer', 'details.product'])
+            $pendingKasbonRaw = Transaction::with(['customer', 'createdBy', 'driver', 'details.product'])
                 ->where('business_id', $businessId)
                 ->where('type', 'sale')
                 ->where('payment_status', 'pending')
