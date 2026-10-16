@@ -109,4 +109,63 @@ class StoreTransactionRequest extends FormRequest
 
         $this->merge($mergeData);
     }
+
+    /**
+     * Konfigurasi validator setelah aturan dasar dijalankan.
+     *
+     * @param \Illuminate\Validation\Validator $validator
+     * @return void
+     */
+    public function withValidator($validator)
+    {
+        $validator->after(function ($validator) {
+            $isMulti = $this->has('orders');
+            $hasDriver = !empty($this->driver_id);
+            $isKasbon = $hasDriver || (($this->payment_method ?? '') === 'kasbon');
+
+            if ($isMulti) {
+                $orders = $this->orders ?? [];
+                foreach ($orders as $index => $order) {
+                    $cId = $order['customer_id'] ?? null;
+                    $cName = trim($order['customer_name'] ?? '');
+
+                    if (!empty($cId)) {
+                        $cust = \App\Models\Customer::find($cId);
+                        if ($cust) {
+                            $cName = trim($cust->name);
+                        }
+                    }
+
+                    $isInvalid = empty($cName) || in_array(strtolower($cName), ['pelanggan umum', 'umum']);
+                    if ($isInvalid) {
+                        $validator->errors()->add(
+                            "orders.{$index}.customer_id",
+                            "Pesanan " . ($index + 1) . " pengiriman driver wajib mencantumkan Nama Toko / Pelanggan spesifik (tidak boleh kosong atau Pelanggan Umum)."
+                        );
+                    }
+                }
+            } else {
+                if ($isKasbon) {
+                    $cId = $this->customer_id;
+                    $cName = trim($this->customer_name ?? '');
+
+                    if (!empty($cId)) {
+                        $cust = \App\Models\Customer::find($cId);
+                        if ($cust) {
+                            $cName = trim($cust->name);
+                        }
+                    }
+
+                    $isInvalid = empty($cName) || in_array(strtolower($cName), ['pelanggan umum', 'umum']);
+                    if ($isInvalid) {
+                        $validator->errors()->add(
+                            'customer_id',
+                            'Transaksi Kasbon / Pengiriman Driver wajib mencantumkan Nama Toko atau Pelanggan spesifik (tidak boleh kosong atau Pelanggan Umum).'
+                        );
+                    }
+                }
+            }
+        });
+    }
 }
+

@@ -108,6 +108,19 @@
 @section('content')
 <form action="{{ route('kasir.pos.store') }}" method="POST" id="pos-form">
     @csrf
+
+    @if ($errors->any())
+    <div class="alert alert-danger alert-dismissible fade show mb-3 shadow-sm" role="alert">
+        <h6 class="fw-bold mb-1"><i class="fas fa-exclamation-triangle me-1"></i> Gagal Memproses Transaksi</h6>
+        <ul class="mb-0 ps-3">
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    @endif
+
     <div class="row g-4">
         {{-- Kolom Kiri: Daftar Produk --}}
         <div class="col-lg-7">
@@ -1277,7 +1290,7 @@
 
                         // Cek nama customer (TIDAK BOLEH Pelanggan Umum atau kosong)
                         const ordCustName = (orders[i].customerName || '').trim();
-                        const isPelangganUmum = !ordCustName || ordCustName.toLowerCase() === 'pelanggan umum';
+                        const isPelangganUmum = !ordCustName || ['pelanggan umum', 'umum'].includes(ordCustName.toLowerCase());
 
                         if (isPelangganUmum) {
                             e.preventDefault();
@@ -1310,7 +1323,7 @@
                     // Jika kasbon atau pengiriman driver, WAJIB pelanggan spesifik
                     if (isKasbon) {
                         const custName = (orders[0].customerName || (customerSearch ? customerSearch.value : '')).trim();
-                        const isPelangganUmum = !custName || custName.toLowerCase() === 'pelanggan umum';
+                        const isPelangganUmum = !custName || ['pelanggan umum', 'umum'].includes(custName.toLowerCase());
 
                         if (isPelangganUmum) {
                             e.preventDefault();
