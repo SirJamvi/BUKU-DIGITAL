@@ -202,6 +202,8 @@
                 </div>
                 @php
                     $allCashiers = collect($cashierMonitoring ?? []);
+                    $activeCashiersCount = $allCashiers->where('has_activity', true)->count();
+                    $standbyCashiersCount = $allCashiers->where('has_activity', false)->count();
                     $totalAllCashIn = $allCashiers->sum('total_cash_in');
                     $totalAllCogs = $allCashiers->sum('cogs');
                     $totalAllExpenses = $allCashiers->sum('expenses');
@@ -226,11 +228,62 @@
                     </span>
                 </div>
             </div>
+
+            {{-- Toolbar Filter Cepat: Aktif Bertugas / Standby / Semua --}}
+            <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="text-muted small fw-bold"><i class="fas fa-filter text-primary me-1"></i>Filter Kasir:</span>
+                    <div class="btn-group btn-group-sm" role="group" id="cashierFilterBtnGroup" aria-label="Filter Kasir">
+                        <button type="button" class="btn btn-primary active px-3 fw-semibold cashier-filter-btn" data-filter="active" onclick="switchCashierFilter('active')">
+                            <i class="fas fa-circle-dot text-success me-1"></i>Aktif Bertugas <span class="badge bg-white text-primary ms-1 rounded-pill">{{ $activeCashiersCount }}</span>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary px-3 fw-semibold cashier-filter-btn" data-filter="standby" onclick="switchCashierFilter('standby')">
+                            <i class="fas fa-clock text-muted me-1"></i>Standby (Nol Trx) <span class="badge bg-secondary ms-1 rounded-pill">{{ $standbyCashiersCount }}</span>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary px-3 fw-semibold cashier-filter-btn" data-filter="all" onclick="switchCashierFilter('all')">
+                            <i class="fas fa-users me-1"></i>Semua Kasir <span class="badge bg-secondary ms-1 rounded-pill">{{ $allCashiers->count() }}</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="small text-muted d-flex align-items-center gap-2">
+                    <span id="cashierFilterInfo">
+                        Menampilkan <strong>{{ $activeCashiersCount }}</strong> kasir aktif bertugas
+                    </span>
+                </div>
+            </div>
+
             <div class="card-body bg-light p-3">
                 @if(count($cashierMonitoring ?? []) > 0)
-                <div class="row g-3">
+                <div class="row g-3" id="cashierCardsGrid">
+                    {{-- Alert jika filter aktif dipilih tapi belum ada transaksi --}}
+                    <div id="cashier-no-active-alert" class="col-12 {{ $activeCashiersCount > 0 ? 'd-none' : '' }}">
+                        <div class="alert alert-info border-0 shadow-sm d-flex align-items-center justify-content-between p-3 mb-0" style="border-radius: 10px;">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-info-circle me-3 fs-4 text-info"></i>
+                                <div>
+                                    <strong class="d-block">Belum Ada Kasir yang Memulai Transaksi Hari Ini</strong>
+                                    <span class="small text-muted">Semua akun kasir saat ini berstatus Standby (Rp 0).</span>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-primary" onclick="switchCashierFilter('standby')">
+                                <i class="fas fa-eye me-1"></i>Lihat Kasir Standby ({{ $standbyCashiersCount }})
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Alert jika filter standby dipilih tapi semua kasir sedang aktif --}}
+                    <div id="cashier-no-standby-alert" class="col-12 d-none">
+                        <div class="alert alert-success border-0 shadow-sm d-flex align-items-center p-3 mb-0" style="border-radius: 10px;">
+                            <i class="fas fa-check-circle me-3 fs-4 text-success"></i>
+                            <div>
+                                <strong class="d-block">Semua Kasir Sedang Aktif!</strong>
+                                <span class="small text-muted">Seluruh akun kasir hari ini memiliki aktivitas transaksi tunai atau pengeluaran.</span>
+                            </div>
+                        </div>
+                    </div>
+
                     @foreach($cashierMonitoring as $c)
-                    <div class="col-xl-4 col-md-6">
+                    <div class="col-xl-4 col-md-6 cashier-card-col" data-status="{{ $c['has_activity'] ? 'active' : 'standby' }}">
                         <div class="card h-100 border-0 shadow-sm" style="border-radius: 10px; transition: transform 0.2s, box-shadow 0.2s;">
                             {{-- Header Card Kasir --}}
                             <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
@@ -1188,6 +1241,9 @@
                 const currCashier = document.querySelector('#cashier-priority-container');
                 if (newCashier && currCashier) {
                     currCashier.innerHTML = newCashier.innerHTML;
+                    if (typeof applyCashierFilter === 'function') {
+                        applyCashierFilter(currentCashierFilter);
+                    }
                 }
 
                 // 3. Perbarui Modal Kasir (Hanya jika tidak ada modal yang sedang aktif)
@@ -1253,8 +1309,97 @@
         autoFetchDashboardData(true);
     }
 
+    // ==========================================
+    // LOGIKA FILTER CEPAT KASIR: AKTIF / STANDBY / SEMUA
+    // ==========================================
+    let currentCashierFilter = 'active';
+
+    window.switchCashierFilter = function(filter) {
+        currentCashierFilter = filter;
+        applyCashierFilter(filter);
+    };
+
+    window.applyCashierFilter = function(filter) {
+        const btnGroup = document.getElementById('cashierFilterBtnGroup');
+        if (btnGroup) {
+            const buttons = btnGroup.querySelectorAll('.cashier-filter-btn');
+            buttons.forEach(btn => {
+                if (btn.getAttribute('data-filter') === filter) {
+                    btn.classList.remove('btn-outline-secondary');
+                    btn.classList.add('btn-primary', 'active');
+                } else {
+                    btn.classList.remove('btn-primary', 'active');
+                    btn.classList.add('btn-outline-secondary');
+                }
+            });
+        }
+
+        const cards = document.querySelectorAll('.cashier-card-col');
+        let visibleCount = 0;
+        let activeVisible = 0;
+        let standbyVisible = 0;
+
+        cards.forEach(card => {
+            const status = card.getAttribute('data-status');
+            if (filter === 'all') {
+                card.style.display = '';
+                visibleCount++;
+            } else if (filter === 'active') {
+                if (status === 'active') {
+                    card.style.display = '';
+                    visibleCount++;
+                    activeVisible++;
+                } else {
+                    card.style.display = 'none';
+                }
+            } else if (filter === 'standby') {
+                if (status === 'standby') {
+                    card.style.display = '';
+                    visibleCount++;
+                    standbyVisible++;
+                } else {
+                    card.style.display = 'none';
+                }
+            }
+        });
+
+        const alertNoActive = document.getElementById('cashier-no-active-alert');
+        if (alertNoActive) {
+            if (filter === 'active' && activeVisible === 0) {
+                alertNoActive.classList.remove('d-none');
+            } else {
+                alertNoActive.classList.add('d-none');
+            }
+        }
+
+        const alertNoStandby = document.getElementById('cashier-no-standby-alert');
+        if (alertNoStandby) {
+            if (filter === 'standby' && standbyVisible === 0) {
+                alertNoStandby.classList.remove('d-none');
+            } else {
+                alertNoStandby.classList.add('d-none');
+            }
+        }
+
+        const info = document.getElementById('cashierFilterInfo');
+        if (info) {
+            if (filter === 'active') {
+                info.innerHTML = `Menampilkan <strong>${visibleCount}</strong> kasir aktif bertugas`;
+            } else if (filter === 'standby') {
+                info.innerHTML = `Menampilkan <strong>${visibleCount}</strong> kasir standby (belum ada transaksi)`;
+            } else {
+                info.innerHTML = `Menampilkan semua <strong>${visibleCount}</strong> kasir terdaftar`;
+            }
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         startReloadCountdown();
+
+        // Inisialisasi tampilan kasir: default kasir aktif, fallback ke 'all' jika belum ada kasir aktif
+        const hasActive = document.querySelectorAll('.cashier-card-col[data-status="active"]').length > 0;
+        currentCashierFilter = hasActive ? 'active' : 'all';
+        applyCashierFilter(currentCashierFilter);
     });
 </script>
 @endpush

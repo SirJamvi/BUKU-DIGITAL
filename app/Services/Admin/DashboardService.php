@@ -431,6 +431,18 @@ class DashboardService
             ];
         }
 
+        // Urutkan: Kasir Aktif (has_activity = true) di paling depan/kiri atas,
+        // disusul saldo Real Cash on Hand terbesar, lalu kasir Standby di urutan belakang.
+        usort($cashierData, function ($a, $b) {
+            if ($a['has_activity'] !== $b['has_activity']) {
+                return $b['has_activity'] <=> $a['has_activity'];
+            }
+            if ($a['has_activity']) {
+                return $b['real_cash_on_hand'] <=> $a['real_cash_on_hand'];
+            }
+            return strcasecmp($a['name'], $b['name']);
+        });
+
         return $cashierData;
     }
 }
