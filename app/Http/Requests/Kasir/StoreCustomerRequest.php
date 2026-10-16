@@ -25,10 +25,12 @@ class StoreCustomerRequest extends FormRequest
      */
     public function rules(): array
     {
+        $businessId = auth()->user()->business_id ?? null;
+
         return [
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:20', 'unique:customers,phone'],
-            'email' => ['nullable', 'email', 'max:255', 'unique:customers,email'],
+            'phone' => ['nullable', 'string', 'max:20', Rule::unique('customers', 'phone')->where('business_id', $businessId)],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('customers', 'email')->where('business_id', $businessId)],
             'address' => ['nullable', 'string'],
         ];
     }

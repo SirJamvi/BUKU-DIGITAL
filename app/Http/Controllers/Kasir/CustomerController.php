@@ -55,13 +55,30 @@ class CustomerController extends Controller
      * @param StoreCustomerRequest $request
      * @return RedirectResponse
      */
-    public function store(StoreCustomerRequest $request): RedirectResponse
+    public function store(StoreCustomerRequest $request)
     {
         try {
-            $this->customerService->createCustomer($request->validated());
+            $customer = $this->customerService->createCustomer($request->validated());
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'customer' => $customer,
+                    'message' => 'Pelanggan baru berhasil ditambahkan.'
+                ]);
+            }
+
             return redirect()->route('kasir.customers.index')->with('success', 'Pelanggan baru berhasil ditambahkan.');
         } catch (\Exception $e) {
             logger()->error('Error creating customer from kasir: ' . $e->getMessage());
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal menambahkan pelanggan: ' . $e->getMessage()
+                ], 422);
+            }
+
             return back()->with('error', 'Gagal menambahkan pelanggan.')->withInput();
         }
     }

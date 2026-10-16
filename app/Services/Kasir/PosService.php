@@ -130,10 +130,34 @@ class PosService
             foreach ($data['orders'] as $orderIndex => $order) {
                 $orderTotal = $order['total_amount'] ?? 0;
 
+                // Resolusi Customer: Jika customer_id kosong tapi customer_name diisi dan bukan "Pelanggan Umum", cari atau buat baru
+                $customerId = $order['customer_id'] ?? null;
+                $customerName = trim($order['customer_name'] ?? '');
+
+                if (empty($customerId) && !empty($customerName) && strtolower($customerName) !== 'pelanggan umum') {
+                    $existing = Customer::where('business_id', $businessId)
+                        ->whereRaw('LOWER(name) = ?', [strtolower($customerName)])
+                        ->first();
+                    if ($existing) {
+                        $customerId = $existing->id;
+                    } else {
+                        $newCustomer = Customer::create([
+                            'business_id' => $businessId,
+                            'name' => $customerName,
+                            'phone' => $order['customer_phone'] ?? null,
+                            'address' => $order['customer_address'] ?? null,
+                            'join_date' => now(),
+                            'created_by' => Auth::id(),
+                            'status' => 'active',
+                        ]);
+                        $customerId = $newCustomer->id;
+                    }
+                }
+
                 $transaction = Transaction::create([
                     'business_id' => $businessId,
                     'type' => 'sale',
-                    'customer_id' => $order['customer_id'] ?? null,
+                    'customer_id' => $customerId,
                     'driver_id' => $driverId,
                     'claimed_by_driver_id' => $driverId,
                     'delivery_trip_code' => $tripCode,
@@ -201,6 +225,30 @@ class PosService
             $isDelivery = !empty($driverId);
             $isKasbon = $isDelivery || (($data['payment_method'] ?? '') === 'kasbon');
 
+            // Resolusi Customer: Jika customer_id kosong tapi customer_name diisi dan bukan "Pelanggan Umum", cari atau buat baru
+            $customerId = $data['customer_id'] ?? null;
+            $customerName = trim($data['customer_name'] ?? '');
+
+            if (empty($customerId) && !empty($customerName) && strtolower($customerName) !== 'pelanggan umum') {
+                $existing = Customer::where('business_id', Auth::user()->business_id)
+                    ->whereRaw('LOWER(name) = ?', [strtolower($customerName)])
+                    ->first();
+                if ($existing) {
+                    $customerId = $existing->id;
+                } else {
+                    $newCustomer = Customer::create([
+                        'business_id' => Auth::user()->business_id,
+                        'name' => $customerName,
+                        'phone' => $data['customer_phone'] ?? null,
+                        'address' => $data['customer_address'] ?? null,
+                        'join_date' => now(),
+                        'created_by' => Auth::id(),
+                        'status' => 'active',
+                    ]);
+                    $customerId = $newCustomer->id;
+                }
+            }
+
             // Generate trip_code jika pengiriman driver (baik 1 pesanan maupun rombongan)
             $tripCode = $isDelivery ? $this->generateTripCode(Auth::user()->business_id) : null;
 
@@ -208,7 +256,7 @@ class PosService
             $transaction = Transaction::create([
                 'business_id' => Auth::user()->business_id,
                 'type' => 'sale',
-                'customer_id' => $data['customer_id'] ?? null,
+                'customer_id' => $customerId,
                 'driver_id' => $driverId,
                 'claimed_by_driver_id' => $driverId,
                 'delivery_trip_code' => $tripCode,

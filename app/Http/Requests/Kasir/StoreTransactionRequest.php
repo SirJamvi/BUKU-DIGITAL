@@ -28,7 +28,10 @@ class StoreTransactionRequest extends FormRequest
             return [
                 'driver_id' => ['required', 'integer', 'exists:users,id'],
                 'orders' => ['required', 'array', 'min:1'],
-                'orders.*.customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+                'orders.*.customer_id' => ['nullable'],
+                'orders.*.customer_name' => ['nullable', 'string', 'max:255'],
+                'orders.*.customer_phone' => ['nullable', 'string', 'max:50'],
+                'orders.*.customer_address' => ['nullable', 'string'],
                 'orders.*.total_amount' => ['required', 'numeric', 'min:0'],
                 'orders.*.notes' => ['nullable', 'string'],
                 'orders.*.items' => ['required', 'array', 'min:1'],
@@ -41,7 +44,10 @@ class StoreTransactionRequest extends FormRequest
         }
 
         return [
-            'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'customer_id' => ['nullable'],
+            'customer_name' => ['nullable', 'string', 'max:255'],
+            'customer_phone' => ['nullable', 'string', 'max:50'],
+            'customer_address' => ['nullable', 'string'],
             'driver_id' => ['nullable', 'integer', 'exists:users,id'],
             'payment_method' => ['required', 'string', 'max:50'],
             'total_amount' => ['required', 'numeric', 'min:0'],
@@ -72,6 +78,9 @@ class StoreTransactionRequest extends FormRequest
                     });
                 }
                 $orders[$index]['total_amount'] = $orderTotal;
+                if (empty($order['customer_id'])) {
+                    $orders[$index]['customer_id'] = null;
+                }
             }
             $this->merge([
                 'orders' => $orders,
@@ -90,6 +99,7 @@ class StoreTransactionRequest extends FormRequest
 
         $mergeData = [
             'total_amount' => $totalAmount,
+            'customer_id' => $this->filled('customer_id') ? $this->customer_id : null,
         ];
 
         // Jika single order ditugaskan ke driver, otomatis payment_method kasbon
