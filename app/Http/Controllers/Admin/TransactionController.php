@@ -9,6 +9,7 @@ use App\Services\Kasir\TransactionService as KasirTransactionService;
 use App\Http\Requests\Kasir\StoreTransactionRequest;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class TransactionController extends Controller
@@ -22,9 +23,9 @@ class TransactionController extends Controller
         $this->transactionService = $transactionService;
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        $transactions = $this->transactionService->getAllTransactionsWithPagination();
+        $transactions = $this->transactionService->getAllTransactionsWithPagination($request->all());
         return view('admin.transactions.index', compact('transactions'));
     }
 

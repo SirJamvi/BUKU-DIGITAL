@@ -14,13 +14,73 @@ use Illuminate\Support\Facades\Auth; // <-- Tambahkan Auth untuk perbaikan Intel
 class TransactionService
 {
     /**
-     * Mendapatkan semua transaksi dengan paginasi untuk admin.
+     * Mendapatkan semua transaksi dengan paginasi dan filter pencarian untuk admin.
      */
-    public function getAllTransactionsWithPagination(int $perPage = 15): LengthAwarePaginator
+    public function getAllTransactionsWithPagination(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        return Transaction::with(['customer', 'createdBy'])
-            ->latest('transaction_date')
-            ->paginate($perPage);
+        $query = Transaction::with(['customer', 'createdBy', 'driver'])
+            ->latest('transaction_date');
+
+        // Pencarian berdasarkan ID, Pelanggan, Kasir, Driver, atau No. Surat Jalan
+        if (!empty($filters['search'])) {
+            $search = trim($filters['search']);
+            $isExplicitId = str_starts_with($search, '#') || 
+                            stripos($search, 'trx-') === 0 || 
+                            stripos($search, 'tx-') === 0;
+
+            $numericOnly = preg_replace('/[^0-9]/', '', $search);
+
+            $query->where(function ($q) use ($search, $isExplicitId, $numericOnly) {
+                if ($isExplicitId && !empty($numericOnly)) {
+                    // Pencarian eksplisit ID (misal #123 atau TRX-123)
+                    $q->where('id', (int) $numericOnly);
+                } elseif (ctype_digit($search)) {
+                    // Murni angka (misal '12') -> cocokan ID persis, atau ID yang mengandung angka, atau no telepon pelanggan
+                    $q->where('id', (int) $search)
+                      ->orWhere('id', 'LIKE', "%{$search}%")
+                      ->orWhere('delivery_trip_code', 'LIKE', "%{$search}%")
+                      ->orWhereHas('customer', function ($cq) use ($search) {
+                          $cq->where('phone', 'LIKE', "%{$search}%");
+                      });
+                } else {
+                    // Pencarian teks umum (nama customer, kasir, driver, trip code, notes)
+                    $q->where('delivery_trip_code', 'LIKE', "%{$search}%")
+                      ->orWhere('notes', 'LIKE', "%{$search}%")
+                      ->orWhereHas('customer', function ($cq) use ($search) {
+                          $cq->where('name', 'LIKE', "%{$search}%")
+                             ->orWhere('phone', 'LIKE', "%{$search}%");
+                      })
+                      ->orWhereHas('createdBy', function ($uq) use ($search) {
+                          $uq->where('name', 'LIKE', "%{$search}%");
+                      })
+                      ->orWhereHas('driver', function ($dq) use ($search) {
+                          $dq->where('name', 'LIKE', "%{$search}%");
+                      });
+
+                    // Jika di dalam teks ada angka, dukung juga pencarian ID
+                    if (!empty($numericOnly) && strlen($numericOnly) <= 8) {
+                        $q->orWhere('id', (int) $numericOnly);
+                    }
+                }
+            });
+        }
+
+        // Filter status pembayaran (paid / pending)
+        if (!empty($filters['payment_status']) && in_array($filters['payment_status'], ['paid', 'pending'])) {
+            $query->where('payment_status', $filters['payment_status']);
+        }
+
+        // Filter tanggal mulai
+        if (!empty($filters['start_date'])) {
+            $query->whereDate('transaction_date', '>=', $filters['start_date']);
+        }
+
+        // Filter tanggal akhir
+        if (!empty($filters['end_date'])) {
+            $query->whereDate('transaction_date', '<=', $filters['end_date']);
+        }
+
+        return $query->paginate($perPage)->withQueryString();
     }
 
     /**

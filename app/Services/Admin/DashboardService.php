@@ -294,10 +294,11 @@ class DashboardService
      */
     public function getCashierCashOnHandData(int $businessId, Carbon $filterDate): array
     {
-        // Ambil semua user kasir atau user yang punya aktivitas transaksi / kas masuk-keluar di tanggal ini
+        // Ambil HANYA user role 'kasir' yang aktif atau memiliki aktivitas transaksi / kas masuk-keluar di tanggal ini
         $users = User::where('business_id', $businessId)
+            ->where('role', 'kasir')
             ->where(function ($q) use ($filterDate) {
-                $q->where('role', 'kasir')
+                $q->where('is_active', true)
                   ->orWhereHas('transactions', function ($tq) use ($filterDate) {
                       $tq->whereDate('transaction_date', $filterDate);
                   })
@@ -311,6 +312,11 @@ class DashboardService
         $cashierData = [];
 
         foreach ($users as $user) {
+            // Validasi ketat: Abaikan akun non-kasir (Driver, Admin, Koordinator tidak boleh masuk)
+            if ($user->role !== 'kasir') {
+                continue;
+            }
+
             // 1. Transaksi Penjualan Tunai Lunas
             $cashTransactions = Transaction::with(['details.product'])
                 ->where('business_id', $businessId)
@@ -397,28 +403,32 @@ class DashboardService
                 ->whereDate('transaction_date', $filterDate)
                 ->sum('total_amount');
 
-            // Masukkan jika user adalah role kasir atau memiliki aktivitas pada tanggal filter
-            if ($user->role === 'kasir' || $totalCashIn > 0 || $cashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashSalesAmount > 0) {
-                $cashierData[] = [
-                    'user_id' => $user->id,
-                    'name' => $user->name,
-                    'role' => $user->role,
-                    'phone' => $user->phone ?? '-',
-                    'total_cash_in' => $totalCashIn,
-                    'cash_sales' => $cashSalesAmount,
-                    'pelunasan_cash' => $pelunasanCashAmount,
-                    'cash_orders_count' => $cashOrdersCount,
-                    'cogs' => $cogsAmount,
-                    'items_sold' => array_values($itemsSoldBreakdown),
-                    'expenses' => $cashExpensesAmount,
-                    'expenses_list' => $expensesList,
-                    'physical_drawer' => $physicalCashDrawer,
-                    'real_cash_on_hand' => $realCashOnHand,
-                    'non_cash_sales' => $nonCashSalesAmount,
-                    'kasbon' => $kasbonAmount,
-                    'has_activity' => ($totalCashIn > 0 || $cashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashSalesAmount > 0)
-                ];
+            $hasActivity = ($totalCashIn > 0 || $cashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashSalesAmount > 0 || $cashOrdersCount > 0);
+
+            // Jika kasir tidak aktif dan sama sekali tidak ada aktivitas di tanggal filter, jangan tampilkan
+            if (!$user->is_active && !$hasActivity) {
+                continue;
             }
+
+            $cashierData[] = [
+                'user_id' => $user->id,
+                'name' => $user->name,
+                'role' => $user->role,
+                'phone' => $user->phone ?? '-',
+                'total_cash_in' => $totalCashIn,
+                'cash_sales' => $cashSalesAmount,
+                'pelunasan_cash' => $pelunasanCashAmount,
+                'cash_orders_count' => $cashOrdersCount,
+                'cogs' => $cogsAmount,
+                'items_sold' => array_values($itemsSoldBreakdown),
+                'expenses' => $cashExpensesAmount,
+                'expenses_list' => $expensesList,
+                'physical_drawer' => $physicalCashDrawer,
+                'real_cash_on_hand' => $realCashOnHand,
+                'non_cash_sales' => $nonCashSalesAmount,
+                'kasbon' => $kasbonAmount,
+                'has_activity' => $hasActivity
+            ];
         }
 
         return $cashierData;
