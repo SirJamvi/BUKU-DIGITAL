@@ -71,6 +71,31 @@
             </div>
         </div>
 
+        {{-- Pilihan Sumber Dana --}}
+        <div class="row mb-3">
+            <div class="col-12">
+                <label class="form-label fw-bold d-block text-primary">
+                    <i class="fas fa-hand-holding-dollar me-1"></i> Sumber Dana Pengeluaran <span class="text-danger">*</span>
+                </label>
+                <div class="p-3 bg-white rounded border" style="border: 2px dashed #0d6efd !important;">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_drawer" value="drawer" {{ old('funding_source', 'drawer') === 'drawer' ? 'checked' : '' }}>
+                        <label class="form-check-label" for="exp_funding_drawer">
+                            <strong class="text-dark">1. Uang Laci Kasir (Shift Hari Ini)</strong>
+                            <span class="d-block small text-muted">Masuk ke pengeluaran dan <strong>MEMOTONG</strong> Saldo Kas Fisik Laci kasir hari ini.</span>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_external" value="external" {{ old('funding_source') === 'external' ? 'checked' : '' }}>
+                        <label class="form-check-label" for="exp_funding_external">
+                            <strong class="text-dark">2. Kas Kemarin / Uang Bos / Transfer</strong>
+                            <span class="d-block small text-muted">Tercatat di pengeluaran, tetapi <u>TIDAK MEMOTONG</u> Saldo Kas Fisik Laci kasir hari ini.</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="mb-4">
             <label class="form-label fw-bold">Deskripsi <span class="text-danger">*</span></label>
             <textarea name="description" rows="3" class="form-control @error('description') is-invalid @enderror" required>{{ old('description') }}</textarea>

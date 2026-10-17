@@ -196,9 +196,9 @@
                 <div>
                     <h5 class="mb-0 fw-bold d-flex align-items-center">
                         <span class="badge bg-success bg-opacity-25 text-success border border-success me-2 px-2 py-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">PRIORITAS</span>
-                        <i class="fas fa-hand-holding-dollar text-warning me-2"></i> Cash on Hand Real per Kasir ({{ $isToday ? 'Hari Ini' : $formattedDate }})
+                        <i class="fas fa-cash-register text-warning me-2"></i> Rekonsiliasi Kas Laci & Performa Kasir ({{ $isToday ? 'Hari Ini' : $formattedDate }})
                     </h5>
-                    <small class="text-white-50">Monitoring uang tunai fisik laci kasir setelah dipotong HPP Modal Es (COGS) dan pengeluaran operasional.</small>
+                    <small class="text-white-50">Monitoring uang kas fisik di laci kasir (Cash on Hand) dan estimasi laba bersih operasional shift.</small>
                 </div>
                 @php
                     $allCashiers = collect($cashierMonitoring ?? []);
@@ -207,24 +207,24 @@
                     $totalAllCashIn = $allCashiers->sum('total_cash_in');
                     $totalAllCogs = $allCashiers->sum('cogs');
                     $totalAllExpenses = $allCashiers->sum('expenses');
-                    $totalAllRealCash = $allCashiers->sum('real_cash_on_hand');
                     $totalAllDrawer = $allCashiers->sum('physical_drawer');
+                    $totalAllShiftProfit = $allCashiers->sum('shift_net_profit');
                 @endphp
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <span class="badge bg-secondary px-3 py-2 fs-6">
                         <i class="fas fa-users me-1"></i> {{ $allCashiers->count() }} Akun Kasir
                     </span>
                     <span class="badge bg-light text-dark px-3 py-2 fs-6" title="Total Uang Tunai Masuk">
-                        <i class="fas fa-arrow-down text-success me-1"></i> Tunai: <strong>Rp {{ number_format($totalAllCashIn, 0, ',', '.') }}</strong>
+                        <i class="fas fa-arrow-down text-success me-1"></i> Masuk: <strong>Rp {{ number_format($totalAllCashIn, 0, ',', '.') }}</strong>
                     </span>
-                    <span class="badge bg-danger bg-opacity-75 text-white px-3 py-2 fs-6" title="Total Modal Es (COGS)">
-                        <i class="fas fa-cubes-stacked me-1"></i> COGS: <strong>- Rp {{ number_format($totalAllCogs, 0, ',', '.') }}</strong>
+                    <span class="badge bg-warning text-dark px-3 py-2 fs-6" title="Total Semua Kas Keluar Laci">
+                        <i class="fas fa-receipt me-1"></i> Keluar Laci: <strong>- Rp {{ number_format($totalAllExpenses, 0, ',', '.') }}</strong>
                     </span>
-                    <span class="badge bg-warning text-dark px-3 py-2 fs-6" title="Total Pengeluaran Kasir">
-                        <i class="fas fa-receipt me-1"></i> Beban: <strong>- Rp {{ number_format($totalAllExpenses, 0, ',', '.') }}</strong>
+                    <span class="badge bg-success px-3 py-2 fs-6 fw-bold shadow-sm" title="Grand Total Saldo Kas Laci Semua Kasir">
+                        <i class="fas fa-cash-register me-1"></i> Saldo Laci: <strong>Rp {{ number_format($totalAllDrawer, 0, ',', '.') }}</strong>
                     </span>
-                    <span class="badge bg-success px-3 py-2 fs-6 fw-bold shadow-sm" title="Grand Total Cash On Hand Real Semua Kasir">
-                        <i class="fas fa-wallet me-1"></i> Net Real: <strong>Rp {{ number_format($totalAllRealCash, 0, ',', '.') }}</strong>
+                    <span class="badge {{ $totalAllShiftProfit >= 0 ? 'bg-info bg-opacity-75 text-white' : 'bg-danger text-white' }} px-3 py-2 fs-6 fw-bold shadow-sm" title="Grand Total Estimasi Laba Bersih Shift">
+                        <i class="fas fa-chart-line me-1"></i> Laba Shift: <strong>{{ $totalAllShiftProfit >= 0 ? '+' : '' }}Rp {{ number_format($totalAllShiftProfit, 0, ',', '.') }}</strong>
                     </span>
                 </div>
             </div>
@@ -311,33 +311,54 @@
                                 </div>
                             </div>
 
-                            {{-- Body Card Kasir: Hero Cash On Hand Real --}}
+                            {{-- Body Card Kasir: Hero Dual-Metric (Saldo Laci & Laba Shift) --}}
                             <div class="card-body p-3">
                                 <div class="text-center p-3 rounded mb-3" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.12) 100%); border: 1px solid rgba(16, 185, 129, 0.25);">
-                                    <span class="text-uppercase fw-bold text-muted small" style="letter-spacing: 0.5px;">CASH ON HAND REAL</span>
-                                    <h3 class="fw-bold mb-0 mt-1 {{ $c['real_cash_on_hand'] >= 0 ? 'text-success' : 'text-danger' }}">
-                                        Rp {{ number_format($c['real_cash_on_hand'], 0, ',', '.') }}
+                                    <span class="text-uppercase fw-bold text-muted small" style="letter-spacing: 0.5px;">SALDO KAS LACI (FISIK)</span>
+                                    <h3 class="fw-bold mb-1 mt-1 {{ $c['physical_drawer'] >= 0 ? 'text-success' : 'text-danger' }}">
+                                        Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}
                                     </h3>
-                                    <small class="text-muted" style="font-size: 0.73rem;">(Sisa uang riil setelah dipotong COGS & Beban)</small>
+                                    <div class="d-flex justify-content-center align-items-center mt-2">
+                                        <span class="badge {{ $c['shift_net_profit'] >= 0 ? 'bg-success bg-opacity-10 text-success border border-success' : 'bg-danger bg-opacity-10 text-danger border border-danger' }} px-2 py-1" style="font-size: 0.78rem;">
+                                            <i class="fas {{ $c['shift_net_profit'] >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down' }} me-1"></i>
+                                            Estimasi Laba Shift: <strong>{{ $c['shift_net_profit'] >= 0 ? '+' : '' }}Rp {{ number_format($c['shift_net_profit'], 0, ',', '.') }}</strong>
+                                        </span>
+                                    </div>
                                 </div>
 
                                 {{-- Rincian Waterfall Perhitungan --}}
                                 <div class="bg-white rounded border p-2 mb-3">
+                                    @if(($c['opening_cash'] ?? 0) > 0)
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                        <span class="small text-muted"><i class="fas fa-vault text-secondary me-1"></i> Modal Awal (Kas Kemarin):</span>
+                                        <span class="fw-bold text-dark">+ Rp {{ number_format($c['opening_cash'], 0, ',', '.') }}</span>
+                                    </div>
+                                    @endif
                                     <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                                         <span class="small text-muted"><i class="fas fa-money-bill-wave text-success me-1"></i> Kas Tunai Masuk:</span>
                                         <span class="fw-bold text-success">+ Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</span>
                                     </div>
                                     <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                                        <span class="small text-muted"><i class="fas fa-snowflake text-info me-1"></i> Modal Es (COGS):</span>
-                                        <span class="fw-bold text-danger">- Rp {{ number_format($c['cogs'], 0, ',', '.') }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                                        <span class="small text-muted"><i class="fas fa-receipt text-warning me-1"></i> Pengeluaran Kasir:</span>
+                                        <span class="small text-muted"><i class="fas fa-receipt text-danger me-1"></i> Kas Keluar dari Laci:</span>
                                         <span class="fw-bold text-danger">- Rp {{ number_format($c['expenses'], 0, ',', '.') }}</span>
                                     </div>
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom bg-light px-1 rounded">
+                                        <span class="small fw-bold text-dark"><i class="fas fa-cash-register text-success me-1"></i> Sisa Fisik Laci:</span>
+                                        <span class="fw-bold {{ $c['physical_drawer'] >= 0 ? 'text-success' : 'text-danger' }}">Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom mt-1">
+                                        <span class="small text-muted"><i class="fas fa-boxes-stacked text-info me-1"></i> Modal Es (COGS):</span>
+                                        <span class="small text-muted">Rp {{ number_format($c['cogs'], 0, ',', '.') }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                        <span class="small text-muted"><i class="fas fa-gas-pump text-warning me-1"></i> Beban Ops Murni:</span>
+                                        <span class="small text-muted">Rp {{ number_format($c['operational_expenses'], 0, ',', '.') }}</span>
+                                    </div>
                                     <div class="d-flex justify-content-between align-items-center pt-2">
-                                        <span class="small fw-bold text-dark"><i class="fas fa-cash-register text-primary me-1"></i> Saldo Laci Fisik:</span>
-                                        <span class="fw-bold text-primary">Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}</span>
+                                        <span class="small fw-bold text-dark"><i class="fas fa-chart-line text-primary me-1"></i> Estimasi Laba Bersih:</span>
+                                        <span class="fw-bold {{ $c['shift_net_profit'] >= 0 ? 'text-success' : 'text-danger' }}">
+                                            {{ $c['shift_net_profit'] >= 0 ? '+' : '' }}Rp {{ number_format($c['shift_net_profit'], 0, ',', '.') }}
+                                        </span>
                                     </div>
                                 </div>
 
@@ -803,7 +824,7 @@
                     <h5 class="modal-title fw-bold mb-0">
                         <i class="fas fa-user-circle text-warning me-2"></i> Rincian Keuangan Kasir: <span class="text-warning">{{ $c['name'] }}</span>
                     </h5>
-                    <small class="text-white-50">Tanggal: <strong>{{ $formattedDate }}</strong> | Cash on Hand Real: <strong class="text-success">Rp {{ number_format($c['real_cash_on_hand'], 0, ',', '.') }}</strong></small>
+                    <small class="text-white-50">Tanggal: <strong>{{ $formattedDate }}</strong> | Saldo Laci: <strong class="text-success">Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}</strong> | Laba Shift: <strong class="{{ $c['shift_net_profit'] >= 0 ? 'text-info' : 'text-danger' }}">{{ $c['shift_net_profit'] >= 0 ? '+' : '' }}Rp {{ number_format($c['shift_net_profit'], 0, ',', '.') }}</strong></small>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
@@ -814,37 +835,44 @@
                         <div class="p-3 bg-white rounded border text-center shadow-sm">
                             <div class="text-muted small fw-semibold">KAS TUNAI MASUK</div>
                             <h5 class="fw-bold mb-0 text-success">Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</h5>
-                            <small class="text-muted" style="font-size: 0.7rem;">{{ $c['cash_orders_count'] }} Struk Tunai</small>
+                            <small class="text-muted" style="font-size: 0.7rem;">
+                                {{ $c['cash_orders_count'] }} Struk Tunai
+                                @if(($c['opening_cash'] ?? 0) > 0)
+                                    (Modal Awal: Rp {{ number_format($c['opening_cash'], 0, ',', '.') }})
+                                @endif
+                            </small>
                         </div>
                     </div>
                     <div class="col-md-3 col-6">
                         <div class="p-3 bg-white rounded border text-center shadow-sm">
-                            <div class="text-muted small fw-semibold">MODAL ES (COGS)</div>
-                            <h5 class="fw-bold mb-0 text-danger">- Rp {{ number_format($c['cogs'], 0, ',', '.') }}</h5>
-                            <small class="text-muted" style="font-size: 0.7rem;">Total Biaya Pokok</small>
-                        </div>
-                    </div>
-                    <div class="col-md-3 col-6">
-                        <div class="p-3 bg-white rounded border text-center shadow-sm">
-                            <div class="text-muted small fw-semibold">BEBAN PENGELUARAN</div>
+                            <div class="text-muted small fw-semibold">TOTAL KAS KELUAR</div>
                             <h5 class="fw-bold mb-0 text-danger">- Rp {{ number_format($c['expenses'], 0, ',', '.') }}</h5>
-                            <small class="text-muted" style="font-size: 0.7rem;">{{ count($c['expenses_list']) }} Catatan Beban</small>
+                            <small class="text-muted" style="font-size: 0.7rem;">{{ count($c['expenses_list']) }} Catatan Pengeluaran</small>
                         </div>
                     </div>
                     <div class="col-md-3 col-6">
                         <div class="p-3 bg-white rounded border text-center shadow-sm" style="border: 2px solid #10b981 !important;">
-                            <div class="text-success small fw-bold">CASH ON HAND REAL</div>
-                            <h5 class="fw-bold mb-0 text-success">Rp {{ number_format($c['real_cash_on_hand'], 0, ',', '.') }}</h5>
-                            <small class="text-muted" style="font-size: 0.7rem;">Laci Fisik: Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}</small>
+                            <div class="text-success small fw-bold">SALDO KAS LACI (FISIK)</div>
+                            <h5 class="fw-bold mb-0 text-success">Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}</h5>
+                            <small class="text-muted" style="font-size: 0.7rem;">Uang Kas Fisik di Laci</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="p-3 bg-white rounded border text-center shadow-sm" style="border: 2px solid #3b82f6 !important;">
+                            <div class="text-primary small fw-bold">ESTIMASI LABA SHIFT</div>
+                            <h5 class="fw-bold mb-0 {{ $c['shift_net_profit'] >= 0 ? 'text-primary' : 'text-danger' }}">
+                                {{ $c['shift_net_profit'] >= 0 ? '+' : '' }}Rp {{ number_format($c['shift_net_profit'], 0, ',', '.') }}
+                            </h5>
+                            <small class="text-muted" style="font-size: 0.7rem;">Omset - COGS - Ops Murni</small>
                         </div>
                     </div>
                 </div>
 
-                {{-- Tabel 1: Rincian Modal Es (COGS) per Produk Terjual --}}
+                {{-- Tabel 1: Rincian Modal Es (COGS) Seluruh Produk Terjual (Tunai, Non-Tunai & Kasbon) --}}
                 <div class="card border-0 shadow-sm mb-4">
                     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
                         <h6 class="mb-0 fw-bold text-dark">
-                            <i class="fas fa-boxes-stacked text-primary me-2"></i> Rincian Modal Es (COGS) Produk Terjual Tunai
+                            <i class="fas fa-boxes-stacked text-primary me-2"></i> Rincian Modal Es (COGS) Seluruh Produk Terjual (Tunai, Non-Tunai & Kasbon)
                         </h6>
                         <span class="badge bg-danger text-white">Total COGS: Rp {{ number_format($c['cogs'], 0, ',', '.') }}</span>
                     </div>
@@ -871,7 +899,7 @@
                                     </tr>
                                     @empty
                                     <tr>
-                                        <td colspan="4" class="text-center text-muted py-3">Tidak ada produk es terjual tunai pada tanggal ini.</td>
+                                        <td colspan="4" class="text-center text-muted py-3">Tidak ada produk es terjual pada tanggal ini.</td>
                                     </tr>
                                     @endforelse
                                 </tbody>
@@ -880,32 +908,54 @@
                     </div>
                 </div>
 
-                {{-- Tabel 2: Rincian Beban / Pengeluaran yang Dibayar dari Laci --}}
+                {{-- Tabel 2: Rincian Pengeluaran dari Laci Kasir & Non-Laci --}}
                 <div class="card border-0 shadow-sm mb-3">
                     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
                         <h6 class="mb-0 fw-bold text-dark">
                             <i class="fas fa-receipt text-warning me-2"></i> Rincian Pengeluaran dari Laci Kasir
                         </h6>
-                        <span class="badge bg-warning text-dark">Total Beban: Rp {{ number_format($c['expenses'], 0, ',', '.') }}</span>
+                        <span class="badge bg-warning text-dark"><i class="fas fa-cash-register me-1"></i>Total Kas Keluar Laci: Rp {{ number_format($c['expenses'], 0, ',', '.') }}</span>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
                             <table class="table table-hover table-sm align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
-                                        <th class="ps-3">Kategori</th>
+                                        <th class="ps-3">Kategori & Jenis Biaya</th>
                                         <th>Keterangan / Deskripsi</th>
                                         <th class="text-end pe-3">Jumlah Pengeluaran</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse($c['expenses_list'] as $exp)
+                                    @php
+                                        $isCogs = (bool) (optional($exp->category)->is_cogs);
+                                        $affectsDrawer = ($exp->affects_drawer ?? 1) == 1;
+                                    @endphp
                                     <tr>
                                         <td class="ps-3">
-                                            <span class="badge bg-secondary bg-opacity-25 text-dark border">{{ $exp->category->name ?? 'Operasional' }}</span>
+                                            <div class="d-flex align-items-center gap-1 flex-wrap">
+                                                <span class="badge {{ $isCogs ? 'bg-primary' : 'bg-warning text-dark' }}">
+                                                    {{ $exp->category->name ?? ($isCogs ? 'Refill Es Batu' : 'Operasional') }}
+                                                </span>
+                                                <span class="badge {{ $isCogs ? 'bg-info bg-opacity-10 text-info border border-info' : 'bg-secondary bg-opacity-10 text-secondary border' }}" style="font-size: 0.72rem;">
+                                                    {{ $isCogs ? 'Pembelian Stok (HPP)' : 'Beban Operasional Murni' }}
+                                                </span>
+                                                @if(!$affectsDrawer)
+                                                <span class="badge bg-light text-muted border" style="font-size: 0.7rem;" title="Dibayar menggunakan kas kemarin atau titipan bos, tidak memotong laci kasir hari ini">
+                                                    <i class="fas fa-shield-alt me-1"></i>Uang Bos / Non-Laci
+                                                </span>
+                                                @else
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size: 0.7rem;">
+                                                    <i class="fas fa-cash-register me-1"></i>Potong Laci
+                                                </span>
+                                                @endif
+                                            </div>
                                         </td>
                                         <td class="text-dark small">{{ $exp->description ?? '-' }}</td>
-                                        <td class="text-end pe-3 fw-bold text-danger">Rp {{ number_format($exp->amount, 0, ',', '.') }}</td>
+                                        <td class="text-end pe-3 fw-bold {{ $affectsDrawer ? 'text-danger' : 'text-muted' }}">
+                                            Rp {{ number_format($exp->amount, 0, ',', '.') }}
+                                        </td>
                                     </tr>
                                     @empty
                                     <tr>

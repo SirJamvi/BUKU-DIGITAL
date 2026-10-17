@@ -13,6 +13,7 @@ use App\Http\Controllers\Kasir\InventoryController as KasirInventoryController;
 // Dashboard
 Route::get('/dashboard', [KasirDashboardController::class, 'index'])->name('dashboard');
 Route::get('/', [KasirDashboardController::class, 'index'])->name('index');
+Route::post('/opening-balance', [KasirDashboardController::class, 'setOpeningBalance'])->name('set_opening_balance');
 
 // POS System
 Route::prefix('pos')->name('pos.')->group(function () {

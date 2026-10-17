@@ -63,6 +63,7 @@ class ExpenseController extends Controller
             'description'    => 'required|string|max:500',
             'date'           => 'required|date',
             'payment_method' => 'required|exists:payment_methods,slug',
+            'funding_source' => 'nullable|string|in:drawer,external',
         ]);
         
         $this->financialService->createExpense($request->all());

@@ -618,12 +618,17 @@ class FinancialService
             ['type' => 'Operasional', 'is_active' => true, 'created_by' => Auth::id(), 'is_cogs' => false]
         );
 
+        $fundingSource = $data['funding_source'] ?? 'drawer';
+        $affectsDrawer = ($fundingSource === 'drawer');
+
         CashFlow::create([
             'business_id'    => Auth::user()->business_id,
             'type'           => 'expense',
             'category_id'    => $category->id,
             'amount'         => $data['amount'],
             'payment_method' => $data['payment_method'],
+            'funding_source' => $fundingSource,
+            'affects_drawer' => $affectsDrawer,
             'description'    => $data['description'],
             'date'           => $data['date'],
             'created_by'     => Auth::id(),
@@ -642,13 +647,20 @@ class FinancialService
             ]
         );
 
-        $expense->update([
+        $updateData = [
             'category_id'    => $category->id,
             'amount'         => $data['amount'],
             'payment_method' => $data['payment_method'],
             'description'    => $data['description'],
             'date'           => $data['date'],
-        ]);
+        ];
+
+        if (isset($data['funding_source'])) {
+            $updateData['funding_source'] = $data['funding_source'];
+            $updateData['affects_drawer'] = ($data['funding_source'] === 'drawer');
+        }
+
+        $expense->update($updateData);
     }
 
     public function deleteExpense(CashFlow $expense): void

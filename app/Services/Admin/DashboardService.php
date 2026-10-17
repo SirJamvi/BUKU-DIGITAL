@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\UserActivityLog;
 use App\Models\FundAllocationSetting;
 use App\Models\CashFlow;
+use App\Models\CashierOpeningBalance;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use App\Services\Admin\FinancialService;
@@ -289,8 +290,9 @@ class DashboardService
     }
 
     /**
-     * Menghitung Cash on Hand Real per Akun Kasir setelah dikurangi COGS dan Pengeluaran.
-     * Rumus: [Uang Tunai Lunas Masuk] - [COGS/Modal Es] - [Pengeluaran Kasir]
+     * Menghitung Dual-Metric Kasir (Saldo Fisik Laci & Estimasi Laba Bersih Shift).
+     * 1. Saldo Fisik Laci: [Kas Awal] + [Kas Masuk] + [Pelunasan] - [Semua Kas Keluar Laci]
+     * 2. Estimasi Laba Shift: [Omset Penjualan] - [COGS Snapshot] - [Beban Ops Murni (is_cogs = 0)]
      */
     public function getCashierCashOnHandData(int $businessId, Carbon $filterDate): array
     {
@@ -312,12 +314,12 @@ class DashboardService
         $cashierData = [];
 
         foreach ($users as $user) {
-            // Validasi ketat: Abaikan akun non-kasir (Driver, Admin, Koordinator tidak boleh masuk)
+            // Validasi ketat: Abaikan akun non-kasir
             if ($user->role !== 'kasir') {
                 continue;
             }
 
-            // 1. Transaksi Penjualan Tunai Lunas
+            // 1. Transaksi Penjualan Tunai Lunas (Masuk ke Laci)
             $cashTransactions = Transaction::with(['details.product'])
                 ->where('business_id', $businessId)
                 ->where('created_by', $user->id)
@@ -341,11 +343,21 @@ class DashboardService
 
             $totalCashIn = $cashSalesAmount + $pelunasanCashAmount;
 
-            // 3. Hitung COGS / HPP (Modal Es Kristal) dari Penjualan Tunai Kasir Ini
+            // 3. Seluruh Penjualan Hari Ini (Tunai, Non-Tunai & Kasbon) untuk Perhitungan Omset & COGS
+            $allSalesToday = Transaction::with(['details.product'])
+                ->where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'sale')
+                ->whereDate('transaction_date', $filterDate)
+                ->get();
+
+            $totalSalesRevenue = (float) $allSalesToday->sum('total_amount');
+
+            // 4. Hitung COGS / HPP (Modal Es Kristal) Berdasarkan Snapshot cost_price Detail Transaksi
             $cogsAmount = 0;
             $itemsSoldBreakdown = [];
 
-            foreach ($cashTransactions as $trx) {
+            foreach ($allSalesToday as $trx) {
                 foreach ($trx->details as $detail) {
                     $pName = optional($detail->product)->name ?? 'Produk';
                     // Abaikan ongkos kirim dari hitungan COGS
@@ -355,6 +367,7 @@ class DashboardService
                     }
 
                     $qty = (float) $detail->quantity;
+                    // Prioritaskan snapshot HPP dari detail transaksi, fallback ke master Product
                     $costPrice = (float) ($detail->cost_price ?? optional($detail->product)->cost_price ?? 0);
                     $subCogs = $costPrice * $qty;
                     $cogsAmount += $subCogs;
@@ -373,21 +386,56 @@ class DashboardService
                 }
             }
 
-            // 4. Pengeluaran Kasir (Expenses) yang dibayar dari laci kasir pada tanggal filter
-            $cashExpensesQuery = CashFlow::with('category')
+            // 5. METRIK 1: Saldo Fisik Laci ($physicalCashDrawer / Cash on Hand)
+            // Modal awal laci kasir (kas kemarin)
+            $openingRecord = CashierOpeningBalance::where('business_id', $businessId)
+                ->where('user_id', $user->id)
+                ->whereDate('date', $filterDate)
+                ->first();
+            $openingCash = $openingRecord ? (float) $openingRecord->amount : 0.0;
+
+            // Kas keluar fisik dari laci kasir (hanya yang memotong laci kasir: affects_drawer = 1 & cash)
+            $drawerCashExpensesQuery = CashFlow::with('category')
                 ->where('business_id', $businessId)
                 ->where('created_by', $user->id)
                 ->where('type', 'expense')
+                ->where(function ($q) {
+                    $q->where('affects_drawer', 1)
+                      ->orWhereNull('affects_drawer');
+                })
+                ->where(function ($q) {
+                    $q->where('payment_method', 'cash')
+                      ->orWhereNull('payment_method');
+                })
                 ->whereDate('date', $filterDate);
 
-            $cashExpensesAmount = (float) $cashExpensesQuery->sum('amount');
-            $expensesList = $cashExpensesQuery->get();
+            $allCashExpensesAmount = (float) $drawerCashExpensesQuery->sum('amount');
 
-            // 5. Saldo Fisik Laci vs Cash On Hand Real
-            $physicalCashDrawer = $totalCashIn - $cashExpensesAmount; // Uang fisik di laci
-            $realCashOnHand = $totalCashIn - $cogsAmount - $cashExpensesAmount; // Cash on hand riil setelah HPP & Expenses
+            // Ambil SEMUA daftar pengeluaran kasir ini untuk modal rincian (baik yang potong laci maupun uang bos)
+            $expensesList = CashFlow::with('category')
+                ->where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'expense')
+                ->whereDate('date', $filterDate)
+                ->get();
 
-            // 6. Transaksi Non-Tunai & Kasbon (sebagai data pendukung)
+            $physicalCashDrawer = $openingCash + $cashSalesAmount + $pelunasanCashAmount - $allCashExpensesAmount;
+
+            // 6. METRIK 2: Estimasi Laba Bersih Shift ($shiftNetProfit)
+            // Hanya memperhitungkan beban operasional murni (is_cogs = 0) agar tidak double-counting dengan COGS
+            $operationalExpensesAmount = (float) CashFlow::where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'expense')
+                ->whereHas('category', function ($q) {
+                    $q->where('is_cogs', 0);
+                })
+                ->whereDate('date', $filterDate)
+                ->sum('amount');
+
+            // Laba Bersih = Omset Penjualan - COGS - Beban Operasional Murni
+            $shiftNetProfit = $totalSalesRevenue - $cogsAmount - $operationalExpensesAmount;
+
+            // 7. Transaksi Non-Tunai & Kasbon (sebagai data pendukung)
             $nonCashSalesAmount = (float) Transaction::where('business_id', $businessId)
                 ->where('created_by', $user->id)
                 ->where('type', 'sale')
@@ -403,7 +451,7 @@ class DashboardService
                 ->whereDate('transaction_date', $filterDate)
                 ->sum('total_amount');
 
-            $hasActivity = ($totalCashIn > 0 || $cashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashSalesAmount > 0 || $cashOrdersCount > 0);
+            $hasActivity = ($openingCash > 0 || $totalCashIn > 0 || $allCashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashSalesAmount > 0 || $cashOrdersCount > 0 || $expensesList->isNotEmpty());
 
             // Jika kasir tidak aktif dan sama sekali tidak ada aktivitas di tanggal filter, jangan tampilkan
             if (!$user->is_active && !$hasActivity) {
@@ -411,34 +459,38 @@ class DashboardService
             }
 
             $cashierData[] = [
-                'user_id' => $user->id,
-                'name' => $user->name,
-                'role' => $user->role,
-                'phone' => $user->phone ?? '-',
-                'total_cash_in' => $totalCashIn,
-                'cash_sales' => $cashSalesAmount,
-                'pelunasan_cash' => $pelunasanCashAmount,
-                'cash_orders_count' => $cashOrdersCount,
-                'cogs' => $cogsAmount,
-                'items_sold' => array_values($itemsSoldBreakdown),
-                'expenses' => $cashExpensesAmount,
-                'expenses_list' => $expensesList,
-                'physical_drawer' => $physicalCashDrawer,
-                'real_cash_on_hand' => $realCashOnHand,
-                'non_cash_sales' => $nonCashSalesAmount,
-                'kasbon' => $kasbonAmount,
-                'has_activity' => $hasActivity
+                'user_id'              => $user->id,
+                'name'                 => $user->name,
+                'role'                 => $user->role,
+                'phone'                => $user->phone ?? '-',
+                'total_cash_in'        => $totalCashIn,
+                'cash_sales'           => $cashSalesAmount,
+                'pelunasan_cash'       => $pelunasanCashAmount,
+                'cash_orders_count'    => $cashOrdersCount,
+                'sales_revenue'        => $totalSalesRevenue,
+                'cogs'                 => $cogsAmount,
+                'items_sold'           => array_values($itemsSoldBreakdown),
+                'expenses'             => $allCashExpensesAmount,
+                'expenses_list'        => $expensesList,
+                'operational_expenses' => $operationalExpensesAmount,
+                'opening_cash'         => $openingCash,
+                'physical_drawer'      => $physicalCashDrawer,
+                'shift_net_profit'     => $shiftNetProfit,
+                'real_cash_on_hand'    => $physicalCashDrawer, // Alias untuk kompatibilitas
+                'non_cash_sales'       => $nonCashSalesAmount,
+                'kasbon'               => $kasbonAmount,
+                'has_activity'         => $hasActivity,
             ];
         }
 
-        // Urutkan: Kasir Aktif (has_activity = true) di paling depan/kiri atas,
-        // disusul saldo Real Cash on Hand terbesar, lalu kasir Standby di urutan belakang.
+        // Urutkan: Kasir Aktif di paling depan/kiri atas,
+        // disusul Saldo Fisik Laci terbesar, lalu kasir Standby di urutan belakang.
         usort($cashierData, function ($a, $b) {
             if ($a['has_activity'] !== $b['has_activity']) {
                 return $b['has_activity'] <=> $a['has_activity'];
             }
             if ($a['has_activity']) {
-                return $b['real_cash_on_hand'] <=> $a['real_cash_on_hand'];
+                return $b['physical_drawer'] <=> $a['physical_drawer'];
             }
             return strcasecmp($a['name'], $b['name']);
         });

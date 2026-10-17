@@ -50,6 +50,7 @@ class InventoryController extends Controller
             'supplier_id'    => 'required|exists:suppliers,id',
             'product_id'     => 'required|exists:products,id',
             'quantity'       => 'required|integer|min:1',
+            'purchase_price' => 'nullable|numeric|min:0',
             'record_expense' => 'nullable|boolean',
             'payment_method' => 'required_if:record_expense,1|nullable|string',
             'notes'          => 'nullable|string|max:500',
@@ -69,11 +70,36 @@ class InventoryController extends Controller
                 throw new \Exception("Produk ini belum diatur harganya untuk supplier yang dipilih.");
             }
 
-            // 2. Update Inventory & Catat Stock Movement
+            // 2. Ambil input harga beli per unit & jumlah masuk
+            $purchasePricePerUnit = (float) ($request->filled('purchase_price') && $request->purchase_price > 0 
+                ? $request->purchase_price 
+                : $productPivot->pivot->price);
+            $addedQty = (float) $request->quantity;
+            $grandTotalExpense = $purchasePricePerUnit * $addedQty;
+
+            // 3. Ambil data produk & inventory saat ini SEBELUM stok ditambahkan
+            $product = Product::findOrFail($request->product_id);
             $inventory = Inventory::firstOrCreate(
                 ['product_id' => $request->product_id, 'business_id' => $businessId],
                 ['current_stock' => 0]
             );
+
+            $currentStock = (float) $inventory->current_stock;
+            $currentCogs = (float) ($product->cost_price ?? 0);
+
+            // 4. Hitung Moving Average Cost (HPP Rata-Rata Bergerak)
+            if ($currentStock <= 0) {
+                // Edge case: Stok habis atau minus, HPP baru langsung menggunakan harga beli terbaru
+                $newCogs = $purchasePricePerUnit;
+            } else {
+                // Rumus Moving Average Cost
+                $newCogs = (($currentStock * $currentCogs) + ($addedQty * $purchasePricePerUnit)) / ($currentStock + $addedQty);
+            }
+
+            $newCogs = round($newCogs, 2);
+            $product->update(['cost_price' => $newCogs]);
+
+            // 5. Update Inventory & Catat Stock Movement
             $inventory->increment('current_stock', $request->quantity);
 
             StockMovement::create([
@@ -82,18 +108,15 @@ class InventoryController extends Controller
                 'type'        => 'in',
                 'quantity'    => $request->quantity,
                 'reference_id' => 'supplier:' . $supplier->id,
-                'notes'       => 'Restock dari ' . $supplier->name . '. ' . $request->notes,
+                'notes'       => 'Restock dari ' . $supplier->name . " @ Rp " . number_format($purchasePricePerUnit, 0, ',', '.') . " (HPP Moving Avg: Rp " . number_format($newCogs, 0, ',', '.') . "). " . $request->notes,
                 'created_by'  => $userId,
             ]);
 
-            $message = 'Stok berhasil ditambahkan (Tanpa mencatat pengeluaran).';
+            $message = 'Stok berhasil ditambahkan dan HPP disesuaikan menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ' (Tanpa mencatat pengeluaran).';
 
-            // 3. Catat ke Expenses (Cash Flow) JIKA toggle dicentang
+            // 6. Catat ke Expenses (Cash Flow) JIKA toggle dicentang
             if ($request->has('record_expense') && $request->record_expense == 1) {
-                $unitPrice = $productPivot->pivot->price;
-                $grandTotalExpense = $unitPrice * $request->quantity;
-
-                // Cari atau buat kategori "Refill Es Batu" khusus untuk bisnis ini
+                // Cari atau buat kategori "Refill Es Batu" khusus untuk bisnis ini dengan flag is_cogs = 1
                 $expenseCategory = ExpenseCategory::firstOrCreate(
                     [
                         'business_id' => $businessId,
@@ -106,18 +129,28 @@ class InventoryController extends Controller
                     ]
                 );
 
+                // Pastikan flag is_cogs aktif jika kategori sudah ada sebelumnya
+                if (!$expenseCategory->is_cogs) {
+                    $expenseCategory->update(['is_cogs' => 1]);
+                }
+
+                $fundingSource = $request->input('funding_source', 'drawer');
+                $affectsDrawer = ($fundingSource === 'drawer');
+
                 CashFlow::create([
                     'business_id'    => $businessId,
                     'type'           => 'expense',
                     'category_id'    => $expenseCategory->id, 
                     'amount'         => $grandTotalExpense,
                     'payment_method' => $request->payment_method,
-                    'description'    => "Pembelian " . $request->quantity . " unit " . $productPivot->name . " dari " . $supplier->name,
+                    'funding_source' => $fundingSource,
+                    'affects_drawer' => $affectsDrawer,
+                    'description'    => "Pembelian " . $request->quantity . " unit " . $product->name . " dari " . $supplier->name . " (@ Rp " . number_format($purchasePricePerUnit, 0, ',', '.') . ") [" . ($affectsDrawer ? 'Laci Kasir' : 'Dana Bos / Non-Laci') . "]",
                     'date'           => now()->toDateString(),
                     'created_by'     => $userId,
                 ]);
 
-                $message = 'Stok berhasil ditambahkan dan biaya otomatis tercatat di Pengeluaran.';
+                $message = 'Stok berhasil ditambahkan, HPP diperbarui menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ', dan biaya otomatis tercatat di Pengeluaran (' . ($affectsDrawer ? 'Memotong Saldo Laci' : 'Dana Bos/Luar Laci - Tidak Memotong Laci') . ').';
             }
 
             DB::commit();

@@ -70,5 +70,33 @@ class ViewServiceProvider extends ServiceProvider
                 ]);
             }
         });
+
+        // View composer untuk layout kasir agar statistik harian selalu sinkron real-time (WIB)
+        View::composer(['kasir.layouts.header', 'kasir.layouts.sidebar', 'kasir.layouts.app'], function ($view) {
+            $user = Auth::user();
+            if ($user && $user->role === 'kasir') {
+                $today = \Carbon\Carbon::today('Asia/Jakarta');
+                $businessId = $user->business_id;
+
+                $todayQuery = \App\Models\Transaction::where('business_id', $businessId)
+                    ->where('created_by', $user->id)
+                    ->where('type', 'sale')
+                    ->where(function ($q) use ($today) {
+                        $q->whereDate('transaction_date', $today->toDateString())
+                          ->orWhereBetween('transaction_date', [
+                              $today->copy()->startOfDay(),
+                              $today->copy()->endOfDay()
+                          ]);
+                    });
+
+                $todaySales = (float) $todayQuery->sum('total_amount');
+                $todayCount = $todayQuery->count();
+
+                $view->with([
+                    'headerTodaySales' => 'Rp ' . number_format($todaySales, 0, ',', '.'),
+                    'headerTodayTransactions' => (string) $todayCount,
+                ]);
+            }
+        });
     }
 }

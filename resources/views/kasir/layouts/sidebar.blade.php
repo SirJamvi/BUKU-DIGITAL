@@ -177,7 +177,7 @@
                         <i class="fas fa-money-bill-wave"></i>
                     </div>
                     <div class="stat-info">
-                        <div class="stat-value">@yield('today-sales', 'Rp 0')</div>
+                        <div class="stat-value">@hasSection('today-sales')@yield('today-sales')@else{{ $headerTodaySales ?? 'Rp 0' }}@endif</div>
                         <div class="stat-label">Penjualan</div>
                     </div>
                 </div>
@@ -186,7 +186,7 @@
                         <i class="fas fa-shopping-cart"></i>
                     </div>
                     <div class="stat-info">
-                        <div class="stat-value">@yield('today-transactions', '0')</div>
+                        <div class="stat-value">@hasSection('today-transactions')@yield('today-transactions')@else{{ $headerTodayTransactions ?? '0' }}@endif</div>
                         <div class="stat-label">Transaksi</div>
                     </div>
                 </div>

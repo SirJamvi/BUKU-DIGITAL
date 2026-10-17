@@ -78,6 +78,18 @@
                         <div class="text-danger small mt-1">{{ $message }}</div>
                         @enderror
                     </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label for="purchase_price" class="form-label font-weight-bold">Harga Beli per Unit (Rp)</label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text">Rp</span>
+                            <input type="number" step="any" class="form-control @error('purchase_price') is-invalid @enderror" id="purchase_price" name="purchase_price" value="{{ old('purchase_price') }}" placeholder="Auto terisi dari supplier">
+                        </div>
+                        <small class="text-muted">Bisa diubah jika ada kenaikan/penurunan harga beli dari supplier saat ini.</small>
+                        @error('purchase_price')
+                        <div class="text-danger small mt-1">{{ $message }}</div>
+                        @enderror
+                    </div>
                 </div>
 
                 <!-- Bagian Pembayaran (Bisa Disembunyikan oleh Toggle) -->
@@ -102,6 +114,27 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label font-weight-bold text-danger">Total Pengeluaran</label>
                             <input type="text" class="form-control form-control-lg bg-light fw-bold text-danger" id="grand_total_display" readonly value="Rp 0">
+                        </div>
+                    </div>
+
+                    <!-- Pilihan Sumber Dana Pembelian Es -->
+                    <div class="mb-3 p-3 bg-white rounded-3 border" style="border: 2px dashed #0d6efd !important;">
+                        <label class="form-label font-weight-bold d-block mb-2 text-primary">
+                            <i class="fas fa-hand-holding-dollar me-1"></i> Sumber Dana Pembelian Es <span class="text-danger">*</span>
+                        </label>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="funding_source" id="funding_drawer" value="drawer" {{ old('funding_source', 'drawer') === 'drawer' ? 'checked' : '' }}>
+                            <label class="form-check-label" for="funding_drawer">
+                                <strong class="text-dark">1. Uang Laci Kasir (Shift Hari Ini)</strong>
+                                <span class="d-block small text-muted">Masuk ke arus kas dan <strong>MEMOTONG</strong> Saldo Kas Fisik Laci kasir hari ini.</span>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="funding_source" id="funding_external" value="external" {{ old('funding_source') === 'external' ? 'checked' : '' }}>
+                            <label class="form-check-label" for="funding_external">
+                                <strong class="text-dark">2. Kas Kemarin / Uang Bos / Transfer</strong>
+                                <span class="d-block small text-muted">Stok & HPP Moving Average ter-update, tercatat di riwayat, tetapi <u>TIDAK MEMOTONG</u> Saldo Kas Laci hari ini.</span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -130,6 +163,7 @@
         const supplierSelect = document.getElementById('supplier_id');
         const productSelect = document.getElementById('product_id');
         const qtyInput = document.getElementById('quantity');
+        const purchasePriceInput = document.getElementById('purchase_price');
         const totalDisplay = document.getElementById('grand_total_display');
         const paymentSection = document.getElementById('payment_section');
         const paymentMethodSelect = document.getElementById('payment_method');
@@ -141,7 +175,9 @@
 
         function calculateTotal() {
             const selectedOption = productSelect.options[productSelect.selectedIndex];
-            const price = selectedOption && selectedOption.value ? parseFloat(selectedOption.getAttribute('data-price')) : 0;
+            const defaultPrice = selectedOption && selectedOption.value ? parseFloat(selectedOption.getAttribute('data-price')) : 0;
+            const customPrice = parseFloat(purchasePriceInput.value);
+            const price = (!isNaN(customPrice) && customPrice > 0) ? customPrice : defaultPrice;
             const qty = parseFloat(qtyInput.value) || 0;
             
             const total = price * qty;
@@ -163,6 +199,7 @@
         supplierSelect.addEventListener('change', function() {
             const supplierId = this.value;
             productSelect.innerHTML = '<option value="" disabled selected>-- Pilih Produk --</option>';
+            purchasePriceInput.value = '';
             
             if(supplierId) {
                 const supplier = suppliers.find(s => s.id == supplierId);
@@ -185,7 +222,16 @@
             calculateTotal();
         });
 
-        productSelect.addEventListener('change', calculateTotal);
+        productSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                const defaultPrice = selectedOption.getAttribute('data-price');
+                purchasePriceInput.value = defaultPrice || '';
+            }
+            calculateTotal();
+        });
+
+        purchasePriceInput.addEventListener('input', calculateTotal);
         qtyInput.addEventListener('input', calculateTotal);
 
         // Inisialisasi awal

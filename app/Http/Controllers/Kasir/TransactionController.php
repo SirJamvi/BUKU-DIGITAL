@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use Carbon\Carbon;
 
 class TransactionController extends Controller
 {
@@ -32,8 +33,27 @@ class TransactionController extends Controller
      */
     public function index(): View
     {
-        $transactions = $this->transactionService->getTransactionsByKasir(Auth::id());
-        return view('kasir.transactions.index', compact('transactions'));
+        $kasirId = Auth::id();
+        $businessId = Auth::user()->business_id;
+        $transactions = $this->transactionService->getTransactionsByKasir($kasirId);
+
+        // Ringkasan Transaksi Hari Ini Kasir (WIB / Asia/Jakarta)
+        $today = Carbon::today('Asia/Jakarta');
+        $todayStart = Carbon::today('Asia/Jakarta')->startOfDay();
+        $todayEnd = Carbon::today('Asia/Jakarta')->endOfDay();
+
+        $todayTransactionsQuery = Transaction::where('business_id', $businessId)
+            ->where('created_by', $kasirId)
+            ->where('type', 'sale')
+            ->where(function ($q) use ($today, $todayStart, $todayEnd) {
+                $q->whereBetween('transaction_date', [$todayStart, $todayEnd])
+                  ->orWhereDate('transaction_date', $today->toDateString());
+            });
+
+        $todaySales = (float) $todayTransactionsQuery->sum('total_amount');
+        $todayTransactionsCount = $todayTransactionsQuery->count();
+
+        return view('kasir.transactions.index', compact('transactions', 'todaySales', 'todayTransactionsCount'));
     }
 
     /**

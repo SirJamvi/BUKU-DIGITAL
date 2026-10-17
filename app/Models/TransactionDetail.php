@@ -16,8 +16,15 @@ use HasFactory, BelongsToBusiness;
         'transaction_id',
         'product_id',
         'quantity',
+        'cost_price',
         'unit_price',
         'total_price',
+    ];
+
+    protected $casts = [
+        'cost_price' => 'decimal:2',
+        'unit_price' => 'decimal:2',
+        'total_price' => 'decimal:2',
     ];
 
     public function transaction()

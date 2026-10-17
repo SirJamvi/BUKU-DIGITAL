@@ -194,9 +194,17 @@
                         </div>
                     </div>
                     <div class="flex-grow-1">
-                        <h6 class="text-muted mb-1">Saldo Laci Kasir (Hari Ini)</h6>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <h6 class="text-muted mb-0">Saldo Laci Kasir (Hari Ini)</h6>
+                            <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-bold" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#modalOpeningBalance" title="Atur Modal Awal Laci (Kas Kemarin)">
+                                <i class="fas fa-vault me-1"></i>Modal Awal
+                            </button>
+                        </div>
                         <h4 class="fw-bold mb-0 text-success">Rp {{ number_format($myNetCashToday ?? 0, 0, ',', '.') }}</h4>
                         <small class="text-muted" style="font-size: 0.75rem;">
+                            @if(isset($myOpeningCash) && $myOpeningCash > 0)
+                                <span class="text-dark fw-bold">Kas Kemarin: Rp {{ number_format($myOpeningCash, 0, ',', '.') }}</span> |
+                            @endif
                             Masuk: Rp {{ number_format($mySalesToday ?? 0, 0, ',', '.') }} |
                             Keluar: <span class="text-danger">Rp {{ number_format($myExpensesToday ?? 0, 0, ',', '.') }}</span>
                         </small>
@@ -1027,4 +1035,45 @@ $modalId = 'modalGroup_' . $groupKey;
     });
 </script>
 
+    {{-- Modal Input Modal Awal Laci (Kas Kemarin) --}}
+    <div class="modal fade" id="modalOpeningBalance" tabindex="-1" aria-labelledby="modalOpeningBalanceLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <form action="{{ route('kasir.set_opening_balance') }}" method="POST">
+                    @csrf
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title fw-bold" id="modalOpeningBalanceLabel">
+                            <i class="fas fa-vault me-2"></i> Modal Awal Laci (Kas Kemarin)
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="alert alert-info py-2 px-3 small mb-3">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Input uang tunai sisa kemarin atau uang kembalian yang ditinggalkan di laci kasir. Nilai ini akan otomatis menambah <strong>Saldo Kas Laci (Fisik)</strong> kasir hari ini, tanpa menambah Laba Shift.
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nominal Modal Awal (Rp) <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text fw-bold">Rp</span>
+                                <input type="number" step="any" min="0" name="amount" class="form-control fw-bold fs-5 text-success" value="{{ $myOpeningCash ?? 0 }}" required placeholder="0">
+                            </div>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label fw-bold">Catatan (Opsional)</label>
+                            <textarea name="notes" rows="2" class="form-control" placeholder="Contoh: Sisa kas kecil dari shift kemarin...">{{ $myOpeningNotes ?? '' }}</textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-success px-4 fw-bold">
+                            <i class="fas fa-save me-1"></i> Simpan Modal Awal
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 @endsection

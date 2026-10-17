@@ -154,6 +154,7 @@ class PosService
                     $transaction->details()->create([
                         'product_id' => $item['product_id'],
                         'quantity' => $item['quantity'],
+                        'cost_price' => $product->cost_price ?? 0,
                         'unit_price' => $item['unit_price'],
                         'total_price' => $item['total_price'],
                     ]);
@@ -230,6 +231,7 @@ class PosService
                 $transaction->details()->create([
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
+                    'cost_price' => $product->cost_price ?? 0,
                     'unit_price' => $item['unit_price'],
                     'total_price' => $item['total_price'],
                 ]);

@@ -18,6 +18,8 @@ class CashFlow extends Model
         'type',
         'category_id',
         'payment_method',
+        'funding_source',
+        'affects_drawer',
         'amount',
         'description',
         'date',
@@ -27,6 +29,7 @@ class CashFlow extends Model
 
     protected $casts = [
         'date' => 'date',
+        'affects_drawer' => 'boolean',
     ];
 
     /**

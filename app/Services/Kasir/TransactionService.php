@@ -91,7 +91,8 @@ class TransactionService
                 // Kurangi stok inventaris
                 $product->inventory->decrement('current_stock', $item['quantity']);
 
-                // Buat detail transaksi yang baru
+                // Buat detail transaksi yang baru dengan snapshot cost_price
+                $item['cost_price'] = $item['cost_price'] ?? $product->cost_price ?? 0;
                 $transaction->details()->create($item);
             }
 

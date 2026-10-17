@@ -7,6 +7,9 @@
     <li class="breadcrumb-item active" aria-current="page">Riwayat Transaksi</li>
 @endsection
 
+@section('today-sales', 'Rp ' . number_format($todaySales ?? 0, 0, ',', '.'))
+@section('today-transactions', (string) ($todayTransactionsCount ?? 0))
+
 @section('content')
     <x-card>
         @slot('title')

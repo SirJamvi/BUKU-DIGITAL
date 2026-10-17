@@ -5,6 +5,7 @@ namespace App\Services\Kasir;
 use App\Models\Transaction;
 use App\Models\Inventory;
 use App\Models\CashFlow;
+use App\Models\CashierOpeningBalance;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -17,8 +18,16 @@ class DashboardService
     public function getDashboardData(int $kasirId): array
     {
         try {
-            $today = Carbon::today();
+            $today = Carbon::today('Asia/Jakarta');
             $businessId = Auth::user()->business_id;
+
+            // Modal Awal Laci (Kas Kemarin)
+            $openingRecord = CashierOpeningBalance::where('business_id', $businessId)
+                ->where('user_id', $kasirId)
+                ->whereDate('date', $today)
+                ->first();
+            $myOpeningCash = $openingRecord ? (float) $openingRecord->amount : 0.0;
+            $myOpeningNotes = $openingRecord ? $openingRecord->notes : '';
 
             // ==========================================================
             // [PERBAIKAN] 1. Ambil SEMUA Arus Kas Hari Ini (Income & Expense)
@@ -32,12 +41,17 @@ class DashboardService
             $incomesToday = $allCashFlowsToday->where('type', 'income');
             $expensesToday = $allCashFlowsToday->where('type', 'expense');
 
-            // Hitung Total Penjualan Kotor (Income) & Total Pengeluaran (Expense)
-            $mySalesToday = $incomesToday->sum('amount');
-            $myExpensesToday = $expensesToday->sum('amount');
+            // Pengeluaran yang memotong laci kasir (affects_drawer = 1 atau null)
+            $drawerExpensesToday = $expensesToday->filter(function ($cf) {
+                return ($cf->affects_drawer ?? 1) == 1;
+            });
+
+            // Hitung Total Penjualan Kotor (Income) & Total Pengeluaran Laci
+            $mySalesToday = (float) $incomesToday->sum('amount');
+            $myExpensesToday = (float) $drawerExpensesToday->sum('amount');
 
             // Hitung Uang Bersih di Laci Kasir (Saldo Real-time)
-            $myNetCashToday = $mySalesToday - $myExpensesToday;
+            $myNetCashToday = $myOpeningCash + $mySalesToday - $myExpensesToday;
 
             // Hitung Jumlah Struk Masuk
             $myTransactionsToday = $incomesToday->count();
@@ -118,6 +132,8 @@ class DashboardService
             });
 
             return [
+                'myOpeningCash'       => $myOpeningCash,
+                'myOpeningNotes'      => $myOpeningNotes,
                 'mySalesToday'        => $mySalesToday,
                 'myExpensesToday'     => $myExpensesToday, // <-- Variabel baru
                 'myNetCashToday'      => $myNetCashToday,  // <-- Variabel baru (Uang real di laci)
@@ -135,6 +151,8 @@ class DashboardService
             logger()->error(__METHOD__ . ': ' . $e->getMessage());
 
             return [
+                'myOpeningCash'       => 0,
+                'myOpeningNotes'      => '',
                 'mySalesToday'        => 0,
                 'myExpensesToday'     => 0,
                 'myNetCashToday'      => 0,

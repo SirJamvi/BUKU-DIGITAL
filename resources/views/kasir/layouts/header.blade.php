@@ -95,11 +95,11 @@
                 <div class="quick-stats d-flex gap-3">
                     <div class="stat-item">
                         <span class="text-muted small">Hari ini:</span>
-                        <span class="fw-bold ms-1">@yield('today-sales', 'Rp 0')</span>
+                        <span class="fw-bold ms-1">@hasSection('today-sales')@yield('today-sales')@else{{ $headerTodaySales ?? 'Rp 0' }}@endif</span>
                     </div>
                     <div class="stat-item">
                         <span class="text-muted small">Transaksi:</span>
-                        <span class="fw-bold ms-1">@yield('today-transactions', '0')</span>
+                        <span class="fw-bold ms-1">@hasSection('today-transactions')@yield('today-transactions')@else{{ $headerTodayTransactions ?? '0' }}@endif</span>
                     </div>
                 </div>
                 
