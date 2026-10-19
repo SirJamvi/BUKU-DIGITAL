@@ -192,7 +192,11 @@ class InventoryController extends Controller
             $businessId = Auth::user()->business_id;
             $userId = Auth::id();
 
-            // 1. Ambil data stok produk asal
+            // 1. Ambil data stok & master produk asal
+            $sourceProduct = Product::where('id', $request->source_product_id)
+                ->where('business_id', $businessId)
+                ->firstOrFail();
+
             $sourceInventory = Inventory::where('product_id', $request->source_product_id)
                 ->where('business_id', $businessId)
                 ->first();
@@ -212,36 +216,121 @@ class InventoryController extends Controller
             // Kurangi stok utama
             $sourceInventory->decrement('current_stock', $request->source_qty);
 
-            // Catat pergerakan stok keluar (TANPA occurred_at)
+            // Catat pergerakan stok keluar
             StockMovement::create([
                 'business_id' => $businessId,
                 'product_id' => $request->source_product_id,
                 'type' => 'out',
                 'quantity' => $request->source_qty,
-                'notes' => 'Pecah Ball (Bahan Baku)',
+                'notes' => 'Pecah Ball (Bahan Baku): ' . $sourceProduct->name,
                 'created_by' => $userId,
             ]);
 
-            // 2. Tambahkan stok untuk setiap produk hasil pecahan
+            // 2. Hitung Modal Induk yang Dipecah & Alokasikan ke Hasil Pecahan
+            $sourceCostPrice = (float) ($sourceProduct->cost_price ?? 0);
+            $totalSourceCost = (float) $request->source_qty * $sourceCostPrice;
+
+            // Helper untuk mengekstrak bobot produk (misal: "Es Kristal 5 Kg" -> 5)
+            $extractWeight = function ($productName) {
+                if (preg_match('/(\d+(?:[\.,]\d+)?)\s*(kg|kilo|gram|gr)\b/i', $productName, $matches)) {
+                    $val = (float) str_replace(',', '.', $matches[1]);
+                    $unit = strtolower($matches[2]);
+                    if ($unit === 'gram' || $unit === 'gr') {
+                        return $val / 1000.0;
+                    }
+                    return $val;
+                }
+                return null;
+            };
+
+            // Hitung bobot atau nilai relatif jika target lebih dari 1
+            $targetProducts = [];
+            $totalRelativeShare = 0;
+            $allHaveWeight = true;
+
+            foreach ($request->targets as $target) {
+                $p = Product::where('id', $target['product_id'])->where('business_id', $businessId)->first();
+                $weight = $p ? $extractWeight($p->name) : null;
+                if ($weight === null) {
+                    $allHaveWeight = false;
+                }
+                $targetProducts[$target['product_id']] = [
+                    'product' => $p,
+                    'qty' => (float) $target['qty'],
+                    'weight' => $weight,
+                ];
+            }
+
+            foreach ($targetProducts as $tInfo) {
+                if ($allHaveWeight) {
+                    $totalRelativeShare += $tInfo['qty'] * ($tInfo['weight'] ?? 1);
+                } else {
+                    $pPrice = (float) (optional($tInfo['product'])->base_price ?? 1);
+                    $totalRelativeShare += $tInfo['qty'] * ($pPrice > 0 ? $pPrice : 1);
+                }
+            }
+
+            // 3. Tambahkan stok & update Moving Average HPP untuk setiap produk pecahan
             $totalHasilPecahan = 0;
             foreach ($request->targets as $target) {
-                // Cari target, jika belum ada buat baris inventaris baru dengan nilai 0
+                $tId = $target['product_id'];
+                $yieldQty = (float) $target['qty'];
+                $targetProduct = $targetProducts[$tId]['product'] ?? Product::find($tId);
+
+                if (!$targetProduct) {
+                    continue;
+                }
+
+                // Hitung modal per unit pecahan baru
+                if (count($request->targets) === 1) {
+                    // Rumus langsung untuk 1 target: (Qty Induk * cost_price Induk) / Yield Qty
+                    $modalPerUnitPecahanBaru = ($yieldQty > 0) ? ($totalSourceCost / $yieldQty) : 0;
+                } else {
+                    // Proporsional berdasarkan bobot atau nilai relatif
+                    if ($allHaveWeight) {
+                        $targetWeightShare = $yieldQty * ($targetProducts[$tId]['weight'] ?? 1);
+                    } else {
+                        $pPrice = (float) ($targetProduct->base_price ?? 1);
+                        $targetWeightShare = $yieldQty * ($pPrice > 0 ? $pPrice : 1);
+                    }
+                    $proportion = ($totalRelativeShare > 0) ? ($targetWeightShare / $totalRelativeShare) : (1 / count($request->targets));
+                    $targetTotalCost = $totalSourceCost * $proportion;
+                    $modalPerUnitPecahanBaru = ($yieldQty > 0) ? ($targetTotalCost / $yieldQty) : 0;
+                }
+
+                // Cari target inventory
                 $targetInventory = Inventory::firstOrCreate(
-                    ['product_id' => $target['product_id'], 'business_id' => $businessId],
+                    ['product_id' => $tId, 'business_id' => $businessId],
                     ['current_stock' => 0]
                 );
+
+                // Rumus Moving Average HPP:
+                // ((Stok Sisa * HPP Lama) + (Yield Qty * Modal Pecahan Baru)) / (Stok Sisa + Yield Qty)
+                $currentChildStock = (float) $targetInventory->current_stock;
+                $currentChildCostPrice = (float) ($targetProduct->cost_price ?? 0);
+
+                if ($currentChildStock > 0 && $currentChildCostPrice > 0) {
+                    $newChildCostPrice = (($currentChildStock * $currentChildCostPrice) + ($yieldQty * $modalPerUnitPecahanBaru)) / ($currentChildStock + $yieldQty);
+                } else {
+                    $newChildCostPrice = $modalPerUnitPecahanBaru;
+                }
+
+                // Update cost_price produk pecahan agar HPP selalu tersinkronisasi
+                $targetProduct->update([
+                    'cost_price' => round($newChildCostPrice, 2)
+                ]);
 
                 // Tambahkan stok hasil
                 $targetInventory->increment('current_stock', $target['qty']);
 
-                // Catat pergerakan stok masuk (TANPA occurred_at)
+                // Catat pergerakan stok masuk
                 StockMovement::create([
                     'business_id' => $businessId,
-                    'product_id' => $target['product_id'],
-                    'type' => 'in',
-                    'quantity' => $target['qty'],
-                    'notes' => 'Hasil Pecahan dari Produk ID: ' . $request->source_product_id,
-                    'created_by' => $userId,
+                    'product_id'  => $tId,
+                    'type'        => 'in',
+                    'quantity'    => $target['qty'],
+                    'notes'       => 'Hasil Pecahan dari ' . $sourceProduct->name . ' (HPP Moving Avg: Rp ' . number_format($newChildCostPrice, 0, ',', '.') . ')',
+                    'created_by'  => $userId,
                 ]);
 
                 $totalHasilPecahan += $target['qty'];

@@ -110,12 +110,34 @@
                 <div class="modal-body">
                     <p>Total Tagihan: <strong>Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</strong></p>
                     <div class="mb-3">
-                        <label class="form-label">Uang masuk ke mana?</label>
+                        <label class="form-label fw-bold">Metode Pembayaran</label>
                         <select name="payment_method" class="form-select" required>
-                            <option value="cash">Cash</option>
-                            <option value="dana">Dana</option>
-                            <option value="transfer-bank">Transfer Bank</option>
+                            <option value="cash">💵 Cash / Tunai</option>
+                            <option value="dana">📱 Dana</option>
+                            <option value="transfer-bank">🏦 Transfer Bank</option>
                         </select>
+                    </div>
+
+                    <div class="mb-3 p-3 bg-light rounded border">
+                        <label class="form-label fw-bold text-dark small mb-2">Alokasi Tanggal Pembukuan</label>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="settlement_date_mode" id="settle_today_{{ $transaction->id }}" value="today" checked>
+                            <label class="form-check-label" for="settle_today_{{ $transaction->id }}">
+                                <strong>Uang Diterima Hari Ini</strong> (Masuk kas laci hari ini)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="settlement_date_mode" id="settle_nota_{{ $transaction->id }}" value="nota_date">
+                            <label class="form-check-label" for="settle_nota_{{ $transaction->id }}">
+                                <strong>Koreksi: Sudah Dibayar pd Tgl Nota Awal</strong> ({{ $transaction->transaction_date->format('d/m/Y') }})
+                                <br><small class="text-muted">Tidak mengotori/menambah uang laci kasir hari ini</small>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Catatan Pelunasan (Opsional)</label>
+                        <input type="text" name="settlement_notes" class="form-control form-control-sm" placeholder="Misal: Bukti transfer terlampir">
                     </div>
                 </div>
                 <div class="modal-footer">

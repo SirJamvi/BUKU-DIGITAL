@@ -436,6 +436,10 @@
                                                 ⚠️ TETAP KASBON (Belum Lunas)
                                             </option>
                                         </select>
+                                        <select name="settlement_date_modes[{{ $trx->id }}]" class="form-select form-select-sm mt-1 text-muted" style="font-size: 0.72rem;">
+                                            <option value="today" selected>💵 Masuk Kas Hari Ini</option>
+                                            <option value="nota_date">⚠️ Koreksi Tgl Nota ({{ $trx->transaction_date->format('d/m') }})</option>
+                                        </select>
                                     </td>
                                     <td class="pe-3">
                                         <input type="text" name="notes[{{ $trx->id }}]" class="form-control form-control-sm" placeholder="Ket...">
@@ -558,15 +562,35 @@ $modalId = 'modalGroup_' . $groupKey;
                     </div>
                 </div>
 
-                <div class="modal-footer bg-light justify-content-between align-items-center">
-                    <div class="d-flex align-items-center gap-2">
-                        <label class="fw-bold mb-0">Pembayaran via:</label>
-                        <select name="payment_method" class="form-select form-select-sm" style="width: 150px;" required>
-                            <option value="cash">💵 Cash / Tunai</option>
-                            <option value="transfer-bank">🏦 Transfer Bank</option>
-                            <option value="dana">📱 DANA</option>
-                        </select>
+                {{-- Panel Opsi Pelunasan Fleksibel --}}
+                <div class="bg-light p-3 border-top">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-3">
+                            <label class="small fw-bold text-muted mb-1">Metode Bayar:</label>
+                            <select name="payment_method" class="form-select form-select-sm fw-bold border-primary" required>
+                                <option value="cash">💵 Cash / Tunai</option>
+                                <option value="transfer-bank">🏦 Transfer Bank</option>
+                                <option value="dana">📱 DANA</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="small fw-bold text-muted mb-1">Alokasi Tanggal Pembukuan:</label>
+                            <select name="settlement_date_mode" class="form-select form-select-sm">
+                                <option value="today" selected>💵 Uang Diterima Hari Ini (Masuk Kas Hari Ini)</option>
+                                <option value="nota_date">⚠️ Koreksi: Sudah Dibayar pd Tgl Nota Awal (Backdate)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="small fw-bold text-muted mb-1">Catatan Pelunasan (Opsional):</label>
+                            <input type="text" name="settlement_notes" class="form-control form-control-sm" placeholder="Misal: Bukti transfer terlampir">
+                        </div>
                     </div>
+                </div>
+
+                <div class="modal-footer bg-light justify-content-between align-items-center">
+                    <small class="text-muted">
+                        <i class="fas fa-shield-alt text-primary me-1"></i> Opsi "Koreksi" tidak akan mengotori kas laci hari ini.
+                    </small>
                     <div>
                         <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Tutup</button>
                         <button type="submit" class="btn btn-success fw-bold">

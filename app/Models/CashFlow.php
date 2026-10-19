@@ -49,4 +49,9 @@ class CashFlow extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    public function transaction()
+    {
+        return $this->belongsTo(Transaction::class, 'reference_id');
+    }
 }

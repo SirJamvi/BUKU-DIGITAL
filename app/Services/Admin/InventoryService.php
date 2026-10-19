@@ -139,6 +139,27 @@ class InventoryService
                 throw new \Exception("Inventory untuk produk eceran belum dibuat.");
             }
 
+            $fromProduct = $fromInventory->product;
+            $toProduct = $toInventory->product;
+
+            // Hitung modal per unit pecahan baru
+            $sourceCostPrice = (float) ($fromProduct->cost_price ?? 0);
+            $modalPerUnitPecahanBaru = ($yieldAmount > 0) ? (($quantityToBreak * $sourceCostPrice) / $yieldAmount) : 0;
+
+            // Rumus Moving Average HPP produk pecahan:
+            $currentChildStock = (float) $toInventory->current_stock;
+            $currentChildCostPrice = (float) ($toProduct->cost_price ?? 0);
+
+            if ($currentChildStock > 0 && $currentChildCostPrice > 0) {
+                $newChildCostPrice = (($currentChildStock * $currentChildCostPrice) + ($yieldAmount * $modalPerUnitPecahanBaru)) / ($currentChildStock + $yieldAmount);
+            } else {
+                $newChildCostPrice = $modalPerUnitPecahanBaru;
+            }
+
+            if ($toProduct) {
+                $toProduct->update(['cost_price' => round($newChildCostPrice, 2)]);
+            }
+
             // 1. Kurangi stok karung besar (Gunakan type 'out' agar sesuai dengan enum database Anda)
             $this->updateStock(
                 $fromInventory->id,
@@ -152,7 +173,7 @@ class InventoryService
                 $toInventory->id,
                 $yieldAmount,
                 'in',
-                "Hasil pecah ball dari karung " . $fromInventory->product->name
+                "Hasil pecah ball dari karung " . $fromInventory->product->name . " (HPP Moving Avg: Rp " . number_format($newChildCostPrice, 0, ',', '.') . ")"
             );
         });
     }

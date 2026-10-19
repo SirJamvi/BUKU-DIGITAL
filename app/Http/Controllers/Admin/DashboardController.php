@@ -211,6 +211,9 @@ class DashboardController extends Controller
             // --- MONITORING CASH ON HAND REAL PER KASIR (PRIORITAS) ---
             $dashboardData['cashierMonitoring'] = $this->dashboardService->getCashierCashOnHandData($businessId, $filterDate);
 
+            // --- LOG AKTIVITAS PELUNASAN KASBON & PENGIRIMAN HARI INI ---
+            $dashboardData['settlementLogs'] = $this->dashboardService->getSettlementAuditLogs($businessId, $filterDate);
+
             return view('admin.dashboard.index', $dashboardData);
         } catch (\Exception $e) {
             logger()->error('Error fetching dashboard data: ' . $e->getMessage());

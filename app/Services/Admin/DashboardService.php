@@ -333,12 +333,21 @@ class DashboardService
             $cashOrdersCount = $cashTransactions->count();
 
             // 2. Pelunasan Kasbon Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
-            $pelunasanCashAmount = (float) CashFlow::where('business_id', $businessId)
-                ->where('created_by', $user->id)
-                ->where('type', 'income')
-                ->where('payment_method', 'cash')
-                ->whereDate('date', $filterDate)
-                ->where('description', 'LIKE', '%Pelunasan%')
+            // HANYA menghitung pelunasan dari transaksi hari-hari sebelumnya (DATE(transaction_date) < $filterDate)
+            // Transaksi yang dibuat hari ini dan dilunasi hari ini sudah terhitung di $cashSalesAmount (mencegah double-counting)
+            $pelunasanCashAmount = (float) CashFlow::where('cash_flow.business_id', $businessId)
+                ->where('cash_flow.created_by', $user->id)
+                ->where('cash_flow.type', 'income')
+                ->where('cash_flow.payment_method', 'cash')
+                ->whereDate('cash_flow.date', $filterDate)
+                ->where('cash_flow.description', 'LIKE', '%Pelunasan%')
+                ->whereExists(function ($query) use ($businessId, $filterDate) {
+                    $query->select(DB::raw(1))
+                        ->from('transactions')
+                        ->whereColumn('transactions.id', 'cash_flow.reference_id')
+                        ->where('transactions.business_id', $businessId)
+                        ->whereDate('transactions.transaction_date', '<', $filterDate);
+                })
                 ->sum('amount');
 
             $totalCashIn = $cashSalesAmount + $pelunasanCashAmount;
@@ -496,5 +505,20 @@ class DashboardService
         });
 
         return $cashierData;
+    }
+
+    /**
+     * Mengambil log aktivitas pelunasan pending payment / kasbon / pengiriman pada tanggal filter berjalan.
+     * Berdasarkan waktu klik / created_at pada cash_flow.
+     */
+    public function getSettlementAuditLogs(int $businessId, Carbon $filterDate): \Illuminate\Support\Collection
+    {
+        return CashFlow::with(['createdBy', 'transaction.customer', 'transaction.driver'])
+            ->where('business_id', $businessId)
+            ->where('type', 'income')
+            ->where('description', 'LIKE', '%Pelunasan%')
+            ->whereDate('created_at', $filterDate)
+            ->orderBy('created_at', 'desc')
+            ->get();
     }
 }

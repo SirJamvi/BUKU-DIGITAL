@@ -580,6 +580,123 @@
 </div>
 </div>
 
+{{-- ================================================================= --}}
+{{-- [BARU] LOG AKTIVITAS PELUNASAN KASBON & PENGIRIMAN HARI INI       --}}
+{{-- ================================================================= --}}
+<div id="settlement-audit-container">
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-0 fw-bold text-dark">
+                        <i class="fas fa-file-invoice-dollar text-success me-2"></i> Log Aktivitas Pelunasan Kasbon & Pengiriman ({{ $isToday ? 'Hari Ini' : $formattedDate }})
+                    </h5>
+                    <small class="text-muted">Audit real-time setiap transaksi kasbon/pengiriman yang divalidasi lunas oleh kasir.</small>
+                </div>
+                <div>
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 fw-semibold">
+                        <i class="fas fa-check-double me-1"></i> Total: {{ isset($settlementLogs) ? $settlementLogs->count() : 0 }} Pelunasan
+                        @if(isset($settlementLogs) && $settlementLogs->isNotEmpty())
+                            (Rp {{ number_format($settlementLogs->sum('amount'), 0, ',', '.') }})
+                        @endif
+                    </span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                @if(isset($settlementLogs) && $settlementLogs->isNotEmpty())
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Jam Klik</th>
+                                <th>Kasir</th>
+                                <th>Detail Nota & Pelanggan</th>
+                                <th class="text-end">Nominal</th>
+                                <th class="text-center">Metode Bayar</th>
+                                <th class="text-center">Status Alokasi Tanggal</th>
+                                <th class="pe-4">Keterangan / Catatan</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($settlementLogs as $log)
+                            @php
+                                $pm = strtolower($log->payment_method ?? 'cash');
+                                $pmBadge = match($pm) {
+                                    'cash' => 'bg-success text-white',
+                                    'dana' => 'bg-primary text-white',
+                                    'transfer-bank', 'transfer bank', 'transfer' => 'bg-info text-dark',
+                                    'qris' => 'bg-warning text-dark',
+                                    default => 'bg-secondary text-white'
+                                };
+                                $isSameDay = $log->date && $log->created_at && ($log->date->format('Y-m-d') === $log->created_at->format('Y-m-d'));
+                                $trx = $log->transaction;
+                            @endphp
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="badge bg-secondary">
+                                        <i class="far fa-clock me-1"></i>{{ $log->created_at ? $log->created_at->format('H:i') : '-' }} WIB
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="fw-bold text-dark">
+                                        <i class="fas fa-user-circle text-primary me-1"></i>{{ $log->createdBy->name ?? 'Kasir' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div>
+                                        <span class="fw-bold text-primary">
+                                            #{{ str_pad($log->reference_id ?? optional($trx)->id ?? 0, 6, '0', STR_PAD_LEFT) }}
+                                        </span>
+                                        - <strong class="text-dark">{{ optional(optional($trx)->customer)->name ?? 'Pelanggan Umum' }}</strong>
+                                    </div>
+                                    <small class="text-muted">
+                                        Tgl Nota: <strong>{{ optional($trx)->transaction_date ? \Carbon\Carbon::parse($trx->transaction_date)->format('d/m/Y') : '-' }}</strong>
+                                        @if(optional($trx)->driver)
+                                            | Driver: <i class="fas fa-motorcycle text-info me-1"></i>{{ $trx->driver->name }}
+                                        @endif
+                                    </small>
+                                </td>
+                                <td class="text-end fw-bold text-success">
+                                    Rp {{ number_format($log->amount, 0, ',', '.') }}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge {{ $pmBadge }} px-2 py-1">
+                                        {{ strtoupper(str_replace('-', ' ', $log->payment_method ?? 'CASH')) }}
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    @if($isSameDay)
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">
+                                            <i class="fas fa-check-circle me-1"></i> Masuk Kas Hari Ini
+                                        </span>
+                                    @else
+                                        <span class="badge bg-warning bg-opacity-25 text-dark border border-warning px-2 py-1 fw-bold" title="Uang dialokasikan ke tanggal nota awal, tidak menambah laci hari ini">
+                                            <i class="fas fa-triangle-exclamation text-warning me-1"></i> ⚠️ Koreksi ke Tgl Nota ({{ $log->date ? $log->date->format('d/m/Y') : '-' }})
+                                        </span>
+                                    @endif
+                                </td>
+                                <td class="pe-4">
+                                    <small class="text-muted fst-italic">{{ $log->description ?? '-' }}</small>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @else
+                <div class="p-4 text-center text-muted">
+                    <i class="fas fa-file-invoice-dollar fa-3x mb-2 text-secondary opacity-50"></i>
+                    <h6 class="fw-bold text-secondary">Belum Ada Pelunasan Kasbon / Pengiriman</h6>
+                    <p class="small mb-0">Tidak ada aktivitas pelunasan yang diproses kasir pada tanggal {{ $formattedDate }}.</p>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
 {{-- MONITORING HISTORY PECAH BALL --}}
 <div id="pecah-ball-container">
 <div class="row mb-4">
@@ -832,15 +949,23 @@
                 {{-- 4 Stat Boxes Atas Modal --}}
                 <div class="row g-3 mb-4">
                     <div class="col-md-3 col-6">
-                        <div class="p-3 bg-white rounded border text-center shadow-sm">
-                            <div class="text-muted small fw-semibold">KAS TUNAI MASUK</div>
-                            <h5 class="fw-bold mb-0 text-success">Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</h5>
-                            <small class="text-muted" style="font-size: 0.7rem;">
-                                {{ $c['cash_orders_count'] }} Struk Tunai
-                                @if(($c['opening_cash'] ?? 0) > 0)
-                                    (Modal Awal: Rp {{ number_format($c['opening_cash'], 0, ',', '.') }})
-                                @endif
-                            </small>
+                        <div class="p-3 bg-white rounded border shadow-sm h-100">
+                            <div class="text-muted small fw-semibold text-center">KAS TUNAI MASUK</div>
+                            <h5 class="fw-bold mb-2 text-success text-center">Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</h5>
+                            <div class="border-top pt-2" style="font-size: 0.72rem; line-height: 1.4;">
+                                <div class="d-flex justify-content-between text-muted">
+                                    <span>Penjualan Tunai Hari Ini:</span>
+                                    <strong class="text-dark">Rp {{ number_format($c['cash_sales'], 0, ',', '.') }}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between text-muted">
+                                    <span>Pelunasan Kasbon Lalu (Tunai):</span>
+                                    <strong class="text-dark">Rp {{ number_format($c['pelunasan_cash'], 0, ',', '.') }}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between text-muted">
+                                    <span>Modal Awal Laci:</span>
+                                    <strong class="text-dark">Rp {{ number_format($c['opening_cash'] ?? 0, 0, ',', '.') }}</strong>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-3 col-6">

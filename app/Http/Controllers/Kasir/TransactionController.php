@@ -81,27 +81,48 @@ class TransactionController extends Controller
         }
 
         $request->validate([
-            'payment_method' => 'required|string'
+            'payment_method'       => 'required|string',
+            'settlement_date_mode' => 'nullable|string|in:today,nota_date',
+            'settlement_notes'     => 'nullable|string|max:255',
         ]);
 
         try {
+            // Tentukan tanggal buku pencatatan cash flow
+            $settlementDate = ($request->settlement_date_mode === 'nota_date')
+                ? \Carbon\Carbon::parse($transaction->transaction_date)->startOfDay()
+                : now();
+
             // 1. Update status transaksi
             $transaction->update([
                 'payment_status' => 'paid',
                 'payment_method' => $request->payment_method
             ]);
 
-            // 2. Catat ke CashFlow (Karena uang baru benar-benar masuk sekarang)
+            if ($request->filled('settlement_notes')) {
+                $transaction->update([
+                    'notes' => ($transaction->notes ? $transaction->notes . ' | ' : '') . '[Pelunasan: ' . $request->settlement_notes . ']'
+                ]);
+            }
+
+            // 2. Catat ke CashFlow (dengan alokasi tanggal pembukuan yang dipilih kasir)
+            $desc = 'Pelunasan Transaksi Kasbon #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT);
+            if ($request->filled('settlement_notes')) {
+                $desc .= ' (' . $request->settlement_notes . ')';
+            }
+            if ($request->settlement_date_mode === 'nota_date') {
+                $desc .= ' [Koreksi Nota Tgl ' . \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') . ']';
+            }
+
             \App\Models\CashFlow::create([
-                'business_id' => $transaction->business_id,
-                'type' => 'income', // Sesuaikan dengan enum di sistem Anda
-                'category_id' => 1,
+                'business_id'    => $transaction->business_id,
+                'type'           => 'income',
+                'category_id'    => 1,
                 'payment_method' => $request->payment_method,
-                'amount' => $transaction->total_amount,
-                'description' => 'Pelunasan Transaksi Kasbon #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT),
-                'date' => now(),
-                'reference_id' => $transaction->id,
-                'created_by' => Auth::id(),
+                'amount'         => $transaction->total_amount,
+                'description'    => $desc,
+                'date'           => $settlementDate,
+                'reference_id'   => $transaction->id,
+                'created_by'     => Auth::id(),
             ]);
 
             return back()->with('success', 'Transaksi berhasil divalidasi dan dicatat sebagai Lunas.');
@@ -146,9 +167,11 @@ class TransactionController extends Controller
     public function bulkMarkAsPaid(\Illuminate\Http\Request $request): RedirectResponse
     {
         $request->validate([
-            'transaction_ids' => 'required|array',
-            'transaction_ids.*' => 'integer|exists:transactions,id',
-            'payment_method' => 'required|string'
+            'transaction_ids'      => 'required|array',
+            'transaction_ids.*'    => 'integer|exists:transactions,id',
+            'payment_method'       => 'required|string',
+            'settlement_date_mode' => 'nullable|string|in:today,nota_date',
+            'settlement_notes'     => 'nullable|string|max:255',
         ], [
             'transaction_ids.required' => 'Anda belum memilih transaksi satupun untuk dilunasi.'
         ]);
@@ -170,23 +193,42 @@ class TransactionController extends Controller
             DB::beginTransaction();
 
             foreach ($transactions as $transaction) {
+                // Tentukan tanggal buku pencatatan cash flow per transaksi
+                $settlementDate = ($request->settlement_date_mode === 'nota_date')
+                    ? \Carbon\Carbon::parse($transaction->transaction_date)->startOfDay()
+                    : now();
+
                 // 1. Update status masing-masing transaksi
                 $transaction->update([
                     'payment_status' => 'paid',
                     'payment_method' => $request->payment_method
                 ]);
 
+                if ($request->filled('settlement_notes')) {
+                    $transaction->update([
+                        'notes' => ($transaction->notes ? $transaction->notes . ' | ' : '') . '[Pelunasan: ' . $request->settlement_notes . ']'
+                    ]);
+                }
+
                 // 2. Catat ke CashFlow untuk setiap transaksi agar laporan tercatat rapi
+                $desc = 'Pelunasan Kasbon (Bulk) #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT);
+                if ($request->filled('settlement_notes')) {
+                    $desc .= ' (' . $request->settlement_notes . ')';
+                }
+                if ($request->settlement_date_mode === 'nota_date') {
+                    $desc .= ' [Koreksi Nota Tgl ' . \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') . ']';
+                }
+
                 \App\Models\CashFlow::create([
-                    'business_id' => $transaction->business_id,
-                    'type' => 'income',
-                    'category_id' => 1,
+                    'business_id'    => $transaction->business_id,
+                    'type'           => 'income',
+                    'category_id'    => 1,
                     'payment_method' => $request->payment_method,
-                    'amount' => $transaction->total_amount,
-                    'description' => 'Pelunasan Kasbon (Bulk) #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT),
-                    'date' => now(),
-                    'reference_id' => $transaction->id,
-                    'created_by' => Auth::id(),
+                    'amount'         => $transaction->total_amount,
+                    'description'    => $desc,
+                    'date'           => $settlementDate,
+                    'reference_id'   => $transaction->id,
+                    'created_by'     => Auth::id(),
                 ]);
             }
 
@@ -252,15 +294,28 @@ class TransactionController extends Controller
                 if (!$isKasbon) {
                     $paidCount++;
 
-                    // Catat ke CashFlow secara dinamis dengan metode pembayaran riil
+                    $dateMode = $request->settlement_date_modes[$transaction->id] ?? $request->settlement_date_mode ?? 'today';
+                    $settlementDate = ($dateMode === 'nota_date')
+                        ? \Carbon\Carbon::parse($transaction->transaction_date)->startOfDay()
+                        : now();
+
+                    $desc = 'Pelunasan Pengiriman ' . $tripCode . ' #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT) . ' (' . ($transaction->customer->name ?? 'Pelanggan Umum') . ')';
+                    if (!empty($orderNote)) {
+                        $desc .= ' - ' . $orderNote;
+                    }
+                    if ($dateMode === 'nota_date') {
+                        $desc .= ' [Koreksi Nota Tgl ' . \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') . ']';
+                    }
+
+                    // Catat ke CashFlow secara dinamis dengan metode pembayaran riil & alokasi tanggal
                     \App\Models\CashFlow::create([
                         'business_id'    => $transaction->business_id,
                         'type'           => 'income',
                         'category_id'    => 1,
                         'payment_method' => $methodSlug,
                         'amount'         => $transaction->total_amount,
-                        'description'    => 'Pelunasan Pengiriman ' . $tripCode . ' #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT) . ' (' . ($transaction->customer->name ?? 'Pelanggan Umum') . ')',
-                        'date'           => now(),
+                        'description'    => $desc,
+                        'date'           => $settlementDate,
                         'reference_id'   => $transaction->id,
                         'created_by'     => Auth::id(),
                     ]);
