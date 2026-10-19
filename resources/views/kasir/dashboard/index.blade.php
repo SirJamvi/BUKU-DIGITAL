@@ -184,30 +184,41 @@
 
     {{-- Kartu Ringkasan Data --}}
     <div class="row g-4">
-        {{-- Saldo Kasir Hari Ini (Real-Time Setelah Dipotong Pengeluaran) --}}
+        {{-- Saldo Kas Fisik Laci Hari Ini (Murni Uang Tunai Real-Time) --}}
         <div class="col-lg-4 col-md-6">
             <div class="card h-100 border-0 shadow-sm" style="background-color: var(--kasir-bg-secondary);">
-                <div class="card-body d-flex align-items-center">
-                    <div class="flex-shrink-0 me-3">
-                        <div class="p-3 rounded-circle d-flex align-items-center justify-content-center bg-success bg-opacity-10">
-                            <i class="fas fa-wallet fa-2x text-success"></i>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="p-3 rounded-circle d-flex align-items-center justify-content-center bg-success bg-opacity-10">
+                                <i class="fas fa-wallet fa-2x text-success"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <h6 class="text-muted mb-0 fw-semibold">Saldo Kas Fisik Laci (Hari Ini)</h6>
+                                <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-bold" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#modalOpeningBalance" title="Atur Modal Awal Laci (Kas Kemarin)">
+                                    <i class="fas fa-vault me-1"></i>Modal Awal
+                                </button>
+                            </div>
+                            <h4 class="fw-bold mb-0 text-success">Rp {{ number_format($myNetCashToday ?? 0, 0, ',', '.') }}</h4>
+                            <small class="text-muted" style="font-size: 0.72rem;">
+                                @if(isset($myOpeningCash) && $myOpeningCash > 0)
+                                    <span class="text-dark fw-bold">Modal Awal: Rp {{ number_format($myOpeningCash, 0, ',', '.') }}</span> |
+                                @endif
+                                Masuk Tunai: <span class="text-success fw-bold">+Rp {{ number_format($totalCashInToday ?? $mySalesToday ?? 0, 0, ',', '.') }}</span> |
+                                Keluar: <span class="text-danger fw-bold">-Rp {{ number_format($myExpensesToday ?? 0, 0, ',', '.') }}</span>
+                            </small>
                         </div>
                     </div>
-                    <div class="flex-grow-1">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <h6 class="text-muted mb-0">Saldo Laci Kasir (Hari Ini)</h6>
-                            <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-bold" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#modalOpeningBalance" title="Atur Modal Awal Laci (Kas Kemarin)">
-                                <i class="fas fa-vault me-1"></i>Modal Awal
-                            </button>
-                        </div>
-                        <h4 class="fw-bold mb-0 text-success">Rp {{ number_format($myNetCashToday ?? 0, 0, ',', '.') }}</h4>
-                        <small class="text-muted" style="font-size: 0.75rem;">
-                            @if(isset($myOpeningCash) && $myOpeningCash > 0)
-                                <span class="text-dark fw-bold">Kas Kemarin: Rp {{ number_format($myOpeningCash, 0, ',', '.') }}</span> |
-                            @endif
-                            Masuk: Rp {{ number_format($mySalesToday ?? 0, 0, ',', '.') }} |
-                            Keluar: <span class="text-danger">Rp {{ number_format($myExpensesToday ?? 0, 0, ',', '.') }}</span>
-                        </small>
+                    {{-- Badge Penerimaan Non-Tunai (Rekening Owner / Non-Laci) --}}
+                    <div class="pt-2 border-top d-flex gap-2 flex-wrap" style="font-size: 0.73rem;">
+                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 py-1 px-2" title="Penerimaan Transfer Bank langsung ke Rekening Owner (Tidak masuk laci fisik)">
+                            <i class="fas fa-university me-1"></i> Transfer: Rp {{ number_format($nonCashTransfer ?? 0, 0, ',', '.') }}
+                        </span>
+                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-1 px-2" title="Penerimaan DANA langsung ke E-Wallet Owner (Tidak masuk laci fisik)">
+                            <i class="fas fa-mobile-alt me-1"></i> DANA: Rp {{ number_format($nonCashDana ?? 0, 0, ',', '.') }}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -437,8 +448,8 @@
                                             </option>
                                         </select>
                                         <select name="settlement_date_modes[{{ $trx->id }}]" class="form-select form-select-sm mt-1 text-muted" style="font-size: 0.72rem;">
-                                            <option value="today" selected>💵 Masuk Kas Hari Ini</option>
-                                            <option value="nota_date">⚠️ Koreksi Tgl Nota ({{ $trx->transaction_date->format('d/m') }})</option>
+                                            <option value="today" selected>💵 Uang Diterima Hari Ini (Masuk Laci Kasir)</option>
+                                            <option value="nota_date">⚠️ Koreksi Lupa Update (Tgl Nota: {{ $trx->transaction_date->format('d/m') }})</option>
                                         </select>
                                     </td>
                                     <td class="pe-3">
@@ -567,7 +578,7 @@ $modalId = 'modalGroup_' . $groupKey;
                     <div class="row g-2 align-items-center">
                         <div class="col-md-3">
                             <label class="small fw-bold text-muted mb-1">Metode Bayar:</label>
-                            <select name="payment_method" class="form-select form-select-sm fw-bold border-primary" required>
+                            <select name="payment_method" id="bulk_payment_method" class="form-select form-select-sm fw-bold border-primary" onchange="checkBulkSettlementMode()" required>
                                 <option value="cash">💵 Cash / Tunai</option>
                                 <option value="transfer-bank">🏦 Transfer Bank</option>
                                 <option value="dana">📱 DANA</option>
@@ -575,10 +586,13 @@ $modalId = 'modalGroup_' . $groupKey;
                         </div>
                         <div class="col-md-5">
                             <label class="small fw-bold text-muted mb-1">Alokasi Tanggal Pembukuan:</label>
-                            <select name="settlement_date_mode" class="form-select form-select-sm">
-                                <option value="today" selected>💵 Uang Diterima Hari Ini (Masuk Kas Hari Ini)</option>
-                                <option value="nota_date">⚠️ Koreksi: Sudah Dibayar pd Tgl Nota Awal (Backdate)</option>
+                            <select name="settlement_date_mode" id="bulk_settlement_date_mode" class="form-select form-select-sm" onchange="checkBulkSettlementMode()">
+                                <option value="today" selected>💵 Uang Baru Diterima Hari Ini (Masuk Laci / Kas Hari Ini)</option>
+                                <option value="nota_date">⚠️ Koreksi Lupa Update (Uang Sudah Diterima Saat Tanggal Nota)</option>
                             </select>
+                            <div id="bulk_warning_nota" class="text-danger small mt-1 fw-bold d-none" style="font-size: 0.72rem;">
+                                ⚠️ Perhatian: Memilih opsi ini tidak akan menambah catatan Saldo Laci hari ini karena uang dianggap sudah masuk pada tanggal nota dibuat.
+                            </div>
                         </div>
                         <div class="col-md-4">
                             <label class="small fw-bold text-muted mb-1">Catatan Pelunasan (Opsional):</label>
@@ -602,6 +616,20 @@ $modalId = 'modalGroup_' . $groupKey;
         </div>
     </div>
 </div>
+<script>
+function checkBulkSettlementMode() {
+    const isNota = document.getElementById('bulk_settlement_date_mode')?.value === 'nota_date';
+    const method = document.getElementById('bulk_payment_method')?.value;
+    const warn = document.getElementById('bulk_warning_nota');
+    if (warn) {
+        if (isNota && method === 'cash') {
+            warn.classList.remove('d-none');
+        } else {
+            warn.classList.add('d-none');
+        }
+    }
+}
+</script>
 
 {{-- ============================================================= --}}
 {{-- MODAL STRUK REKAP TAGIHAN PER PELANGGAN (KASAE, DLL) --}}

@@ -118,7 +118,7 @@
 
                         <div class="mb-3">
                             <label class="form-label fw-bold">Metode Pembayaran</label>
-                            <select name="payment_method" class="form-select" required>
+                            <select name="payment_method" id="pm_idx_{{ $transaction->id }}" class="form-select" onchange="checkSettlementModeIdx_{{ $transaction->id }}()" required>
                                 <option value="cash">💵 Cash / Tunai</option>
                                 <option value="dana">📱 Dana</option>
                                 <option value="transfer-bank">🏦 Transfer Bank</option>
@@ -128,19 +128,41 @@
                         <div class="mb-3 p-3 bg-light rounded border">
                             <label class="form-label fw-bold text-dark small mb-2">Alokasi Tanggal Pembukuan</label>
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="settlement_date_mode" id="settle_idx_today_{{ $transaction->id }}" value="today" checked>
+                                <input class="form-check-input" type="radio" name="settlement_date_mode" id="settle_idx_today_{{ $transaction->id }}" value="today" checked onchange="checkSettlementModeIdx_{{ $transaction->id }}()">
                                 <label class="form-check-label" for="settle_idx_today_{{ $transaction->id }}">
-                                    <strong>Uang Diterima Hari Ini</strong> (Masuk kas laci hari ini)
+                                    <strong>Uang Baru Diterima Hari Ini (Masuk Laci / Kas Hari Ini)</strong>
+                                    <br><small class="text-muted">Gunakan jika pelanggan/driver baru menyerahkan uangnya hari ini (Cash, DANA, Transfer).</small>
                                 </label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="settlement_date_mode" id="settle_idx_nota_{{ $transaction->id }}" value="nota_date">
+                                <input class="form-check-input" type="radio" name="settlement_date_mode" id="settle_idx_nota_{{ $transaction->id }}" value="nota_date" onchange="checkSettlementModeIdx_{{ $transaction->id }}()">
                                 <label class="form-check-label" for="settle_idx_nota_{{ $transaction->id }}">
-                                    <strong>Koreksi: Sudah Dibayar pd Tgl Nota Awal</strong> ({{ $transaction->transaction_date->format('d/m/Y') }})
-                                    <br><small class="text-muted">Tidak mengotori/menambah kas laci kasir hari ini</small>
+                                    <strong>Koreksi Lupa Update (Uang Sudah Diterima Saat Tanggal Nota: {{ $transaction->transaction_date ? \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') : '' }})</strong>
+                                    <br><small class="text-muted">Hanya gunakan jika sebenarnya sudah bayar saat nota dibuat namun kasir lupa mengubah status.</small>
+                                </label>
+                            </div>
+                            <div id="warning_nota_idx_{{ $transaction->id }}" class="alert alert-danger py-2 px-3 mt-2 mb-0 d-none" style="font-size: 0.78rem;">
+                                <i class="fas fa-exclamation-triangle me-1"></i> <strong>Perhatian:</strong> Memilih opsi ini tidak akan menambah catatan Saldo Laci hari ini karena uang dianggap sudah masuk pada tanggal nota dibuat.
+                            </div>
+                        </div>
+
+                        @if(in_array(auth()->user()->role ?? '', ['admin', 'owner']))
+                        <div class="mb-3 p-3 bg-light rounded border">
+                            <label class="form-label fw-bold text-dark small mb-2"><i class="fas fa-user-shield text-primary me-1"></i> Alokasi Fisik Kas Tunai (Role Admin):</label>
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="radio" name="cash_destination" id="dest_idx_drawer_{{ $transaction->id }}" value="drawer" checked>
+                                <label class="form-check-label small" for="dest_idx_drawer_{{ $transaction->id }}">
+                                    <strong>Masuk ke Laci Kasir Pembuat Nota</strong> ({{ optional($transaction->createdBy)->name ?? 'Kasir' }})
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="cash_destination" id="dest_idx_owner_{{ $transaction->id }}" value="owner">
+                                <label class="form-check-label small" for="dest_idx_owner_{{ $transaction->id }}">
+                                    <strong>Dipegang Langsung oleh Admin / Owner</strong> (Tidak masuk laci fisik kasir)
                                 </label>
                             </div>
                         </div>
+                        @endif
 
                         <div class="mb-3">
                             <label class="form-label small text-muted">Catatan Pelunasan (Opsional)</label>
@@ -155,6 +177,20 @@
             </form>
         </div>
     </div>
+    <script>
+    function checkSettlementModeIdx_{{ $transaction->id }}() {
+        const method = document.getElementById('pm_idx_{{ $transaction->id }}')?.value;
+        const isNota = document.getElementById('settle_idx_nota_{{ $transaction->id }}')?.checked;
+        const warn = document.getElementById('warning_nota_idx_{{ $transaction->id }}');
+        if (warn) {
+            if (isNota && method === 'cash') {
+                warn.classList.remove('d-none');
+            } else {
+                warn.classList.add('d-none');
+            }
+        }
+    }
+    </script>
     @endif
     @endforeach
 @endsection

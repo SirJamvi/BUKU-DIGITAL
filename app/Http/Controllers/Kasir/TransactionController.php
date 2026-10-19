@@ -84,9 +84,15 @@ class TransactionController extends Controller
             'payment_method'       => 'required|string',
             'settlement_date_mode' => 'nullable|string|in:today,nota_date',
             'settlement_notes'     => 'nullable|string|max:255',
+            'cash_destination'     => 'nullable|string|in:drawer,owner',
         ]);
 
         try {
+            $isCash = strtolower($request->payment_method) === 'cash';
+            $user = Auth::user();
+            $isAdmin = in_array($user->role, ['admin', 'owner']);
+            $cashDestination = $request->cash_destination ?? 'drawer';
+
             // Tentukan tanggal buku pencatatan cash flow
             $settlementDate = ($request->settlement_date_mode === 'nota_date')
                 ? \Carbon\Carbon::parse($transaction->transaction_date)->startOfDay()
@@ -113,16 +119,28 @@ class TransactionController extends Controller
                 $desc .= ' [Koreksi Nota Tgl ' . \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') . ']';
             }
 
+            if ($isAdmin) {
+                $affectsDrawer = ($isCash && $cashDestination === 'drawer') ? 1 : 0;
+                $creatorId = ($isCash && $cashDestination === 'drawer' && $transaction->created_by)
+                    ? $transaction->created_by
+                    : Auth::id();
+            } else {
+                $affectsDrawer = $isCash ? 1 : 0;
+                $creatorId = Auth::id();
+            }
+
             \App\Models\CashFlow::create([
                 'business_id'    => $transaction->business_id,
                 'type'           => 'income',
                 'category_id'    => 1,
                 'payment_method' => $request->payment_method,
+                'funding_source' => $affectsDrawer ? 'drawer' : 'owner',
+                'affects_drawer' => $affectsDrawer,
                 'amount'         => $transaction->total_amount,
                 'description'    => $desc,
                 'date'           => $settlementDate,
                 'reference_id'   => $transaction->id,
-                'created_by'     => Auth::id(),
+                'created_by'     => $creatorId,
             ]);
 
             return back()->with('success', 'Transaksi berhasil divalidasi dan dicatat sebagai Lunas.');

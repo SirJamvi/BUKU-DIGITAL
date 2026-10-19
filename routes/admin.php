@@ -33,6 +33,7 @@ Route::resource('users', UserController::class);
 
 Route::resource('suppliers', SupplierController::class)->except(['show']);
 Route::resource('transactions', TransactionController::class)->except(['create', 'store', 'destroy']);
+Route::put('transactions/{transaction}/mark-as-paid', [TransactionController::class, 'markAsPaid'])->name('transactions.markAsPaid');
 Route::delete('transactions/{transaction}', [TransactionController::class, 'destroy'])->name('transactions.destroy');
 
 // --- Update Bagian Customer ---

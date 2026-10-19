@@ -30,38 +30,75 @@ class DashboardService
             $myOpeningNotes = $openingRecord ? $openingRecord->notes : '';
 
             // ==========================================================
-            // [PERBAIKAN] 1. Ambil SEMUA Arus Kas Hari Ini (Income & Expense)
+            // [SINKRONISASI] 1. Hitung Saldo Kas Fisik Laci (100% SAMA DENGAN ADMIN)
             // ==========================================================
+            // A. Penjualan Tunai Meja Langsung Lunas Hari Ini (dikecualikan transaksi yang ber-pelunasan)
+            $cashTransactions = Transaction::where('business_id', $businessId)
+                ->where('created_by', $kasirId)
+                ->where('type', 'sale')
+                ->where('payment_status', 'paid')
+                ->where('payment_method', 'cash')
+                ->whereDate('transaction_date', $today)
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('cash_flow')
+                        ->whereColumn('cash_flow.reference_id', 'transactions.id')
+                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                })
+                ->get();
+
+            $cashSalesAmount = (float) $cashTransactions->sum('total_amount');
+
+            // B. Pelunasan Kasbon & Setoran Driver Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
+            $pelunasanCashAmount = (float) CashFlow::where('business_id', $businessId)
+                ->where('created_by', $kasirId)
+                ->where('type', 'income')
+                ->where('payment_method', 'cash')
+                ->whereDate('date', $today)
+                ->where('description', 'LIKE', '%Pelunasan%')
+                ->sum('amount');
+
+            $totalCashInToday = $cashSalesAmount + $pelunasanCashAmount;
+
+            // C. Kas Keluar Tunai Fisik dari Laci Kasir (affects_drawer = 1 & cash)
+            $drawerCashExpensesAmount = (float) CashFlow::where('business_id', $businessId)
+                ->where('created_by', $kasirId)
+                ->where('type', 'expense')
+                ->where(function ($q) {
+                    $q->where('affects_drawer', 1)
+                      ->orWhereNull('affects_drawer');
+                })
+                ->where(function ($q) {
+                    $q->where('payment_method', 'cash')
+                      ->orWhereNull('payment_method');
+                })
+                ->whereDate('date', $today)
+                ->sum('amount');
+
+            // D. Saldo Kas Fisik di Laci Real-Time (100% SAMA PERSIS dengan Admin)
+            $myNetCashToday = $myOpeningCash + $totalCashInToday - $drawerCashExpensesAmount;
+
+            // E. Penerimaan Non-Tunai Hari Ini (Transfer & DANA - Masuk Rekening Owner)
             $allCashFlowsToday = CashFlow::where('created_by', $kasirId)
                 ->whereIn('type', ['income', 'expense'])
                 ->whereDate('date', $today)
                 ->get();
 
-            // Pisahkan Income dan Expense
             $incomesToday = $allCashFlowsToday->where('type', 'income');
             $expensesToday = $allCashFlowsToday->where('type', 'expense');
 
-            // Pengeluaran yang memotong laci kasir (affects_drawer = 1 atau null)
-            $drawerExpensesToday = $expensesToday->filter(function ($cf) {
-                return ($cf->affects_drawer ?? 1) == 1;
-            });
-
-            // Hitung Total Penjualan Kotor (Income) & Total Pengeluaran Laci
-            $mySalesToday = (float) $incomesToday->sum('amount');
-            $myExpensesToday = (float) $drawerExpensesToday->sum('amount');
-
-            // Hitung Uang Bersih di Laci Kasir (Saldo Real-time)
-            $myNetCashToday = $myOpeningCash + $mySalesToday - $myExpensesToday;
+            $nonCashDana = (float) $incomesToday->where('payment_method', 'dana')->sum('amount');
+            $nonCashTransfer = (float) $incomesToday->filter(function ($cf) {
+                $pm = strtolower($cf->payment_method ?? '');
+                return str_contains($pm, 'transfer') || in_array($pm, ['bca', 'bri', 'mandiri', 'bank']);
+            })->sum('amount');
+            $nonCashTotal = (float) $incomesToday->where('payment_method', '!=', 'cash')->sum('amount');
 
             // Hitung Jumlah Struk Masuk
             $myTransactionsToday = $incomesToday->count();
 
-            // ==========================================================
-            // Hitung SALDO BERSIH per Metode Pembayaran (Income - Expense)
-            // ==========================================================
-            // Ambil semua metode pembayaran unik yang dipakai hari ini
+            // Saldo per metode pembayaran untuk detail
             $usedMethods = $allCashFlowsToday->pluck('payment_method')->unique();
-
             $balancesByMethod = collect();
             foreach ($usedMethods as $method) {
                 $inc = $incomesToday->where('payment_method', $method)->sum('amount');
@@ -132,39 +169,51 @@ class DashboardService
             });
 
             return [
-                'myOpeningCash'       => $myOpeningCash,
-                'myOpeningNotes'      => $myOpeningNotes,
-                'mySalesToday'        => $mySalesToday,
-                'myExpensesToday'     => $myExpensesToday, // <-- Variabel baru
-                'myNetCashToday'      => $myNetCashToday,  // <-- Variabel baru (Uang real di laci)
-                'myTransactionsToday' => $myTransactionsToday,
-                'lowStockItems'       => $lowStockItems,
-                'balancesByMethod'    => $balancesByMethod, // <-- Gantikan salesByPaymentMethod
-                'productsSoldToday'   => $productsSoldToday,
-                'activeTrips'         => $activeTrips,      // <-- [BARU] Pengiriman Berjalan
-                'paymentMethods'      => $paymentMethods,   // <-- [BARU] Metode Pembayaran Dinamis
-                'kasbonByCustomer'    => $kasbonByCustomer,
-                'totalKasbonCount'    => $pendingKasbonRaw->count(),
-                'totalKasbonAmount'   => $pendingKasbonRaw->sum('total_amount'),
+                'myOpeningCash'            => $myOpeningCash,
+                'myOpeningNotes'           => $myOpeningNotes,
+                'totalCashInToday'         => $totalCashInToday,
+                'cashSalesAmount'          => $cashSalesAmount,
+                'pelunasanCashAmount'      => $pelunasanCashAmount,
+                'mySalesToday'             => $totalCashInToday, // Alias kompatibilitas laci kasir
+                'myExpensesToday'          => $drawerCashExpensesAmount,
+                'myNetCashToday'           => $myNetCashToday,  // Murni Uang Fisik di Laci Real-Time
+                'nonCashDana'              => $nonCashDana,
+                'nonCashTransfer'          => $nonCashTransfer,
+                'nonCashTotal'             => $nonCashTotal,
+                'myTransactionsToday'      => $myTransactionsToday,
+                'lowStockItems'            => $lowStockItems,
+                'balancesByMethod'         => $balancesByMethod,
+                'productsSoldToday'        => $productsSoldToday,
+                'activeTrips'              => $activeTrips,
+                'paymentMethods'           => $paymentMethods,
+                'kasbonByCustomer'         => $kasbonByCustomer,
+                'totalKasbonCount'         => $pendingKasbonRaw->count(),
+                'totalKasbonAmount'        => $pendingKasbonRaw->sum('total_amount'),
             ];
         } catch (\Exception $e) {
             logger()->error(__METHOD__ . ': ' . $e->getMessage());
 
             return [
-                'myOpeningCash'       => 0,
-                'myOpeningNotes'      => '',
-                'mySalesToday'        => 0,
-                'myExpensesToday'     => 0,
-                'myNetCashToday'      => 0,
-                'myTransactionsToday' => 0,
-                'lowStockItems'       => 0,
-                'balancesByMethod'    => collect(),
-                'productsSoldToday'   => collect(),
-                'activeTrips'         => collect(),
-                'paymentMethods'      => collect(),
-                'kasbonByCustomer'    => collect(),
-                'totalKasbonCount'    => 0,
-                'totalKasbonAmount'   => 0,
+                'myOpeningCash'            => 0,
+                'myOpeningNotes'           => '',
+                'totalCashInToday'         => 0,
+                'cashSalesAmount'          => 0,
+                'pelunasanCashAmount'      => 0,
+                'mySalesToday'             => 0,
+                'myExpensesToday'          => 0,
+                'myNetCashToday'           => 0,
+                'nonCashDana'              => 0,
+                'nonCashTransfer'          => 0,
+                'nonCashTotal'             => 0,
+                'myTransactionsToday'      => 0,
+                'lowStockItems'            => 0,
+                'balancesByMethod'         => collect(),
+                'productsSoldToday'        => collect(),
+                'activeTrips'              => collect(),
+                'paymentMethods'           => collect(),
+                'kasbonByCustomer'         => collect(),
+                'totalKasbonCount'         => 0,
+                'totalKasbonAmount'        => 0,
             ];
         }
     }

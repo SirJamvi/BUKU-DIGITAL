@@ -159,6 +159,13 @@
             {{-- Kolom Aksi --}}
             <td class="text-center">
                 <div class="d-flex justify-content-center gap-1">
+                    {{-- Tombol Pelunasan jika Status Pending / Kasbon --}}
+                    @if($transaction->payment_status === 'pending')
+                    <button type="button" class="btn btn-sm btn-success fw-bold text-white shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAdminPay_{{ $transaction->id }}" title="Validasi Pelunasan Kasbon #{{ $transaction->id }}">
+                        <i class="fas fa-check"></i> Lunasi
+                    </button>
+                    @endif
+
                     {{-- Detail --}}
                     <a href="{{ route('admin.transactions.show', $transaction->id) }}" class="btn btn-sm btn-info text-white" title="Lihat Rincian Transaksi #{{ $transaction->id }}">
                         <i class="fas fa-eye"></i> Detail
@@ -210,4 +217,115 @@
     </div>
     @endif
 </x-card>
+
+{{-- MODAL PELUNASAN KASBON KHUSUS ADMIN --}}
+@foreach ($transactions as $transaction)
+@if($transaction->payment_status === 'pending')
+<div class="modal fade" id="modalAdminPay_{{ $transaction->id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white py-3">
+                <h5 class="modal-title fw-bold mb-0">
+                    <i class="fas fa-money-bill-wave text-success me-2"></i> Pelunasan Kasbon #{{ $transaction->id }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ route('admin.transactions.markAsPaid', $transaction->id) }}" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="modal-body p-4 text-start">
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Pelanggan:</span>
+                            <strong class="text-dark">{{ optional($transaction->customer)->name ?? 'Pelanggan Umum' }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Kasir Pembuat Nota:</span>
+                            <strong class="text-primary">{{ optional($transaction->createdBy)->name ?? 'Kasir' }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Tanggal Nota:</span>
+                            <strong class="text-dark">{{ $transaction->transaction_date ? \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y H:i') : '-' }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between pt-2 border-top">
+                            <span class="fw-bold text-dark">Total Tagihan:</span>
+                            <strong class="fs-5 text-danger">Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Metode Pembayaran</label>
+                        <select name="payment_method" id="admin_pm_{{ $transaction->id }}" class="form-select" onchange="checkAdminSettlementMode_{{ $transaction->id }}()" required>
+                            <option value="cash">💵 Cash / Tunai</option>
+                            <option value="dana">📱 Dana</option>
+                            <option value="transfer-bank">🏦 Transfer Bank</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3 p-3 bg-light rounded border">
+                        <label class="form-label fw-bold text-dark small mb-2">Alokasi Tanggal Pembukuan</label>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="settlement_date_mode" id="admin_settle_today_{{ $transaction->id }}" value="today" checked onchange="checkAdminSettlementMode_{{ $transaction->id }}()">
+                            <label class="form-check-label" for="admin_settle_today_{{ $transaction->id }}">
+                                <strong>Uang Baru Diterima Hari Ini (Masuk Laci / Kas Hari Ini)</strong>
+                                <br><small class="text-muted">Gunakan jika pelanggan/driver baru menyerahkan uangnya hari ini (Cash, DANA, Transfer).</small>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="settlement_date_mode" id="admin_settle_nota_{{ $transaction->id }}" value="nota_date" onchange="checkAdminSettlementMode_{{ $transaction->id }}()">
+                            <label class="form-check-label" for="admin_settle_nota_{{ $transaction->id }}">
+                                <strong>Koreksi Lupa Update (Uang Sudah Diterima Saat Tanggal Nota: {{ $transaction->transaction_date ? \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') : '' }})</strong>
+                                <br><small class="text-muted">Hanya gunakan jika sebenarnya sudah bayar saat nota dibuat namun kasir lupa mengubah status.</small>
+                            </label>
+                        </div>
+                        <div id="admin_warning_nota_{{ $transaction->id }}" class="alert alert-danger py-2 px-3 mt-2 mb-0 d-none" style="font-size: 0.78rem;">
+                            <i class="fas fa-exclamation-triangle me-1"></i> <strong>Perhatian:</strong> Memilih opsi ini tidak akan menambah catatan Saldo Laci hari ini karena uang dianggap sudah masuk pada tanggal nota dibuat.
+                        </div>
+                    </div>
+
+                    <div class="mb-3 p-3 bg-light rounded border">
+                        <label class="form-label fw-bold text-dark small mb-2"><i class="fas fa-user-shield text-primary me-1"></i> Alokasi Fisik Kas Tunai (Role Admin):</label>
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="radio" name="cash_destination" id="admin_dest_drawer_{{ $transaction->id }}" value="drawer" checked>
+                            <label class="form-check-label small" for="admin_dest_drawer_{{ $transaction->id }}">
+                                <strong>Masuk ke Laci Kasir Pembuat Nota</strong> ({{ optional($transaction->createdBy)->name ?? 'Kasir' }})
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="cash_destination" id="admin_dest_owner_{{ $transaction->id }}" value="owner">
+                            <label class="form-check-label small" for="admin_dest_owner_{{ $transaction->id }}">
+                                <strong>Dipegang Langsung oleh Admin / Owner</strong> (Tidak masuk laci fisik kasir)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Catatan Pelunasan (Opsional)</label>
+                        <input type="text" name="settlement_notes" class="form-control form-control-sm" placeholder="Misal: Bukti transfer BCA terlampir">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-success fw-bold"><i class="fas fa-check me-1"></i> Validasi Pelunasan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function checkAdminSettlementMode_{{ $transaction->id }}() {
+    const method = document.getElementById('admin_pm_{{ $transaction->id }}')?.value;
+    const isNota = document.getElementById('admin_settle_nota_{{ $transaction->id }}')?.checked;
+    const warn = document.getElementById('admin_warning_nota_{{ $transaction->id }}');
+    if (warn) {
+        if (isNota && method === 'cash') {
+            warn.classList.remove('d-none');
+        } else {
+            warn.classList.add('d-none');
+        }
+    }
+}
+</script>
+@endif
+@endforeach
 @endsection

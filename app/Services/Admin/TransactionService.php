@@ -130,8 +130,11 @@ class TransactionService
             }
 
             // 3. Hapus Arus Kas (Cash Flow) yang terikat dengan transaksi ini
-            CashFlow::where('reference_id', $transaction->id)
-                ->orWhere('reference_id', 'TX-' . $transaction->id) 
+            CashFlow::where('business_id', $transaction->business_id)
+                ->where(function ($q) use ($transaction) {
+                    $q->where('reference_id', (string) $transaction->id)
+                      ->orWhere('reference_id', 'TX-' . $transaction->id);
+                })
                 ->delete();
 
             // 4. Hapus Data Transaksi
@@ -139,5 +142,13 @@ class TransactionService
 
             return true;
         });
+    }
+
+    /**
+     * Memperbarui transaksi melalui KasirTransactionService agar konsisten.
+     */
+    public function updateTransaction(Transaction $transaction, array $data): Transaction
+    {
+        return app(\App\Services\Kasir\TransactionService::class)->updateTransaction($transaction, $data);
     }
 }

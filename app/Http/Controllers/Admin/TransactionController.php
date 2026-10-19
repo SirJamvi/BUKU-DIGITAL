@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Transaction;
+use App\Models\CashFlow;
 use App\Services\Admin\TransactionService as AdminTransactionService;
 use App\Services\Kasir\TransactionService as KasirTransactionService;
 use App\Http\Requests\Kasir\StoreTransactionRequest;
@@ -11,6 +12,8 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class TransactionController extends Controller
 {
@@ -50,6 +53,73 @@ class TransactionController extends Controller
                 ->with('success', 'Transaksi berhasil diperbarui oleh Admin.');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal memperbarui transaksi: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    /**
+     * [BARU] Memvalidasi pelunasan kasbon dari role Admin dengan opsi alokasi kas fisik (Laci Kasir vs Owner).
+     */
+    public function markAsPaid(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $request->validate([
+            'payment_method'       => 'required|string',
+            'settlement_date_mode' => 'nullable|string|in:today,nota_date',
+            'settlement_notes'     => 'nullable|string|max:255',
+            'cash_destination'     => 'nullable|string|in:drawer,owner',
+        ]);
+
+        try {
+            $isCash = strtolower($request->payment_method) === 'cash';
+            $cashDestination = $request->cash_destination ?? 'drawer';
+
+            $settlementDate = ($request->settlement_date_mode === 'nota_date')
+                ? Carbon::parse($transaction->transaction_date)->startOfDay()
+                : now();
+
+            $transaction->update([
+                'payment_status' => 'paid',
+                'payment_method' => $request->payment_method
+            ]);
+
+            if ($request->filled('settlement_notes')) {
+                $transaction->update([
+                    'notes' => ($transaction->notes ? $transaction->notes . ' | ' : '') . '[Pelunasan: ' . $request->settlement_notes . ']'
+                ]);
+            }
+
+            $desc = 'Pelunasan Transaksi Kasbon #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT);
+            if ($request->filled('settlement_notes')) {
+                $desc .= ' (' . $request->settlement_notes . ')';
+            }
+            if ($request->settlement_date_mode === 'nota_date') {
+                $desc .= ' [Koreksi Nota Tgl ' . Carbon::parse($transaction->transaction_date)->format('d/m/Y') . ']';
+            }
+
+            // Aturan alokasi kas fisik untuk Admin:
+            // Jika drawer: masuk ke laci kasir pembuat nota (created_by = $transaction->created_by, affects_drawer = 1)
+            // Jika owner / non-cash: dipegang Admin/Owner (created_by = Auth::id(), affects_drawer = 0)
+            $affectsDrawer = ($isCash && $cashDestination === 'drawer') ? 1 : 0;
+            $creatorId = ($isCash && $cashDestination === 'drawer' && $transaction->created_by)
+                ? $transaction->created_by
+                : Auth::id();
+
+            CashFlow::create([
+                'business_id'    => $transaction->business_id,
+                'type'           => 'income',
+                'category_id'    => 1,
+                'payment_method' => $request->payment_method,
+                'funding_source' => $affectsDrawer ? 'drawer' : 'owner',
+                'affects_drawer' => $affectsDrawer,
+                'amount'         => $transaction->total_amount,
+                'description'    => $desc,
+                'date'           => $settlementDate,
+                'reference_id'   => $transaction->id,
+                'created_by'     => $creatorId,
+            ]);
+
+            return back()->with('success', "Transaksi #{$transaction->id} berhasil dilunasi oleh Admin.");
+        } catch (\Exception $e) {
+            return back()->with('error', 'Gagal memvalidasi pelunasan: ' . $e->getMessage());
         }
     }
 

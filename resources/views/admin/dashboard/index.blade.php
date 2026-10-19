@@ -78,14 +78,14 @@
             </div>
             <div class="metric-content">
                 <h3 class="metric-title">Arus Kas Riil Hari Ini</h3>
-                <div class="metric-value text-success">Rp {{ number_format($cashInToday ?? 0, 0, ',', '.') }}</div>
+                <div class="metric-value text-success">Rp {{ number_format($totalAllInflowToday ?? ($cashInToday ?? 0), 0, ',', '.') }}</div>
                 <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
                     <span class="badge py-1 px-2" style="background-color: #d1e7dd !important; color: #0f5132 !important; border: 1px solid #badbcc !important; font-size: 0.78rem; font-weight: 600;">
-                        <i class="fas fa-check-circle me-1 text-success"></i>Lunas: Rp {{ number_format($cashInToday ?? 0, 0, ',', '.') }}
+                        <i class="fas fa-check-circle me-1 text-success"></i>Lunas (Hari Ini): Rp {{ number_format($cashInToday ?? 0, 0, ',', '.') }}
                     </span>
                     @if(($pendingToday ?? 0) > 0)
                     <span class="badge py-1 px-2" style="background-color: #f8d7da !important; color: #842029 !important; border: 1px solid #f5c2c7 !important; font-size: 0.78rem; font-weight: 600;" title="Total Kasbon / Tempo Baru Hari Ini">
-                        <i class="fas fa-clock me-1 text-danger"></i>Kasbon: Rp {{ number_format($pendingToday, 0, ',', '.') }}
+                        <i class="fas fa-clock me-1 text-danger"></i>Kasbon (Piutang): Rp {{ number_format($pendingToday, 0, ',', '.') }}
                     </span>
                     @else
                     <span class="badge py-1 px-2" style="background-color: #f8f9fa !important; color: #6c757d !important; border: 1px solid #dee2e6 !important; font-size: 0.78rem; font-weight: 600;">
@@ -93,6 +93,25 @@
                     </span>
                     @endif
                 </div>
+
+                {{-- [BARU] Badge Rincian Saluran Pembayaran (Cash, DANA, Transfer Bank, & Pelunasan Kasbon) --}}
+                <div class="d-flex flex-wrap gap-1 align-items-center mt-2 pt-2 border-top" style="font-size: 0.72rem;">
+                    <span class="badge bg-light text-dark border py-1 px-2" title="Total Uang Masuk Tunai (Penjualan + Pelunasan Kasbon)">
+                        💵 Cash: <strong>Rp {{ number_format($totalInflowCash ?? 0, 0, ',', '.') }}</strong>
+                    </span>
+                    <span class="badge bg-light text-dark border py-1 px-2" title="Total Uang Masuk via DANA (Penjualan + Pelunasan Kasbon)">
+                        📱 DANA: <strong>Rp {{ number_format($totalInflowDana ?? 0, 0, ',', '.') }}</strong>
+                    </span>
+                    <span class="badge bg-light text-dark border py-1 px-2" title="Total Uang Masuk via Transfer Bank (Penjualan + Pelunasan Kasbon)">
+                        🏦 Transfer: <strong>Rp {{ number_format($totalInflowTransfer ?? 0, 0, ',', '.') }}</strong>
+                    </span>
+                </div>
+                @if(($pelunasanCairTotal ?? 0) > 0)
+                <div class="mt-1 small" style="font-size: 0.7rem; color: #475569;">
+                    <i class="fas fa-rotate text-primary me-1"></i>Pelunasan Kasbon Cair: <strong>Rp {{ number_format($pelunasanCairTotal, 0, ',', '.') }}</strong> 
+                    <span class="text-muted">(Tunai: Rp {{ number_format($pelunasanCairCash ?? 0, 0, ',', '.') }} | Non-Tunai: Rp {{ number_format($pelunasanCairNonCash ?? 0, 0, ',', '.') }})</span>
+                </div>
+                @endif
             </div>
             <div class="metric-progress">
                 <div class="progress-bar" style="width: 85%; background: linear-gradient(90deg, #11998e, #38ef7d);"></div>
@@ -593,6 +612,22 @@
 <div class="row mb-4">
     <div class="col-12">
         <div class="card border-0 shadow-sm rounded-3">
+            @php
+                $allLogs = $settlementLogs ?? collect();
+                $logTotalCount = $allLogs->count();
+                $logTotalAmount = $allLogs->sum('amount');
+
+                $logCashAmount = $allLogs->filter(fn($l) => strtolower($l->payment_method ?? '') === 'cash')->sum('amount');
+                $logDanaAmount = $allLogs->filter(fn($l) => strtolower($l->payment_method ?? '') === 'dana')->sum('amount');
+                $logTransferAmount = $allLogs->filter(fn($l) => in_array(strtolower($l->payment_method ?? ''), ['transfer', 'transfer-bank', 'transfer bank', 'transfer_bank', 'bank_transfer']))->sum('amount');
+
+                $logBackdateList = $allLogs->filter(function($l) {
+                    return $l->date && $l->created_at && ($l->date->format('Y-m-d') !== $l->created_at->format('Y-m-d'));
+                });
+                $logBackdateCount = $logBackdateList->count();
+                $logBackdateAmount = $logBackdateList->sum('amount');
+            @endphp
+
             <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h5 class="mb-0 fw-bold text-dark">
@@ -602,13 +637,35 @@
                 </div>
                 <div>
                     <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 fw-semibold">
-                        <i class="fas fa-check-double me-1"></i> Total: {{ isset($settlementLogs) ? $settlementLogs->count() : 0 }} Pelunasan
-                        @if(isset($settlementLogs) && $settlementLogs->isNotEmpty())
-                            (Rp {{ number_format($settlementLogs->sum('amount'), 0, ',', '.') }})
+                        <i class="fas fa-check-double me-1"></i> Total: {{ $logTotalCount }} Pelunasan
+                        @if($logTotalCount > 0)
+                            (Rp {{ number_format($logTotalAmount, 0, ',', '.') }})
                         @endif
                     </span>
                 </div>
             </div>
+
+            {{-- [BARU] DERETAN SUMMARY BADGES LOG PELUNASAN HARI INI --}}
+            <div class="px-4 py-3 bg-light border-bottom d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge py-2 px-3 fs-6" style="background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1;">
+                    🧾 <strong>Total Aktivitas:</strong> {{ $logTotalCount }} Transaksi (Rp {{ number_format($logTotalAmount, 0, ',', '.') }})
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">
+                    💵 <strong>Pelunasan CASH (Masuk Laci):</strong> Rp {{ number_format($logCashAmount, 0, ',', '.') }}
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                    📱 <strong>Pelunasan DANA (Non-Laci):</strong> Rp {{ number_format($logDanaAmount, 0, ',', '.') }}
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe;">
+                    🏦 <strong>Pelunasan TRANSFER BANK (Non-Laci):</strong> Rp {{ number_format($logTransferAmount, 0, ',', '.') }}
+                </span>
+                @if($logBackdateCount > 0)
+                <span class="badge py-2 px-3 fs-6" style="background-color: #ffedd5; color: #9a3412; border: 1px solid #fed7aa;" title="Transaksi yang dialokasikan ke tanggal nota awal, tidak menambah laci hari ini">
+                    ⚠️ <strong>Koreksi Backdate (Tgl Nota Lalu):</strong> {{ $logBackdateCount }} Transaksi (Rp {{ number_format($logBackdateAmount, 0, ',', '.') }})
+                </span>
+                @endif
+            </div>
+
             <div class="card-body p-0">
                 @if(isset($settlementLogs) && $settlementLogs->isNotEmpty())
                 <div class="table-responsive">
@@ -628,13 +685,6 @@
                             @foreach($settlementLogs as $log)
                             @php
                                 $pm = strtolower($log->payment_method ?? 'cash');
-                                $pmBadge = match($pm) {
-                                    'cash' => 'bg-success text-white',
-                                    'dana' => 'bg-primary text-white',
-                                    'transfer-bank', 'transfer bank', 'transfer' => 'bg-info text-dark',
-                                    'qris' => 'bg-warning text-dark',
-                                    default => 'bg-secondary text-white'
-                                };
                                 $isSameDay = $log->date && $log->created_at && ($log->date->format('Y-m-d') === $log->created_at->format('Y-m-d'));
                                 $trx = $log->transaction;
                             @endphp
@@ -667,19 +717,40 @@
                                     Rp {{ number_format($log->amount, 0, ',', '.') }}
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge {{ $pmBadge }} px-2 py-1">
-                                        {{ strtoupper(str_replace('-', ' ', $log->payment_method ?? 'CASH')) }}
-                                    </span>
+                                    @if($pm === 'cash')
+                                        <span class="badge bg-success px-2 py-1 text-white">
+                                            <i class="fas fa-money-bill-wave me-1"></i>CASH (Laci)
+                                        </span>
+                                    @elseif($pm === 'dana')
+                                        <span class="badge px-2 py-1" style="background-color: #0284c7; color: white;">
+                                            <i class="fas fa-mobile-screen me-1"></i>DANA (Non-Laci)
+                                        </span>
+                                    @elseif(in_array($pm, ['transfer', 'transfer-bank', 'transfer bank', 'transfer_bank', 'bank_transfer']))
+                                        <span class="badge px-2 py-1" style="background-color: #6366f1; color: white;">
+                                            <i class="fas fa-building-columns me-1"></i>TRANSFER BANK (Non-Laci)
+                                        </span>
+                                    @else
+                                        <span class="badge bg-secondary px-2 py-1 text-white">
+                                            {{ strtoupper($pm) }} (Non-Laci)
+                                        </span>
+                                    @endif
                                 </td>
                                 <td class="text-center">
                                     @if($isSameDay)
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">
-                                            <i class="fas fa-check-circle me-1"></i> Masuk Kas Hari Ini
-                                        </span>
+                                        @if($pm === 'cash')
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">
+                                                <i class="fas fa-check-circle me-1"></i> Masuk Laci Kasir Hari Ini
+                                            </span>
+                                        @else
+                                            <span class="badge bg-info bg-opacity-10 text-info border border-info px-2 py-1">
+                                                <i class="fas fa-university me-1"></i> Masuk Rekening/Non-Tunai Hari Ini
+                                            </span>
+                                        @endif
                                     @else
                                         <span class="badge bg-warning bg-opacity-25 text-dark border border-warning px-2 py-1 fw-bold" title="Uang dialokasikan ke tanggal nota awal, tidak menambah laci hari ini">
                                             <i class="fas fa-triangle-exclamation text-warning me-1"></i> ⚠️ Koreksi ke Tgl Nota ({{ $log->date ? $log->date->format('d/m/Y') : '-' }})
                                         </span>
+                                        <div class="small text-muted mt-1" style="font-size: 0.72rem;">Oleh: <strong>{{ $log->createdBy->name ?? 'Kasir' }}</strong></div>
                                     @endif
                                 </td>
                                 <td class="pe-4">
@@ -1099,14 +1170,44 @@
                     </div>
                 </div>
 
-                {{-- Alert Info Transaksi Non-Tunai & Kasbon --}}
-                <div class="alert alert-secondary py-2 px-3 mb-0 d-flex justify-content-between align-items-center small">
-                    <div>
-                        <i class="fas fa-info-circle me-1 text-primary"></i>
-                        Transaksi Non-Tunai (Transfer/QRIS): <strong>Rp {{ number_format($c['non_cash_sales'], 0, ',', '.') }}</strong>
-                    </div>
-                    <div>
-                        Kasbon / Belum Bayar: <strong class="text-danger">Rp {{ number_format($c['kasbon'], 0, ',', '.') }}</strong>
+                {{-- [BARU] Bar Rincian Lengkap: Penjualan Non-Tunai, Pelunasan Non-Tunai & Kasbon Baru --}}
+                <div class="p-3 bg-white rounded border shadow-sm mb-0">
+                    <div class="row g-2 align-items-center">
+                        {{-- 1. Penjualan Non-Tunai Hari Ini --}}
+                        <div class="col-md-4">
+                            <div class="small text-muted fw-bold mb-1"><i class="fas fa-credit-card text-primary me-1"></i>Penjualan Non-Tunai Hari Ini:</div>
+                            <div class="d-flex flex-wrap gap-1">
+                                <span class="badge py-1 px-2" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 0.75rem;">
+                                    📱 DANA: <strong>Rp {{ number_format($c['non_cash_dana'] ?? 0, 0, ',', '.') }}</strong>
+                                </span>
+                                <span class="badge py-1 px-2" style="background-color: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; font-size: 0.75rem;">
+                                    🏦 Transfer: <strong>Rp {{ number_format($c['non_cash_transfer'] ?? 0, 0, ',', '.') }}</strong>
+                                </span>
+                            </div>
+                        </div>
+
+                        {{-- 2. Pelunasan Kasbon via Non-Tunai (Tidak Masuk Laci Kasir) --}}
+                        <div class="col-md-5">
+                            <div class="small text-muted fw-bold mb-1">
+                                <i class="fas fa-rotate text-info me-1"></i>Pelunasan Kasbon (DANA / Transfer):
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 align-items-center">
+                                <span class="badge py-1 px-2" style="background-color: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; font-size: 0.75rem;">
+                                    Total: <strong>Rp {{ number_format($c['pelunasan_non_cash_total'] ?? 0, 0, ',', '.') }}</strong>
+                                </span>
+                                <span class="small text-muted" style="font-size: 0.72rem;">
+                                    (DANA: Rp {{ number_format($c['pelunasan_dana'] ?? 0, 0, ',', '.') }} | TF: Rp {{ number_format($c['pelunasan_transfer'] ?? 0, 0, ',', '.') }})
+                                </span>
+                            </div>
+                        </div>
+
+                        {{-- 3. Kasbon Baru Hari Ini (Belum Bayar) --}}
+                        <div class="col-md-3 text-md-end">
+                            <div class="small text-muted fw-bold mb-1"><i class="fas fa-clock text-danger me-1"></i>Kasbon Baru Hari Ini:</div>
+                            <span class="badge py-1 px-2 {{ ($c['kasbon'] ?? 0) > 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-light text-muted border' }}" style="font-size: 0.78rem;">
+                                <strong>Rp {{ number_format($c['kasbon'] ?? 0, 0, ',', '.') }}</strong>
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>

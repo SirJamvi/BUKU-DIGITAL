@@ -87,14 +87,93 @@ class DashboardService
         $cashInToday = (float) Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('payment_status', 'paid')
+            ->where('status', 'completed')
             ->whereDate('transaction_date', $today)
             ->sum('total_amount');
 
         $pendingToday = (float) Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('payment_status', 'pending')
+            ->where('status', 'completed')
             ->whereDate('transaction_date', $today)
             ->sum('total_amount');
+
+        // Rincian Saluran Pembayaran Hari Ini:
+        // A. Penjualan Langsung Lunas di Kasir (Cash, DANA, Transfer)
+        $todaySalesCash = (float) Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('payment_status', 'paid')
+            ->where('payment_method', 'cash')
+            ->where('status', 'completed')
+            ->whereDate('transaction_date', $today)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('cash_flow')
+                    ->whereColumn('cash_flow.reference_id', 'transactions.id')
+                    ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+            })
+            ->sum('total_amount');
+
+        $todaySalesDana = (float) Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('payment_status', 'paid')
+            ->where('payment_method', 'dana')
+            ->where('status', 'completed')
+            ->whereDate('transaction_date', $today)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('cash_flow')
+                    ->whereColumn('cash_flow.reference_id', 'transactions.id')
+                    ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+            })
+            ->sum('total_amount');
+
+        $todaySalesTransfer = (float) Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('payment_status', 'paid')
+            ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
+            ->where('status', 'completed')
+            ->whereDate('transaction_date', $today)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('cash_flow')
+                    ->whereColumn('cash_flow.reference_id', 'transactions.id')
+                    ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+            })
+            ->sum('total_amount');
+
+        // B. Pelunasan Kasbon & Pengiriman yang Cair Hari Ini
+        $pelunasanCashToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'income')
+            ->where('payment_method', 'cash')
+            ->whereDate('date', $today)
+            ->where('description', 'LIKE', '%Pelunasan%')
+            ->sum('amount');
+
+        $pelunasanDanaToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'income')
+            ->where('payment_method', 'dana')
+            ->whereDate('date', $today)
+            ->where('description', 'LIKE', '%Pelunasan%')
+            ->sum('amount');
+
+        $pelunasanTransferToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'income')
+            ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
+            ->whereDate('date', $today)
+            ->where('description', 'LIKE', '%Pelunasan%')
+            ->sum('amount');
+
+        // Total per saluran masuk uang hari ini
+        $totalInflowCash = $todaySalesCash + $pelunasanCashToday;
+        $totalInflowDana = $todaySalesDana + $pelunasanDanaToday;
+        $totalInflowTransfer = $todaySalesTransfer + $pelunasanTransferToday;
+        $totalAllInflowToday = $totalInflowCash + $totalInflowDana + $totalInflowTransfer;
+
+        // Info Pelunasan Kasbon Lalu Cair Hari Ini
+        $pelunasanCairTotal = $pelunasanCashToday + $pelunasanDanaToday + $pelunasanTransferToday;
+        $pelunasanCairCash = $pelunasanCashToday;
+        $pelunasanCairNonCash = $pelunasanDanaToday + $pelunasanTransferToday;
 
         // Sisa Stok Cold Storage Hanya untuk Produk Fisik Es Kristal (Abaikan Ongkos Kirim)
         $totalReadyStock = (int) Inventory::where('business_id', $businessId)
@@ -161,6 +240,13 @@ class DashboardService
             'totalBallSoldToday' => $totalBallSoldToday,
             'cashInToday' => $cashInToday,
             'pendingToday' => $pendingToday,
+            'totalInflowCash' => $totalInflowCash,
+            'totalInflowDana' => $totalInflowDana,
+            'totalInflowTransfer' => $totalInflowTransfer,
+            'totalAllInflowToday' => $totalAllInflowToday,
+            'pelunasanCairTotal' => $pelunasanCairTotal,
+            'pelunasanCairCash' => $pelunasanCairCash,
+            'pelunasanCairNonCash' => $pelunasanCairNonCash,
             'totalReadyStock' => $totalReadyStock,
             'readyStockItems' => $readyStockItems,
             'netProfitThisMonth' => $netProfitThisMonth,
@@ -331,6 +417,7 @@ class DashboardService
                 ->where('type', 'sale')
                 ->where('payment_status', 'paid')
                 ->where('payment_method', 'cash')
+                ->where('status', 'completed')
                 ->whereDate('transaction_date', $filterDate)
                 ->whereNotExists(function ($query) {
                     $query->select(DB::raw(1))
@@ -345,11 +432,15 @@ class DashboardService
 
             // 2. Pelunasan Kasbon & Setoran Driver Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
             // Uang kas fisik masuk 100% ke kasir yang menerima uang & menekan tombol pelunasan/selesaikan pengiriman
-            // (baik untuk nota transaksi hari ini maupun nota hari-hari sebelumnya)
+            // (hanya yang memotong/menambah laci kasir: affects_drawer = 1 & cash)
             $pelunasanCashAmount = (float) CashFlow::where('cash_flow.business_id', $businessId)
                 ->where('cash_flow.created_by', $user->id)
                 ->where('cash_flow.type', 'income')
                 ->where('cash_flow.payment_method', 'cash')
+                ->where(function ($q) {
+                    $q->where('cash_flow.affects_drawer', 1)
+                      ->orWhereNull('cash_flow.affects_drawer');
+                })
                 ->whereDate('cash_flow.date', $filterDate)
                 ->where('cash_flow.description', 'LIKE', '%Pelunasan%')
                 ->sum('amount');
@@ -361,6 +452,7 @@ class DashboardService
                 ->where('business_id', $businessId)
                 ->where('created_by', $user->id)
                 ->where('type', 'sale')
+                ->where('status', 'completed')
                 ->whereDate('transaction_date', $filterDate)
                 ->get();
 
@@ -448,23 +540,68 @@ class DashboardService
             // Laba Bersih = Omset Penjualan - COGS - Beban Operasional Murni
             $shiftNetProfit = $totalSalesRevenue - $cogsAmount - $operationalExpensesAmount;
 
-            // 7. Transaksi Non-Tunai & Kasbon (sebagai data pendukung)
-            $nonCashSalesAmount = (float) Transaction::where('business_id', $businessId)
+            // 7. Transaksi Non-Tunai Langsung Hari Ini (DANA & Transfer Bank)
+            $nonCashDana = (float) Transaction::where('business_id', $businessId)
                 ->where('created_by', $user->id)
                 ->where('type', 'sale')
                 ->where('payment_status', 'paid')
-                ->where('payment_method', '!=', 'cash')
+                ->where('payment_method', 'dana')
+                ->where('status', 'completed')
                 ->whereDate('transaction_date', $filterDate)
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('cash_flow')
+                        ->whereColumn('cash_flow.reference_id', 'transactions.id')
+                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                })
                 ->sum('total_amount');
 
+            $nonCashTransfer = (float) Transaction::where('business_id', $businessId)
+                ->where('created_by', $user->id)
+                ->where('type', 'sale')
+                ->where('payment_status', 'paid')
+                ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
+                ->where('status', 'completed')
+                ->whereDate('transaction_date', $filterDate)
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('cash_flow')
+                        ->whereColumn('cash_flow.reference_id', 'transactions.id')
+                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                })
+                ->sum('total_amount');
+
+            $nonCashSalesAmount = $nonCashDana + $nonCashTransfer;
+
+            // 8. Pelunasan Kasbon via Non-Tunai yang Diproses Kasir Ini (Tidak Masuk Laci Fisik)
+            $pelunasanDanaAmount = (float) CashFlow::where('cash_flow.business_id', $businessId)
+                ->where('cash_flow.created_by', $user->id)
+                ->where('cash_flow.type', 'income')
+                ->where('cash_flow.payment_method', 'dana')
+                ->whereDate('cash_flow.date', $filterDate)
+                ->where('cash_flow.description', 'LIKE', '%Pelunasan%')
+                ->sum('amount');
+
+            $pelunasanTransferAmount = (float) CashFlow::where('cash_flow.business_id', $businessId)
+                ->where('cash_flow.created_by', $user->id)
+                ->where('cash_flow.type', 'income')
+                ->whereIn('cash_flow.payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
+                ->whereDate('cash_flow.date', $filterDate)
+                ->where('cash_flow.description', 'LIKE', '%Pelunasan%')
+                ->sum('amount');
+
+            $pelunasanNonCashTotal = $pelunasanDanaAmount + $pelunasanTransferAmount;
+
+            // 9. Kasbon Baru Hari Ini
             $kasbonAmount = (float) Transaction::where('business_id', $businessId)
                 ->where('created_by', $user->id)
                 ->where('type', 'sale')
                 ->where('payment_status', 'pending')
+                ->where('status', 'completed')
                 ->whereDate('transaction_date', $filterDate)
                 ->sum('total_amount');
 
-            $hasActivity = ($openingCash > 0 || $totalCashIn > 0 || $allCashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashSalesAmount > 0 || $cashOrdersCount > 0 || $expensesList->isNotEmpty());
+            $hasActivity = ($openingCash > 0 || $totalCashIn > 0 || $allCashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashDana > 0 || $nonCashTransfer > 0 || $pelunasanNonCashTotal > 0 || $kasbonAmount > 0 || $cashOrdersCount > 0 || $expensesList->isNotEmpty());
 
             // Jika kasir tidak aktif dan sama sekali tidak ada aktivitas di tanggal filter, jangan tampilkan
             if (!$user->is_active && !$hasActivity) {
@@ -472,27 +609,32 @@ class DashboardService
             }
 
             $cashierData[] = [
-                'user_id'              => $user->id,
-                'name'                 => $user->name,
-                'role'                 => $user->role,
-                'phone'                => $user->phone ?? '-',
-                'total_cash_in'        => $totalCashIn,
-                'cash_sales'           => $cashSalesAmount,
-                'pelunasan_cash'       => $pelunasanCashAmount,
-                'cash_orders_count'    => $cashOrdersCount,
-                'sales_revenue'        => $totalSalesRevenue,
-                'cogs'                 => $cogsAmount,
-                'items_sold'           => array_values($itemsSoldBreakdown),
-                'expenses'             => $allCashExpensesAmount,
-                'expenses_list'        => $expensesList,
-                'operational_expenses' => $operationalExpensesAmount,
-                'opening_cash'         => $openingCash,
-                'physical_drawer'      => $physicalCashDrawer,
-                'shift_net_profit'     => $shiftNetProfit,
-                'real_cash_on_hand'    => $physicalCashDrawer, // Alias untuk kompatibilitas
-                'non_cash_sales'       => $nonCashSalesAmount,
-                'kasbon'               => $kasbonAmount,
-                'has_activity'         => $hasActivity,
+                'user_id'                  => $user->id,
+                'name'                     => $user->name,
+                'role'                     => $user->role,
+                'phone'                    => $user->phone ?? '-',
+                'total_cash_in'            => $totalCashIn,
+                'cash_sales'               => $cashSalesAmount,
+                'pelunasan_cash'           => $pelunasanCashAmount,
+                'cash_orders_count'        => $cashOrdersCount,
+                'sales_revenue'            => $totalSalesRevenue,
+                'cogs'                     => $cogsAmount,
+                'items_sold'               => array_values($itemsSoldBreakdown),
+                'expenses'                 => $allCashExpensesAmount,
+                'expenses_list'            => $expensesList,
+                'operational_expenses'     => $operationalExpensesAmount,
+                'opening_cash'             => $openingCash,
+                'physical_drawer'          => $physicalCashDrawer,
+                'shift_net_profit'         => $shiftNetProfit,
+                'real_cash_on_hand'        => $physicalCashDrawer, // Alias untuk kompatibilitas
+                'non_cash_sales'           => $nonCashSalesAmount,
+                'non_cash_dana'            => $nonCashDana,
+                'non_cash_transfer'        => $nonCashTransfer,
+                'pelunasan_non_cash_total' => $pelunasanNonCashTotal,
+                'pelunasan_dana'           => $pelunasanDanaAmount,
+                'pelunasan_transfer'       => $pelunasanTransferAmount,
+                'kasbon'                   => $kasbonAmount,
+                'has_activity'             => $hasActivity,
             ];
         }
 
