@@ -320,7 +320,11 @@ class DashboardService
                 continue;
             }
 
-            // 1. Transaksi Penjualan Tunai Lunas (Masuk ke Laci)
+            // 1. Transaksi Penjualan Tunai Lunas Langsung di Meja Kasir (Masuk ke Laci)
+            // HANYA transaksi tunai yang dibuat langsung lunas di POS oleh kasir ini
+            // Mengecualikan transaksi yang dilunasi lewat proses pelunasan kasbon/pengiriman driver agar:
+            // - Mencegah double-counting
+            // - Mencegah uang pelunasan shift sore (Kasir B) salah masuk ke laci pembuat nota shift pagi (Kasir A)
             $cashTransactions = Transaction::with(['details.product'])
                 ->where('business_id', $businessId)
                 ->where('created_by', $user->id)
@@ -328,27 +332,26 @@ class DashboardService
                 ->where('payment_status', 'paid')
                 ->where('payment_method', 'cash')
                 ->whereDate('transaction_date', $filterDate)
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('cash_flow')
+                        ->whereColumn('cash_flow.reference_id', 'transactions.id')
+                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                })
                 ->get();
 
             $cashSalesAmount = (float) $cashTransactions->sum('total_amount');
             $cashOrdersCount = $cashTransactions->count();
 
-            // 2. Pelunasan Kasbon Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
-            // HANYA menghitung pelunasan dari transaksi hari-hari sebelumnya (DATE(transaction_date) < $filterDate)
-            // Transaksi yang dibuat hari ini dan dilunasi hari ini sudah terhitung di $cashSalesAmount (mencegah double-counting)
+            // 2. Pelunasan Kasbon & Setoran Driver Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
+            // Uang kas fisik masuk 100% ke kasir yang menerima uang & menekan tombol pelunasan/selesaikan pengiriman
+            // (baik untuk nota transaksi hari ini maupun nota hari-hari sebelumnya)
             $pelunasanCashAmount = (float) CashFlow::where('cash_flow.business_id', $businessId)
                 ->where('cash_flow.created_by', $user->id)
                 ->where('cash_flow.type', 'income')
                 ->where('cash_flow.payment_method', 'cash')
                 ->whereDate('cash_flow.date', $filterDate)
                 ->where('cash_flow.description', 'LIKE', '%Pelunasan%')
-                ->whereExists(function ($query) use ($businessId, $filterDate) {
-                    $query->select(DB::raw(1))
-                        ->from('transactions')
-                        ->whereColumn('transactions.id', 'cash_flow.reference_id')
-                        ->where('transactions.business_id', $businessId)
-                        ->whereDate('transactions.transaction_date', '<', $filterDate);
-                })
                 ->sum('amount');
 
             $totalCashIn = $cashSalesAmount + $pelunasanCashAmount;

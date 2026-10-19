@@ -338,6 +338,12 @@
                                         <span class="small text-muted"><i class="fas fa-money-bill-wave text-success me-1"></i> Kas Tunai Masuk:</span>
                                         <span class="fw-bold text-success">+ Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</span>
                                     </div>
+                                    @if(($c['pelunasan_cash'] ?? 0) > 0)
+                                    <div class="d-flex justify-content-between align-items-center px-1 pb-1 border-bottom text-muted" style="font-size: 0.7rem; background-color: #f8fafc;">
+                                        <span>↳ Meja: Rp {{ number_format($c['cash_sales'], 0, ',', '.') }}</span>
+                                        <span>Setoran: Rp {{ number_format($c['pelunasan_cash'], 0, ',', '.') }}</span>
+                                    </div>
+                                    @endif
                                     <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                                         <span class="small text-muted"><i class="fas fa-receipt text-danger me-1"></i> Kas Keluar dari Laci:</span>
                                         <span class="fw-bold text-danger">- Rp {{ number_format($c['expenses'], 0, ',', '.') }}</span>
@@ -954,11 +960,11 @@
                             <h5 class="fw-bold mb-2 text-success text-center">Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</h5>
                             <div class="border-top pt-2" style="font-size: 0.72rem; line-height: 1.4;">
                                 <div class="d-flex justify-content-between text-muted">
-                                    <span>Penjualan Tunai Hari Ini:</span>
+                                    <span>Penjualan Tunai Meja:</span>
                                     <strong class="text-dark">Rp {{ number_format($c['cash_sales'], 0, ',', '.') }}</strong>
                                 </div>
                                 <div class="d-flex justify-content-between text-muted">
-                                    <span>Pelunasan Kasbon Lalu (Tunai):</span>
+                                    <span>Pelunasan & Driver (Tunai):</span>
                                     <strong class="text-dark">Rp {{ number_format($c['pelunasan_cash'], 0, ',', '.') }}</strong>
                                 </div>
                                 <div class="d-flex justify-content-between text-muted">
