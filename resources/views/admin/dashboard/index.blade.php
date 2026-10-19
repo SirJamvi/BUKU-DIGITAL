@@ -617,6 +617,28 @@
                 $logTotalCount = $allLogs->count();
                 $logTotalAmount = $allLogs->sum('amount');
 
+                // Pilah kategori log:
+                // 1. Order Trip Driver: deskripsi mengandung 'Pelunasan Pengiriman'
+                // 2. Kasbon Murni: deskripsi TIDAK mengandung 'Pelunasan Pengiriman' (misal: 'Pelunasan Transaksi Kasbon', 'Pelunasan Kasbon (Bulk)', dll)
+                $logTripList = $allLogs->filter(function($l) {
+                    return str_contains($l->description ?? '', 'Pelunasan Pengiriman');
+                });
+                $logKasbonList = $allLogs->filter(function($l) {
+                    return !str_contains($l->description ?? '', 'Pelunasan Pengiriman');
+                });
+
+                $logKasbonCount = $logKasbonList->count();
+                $logKasbonAmount = $logKasbonList->sum('amount');
+                $kasbonCashAmount = $logKasbonList->filter(fn($l) => strtolower($l->payment_method ?? '') === 'cash')->sum('amount');
+                $kasbonDanaAmount = $logKasbonList->filter(fn($l) => strtolower($l->payment_method ?? '') === 'dana')->sum('amount');
+                $kasbonTransferAmount = $logKasbonList->filter(fn($l) => in_array(strtolower($l->payment_method ?? ''), ['transfer', 'transfer-bank', 'transfer bank', 'transfer_bank', 'bank_transfer']))->sum('amount');
+
+                $logTripCount = $logTripList->count();
+                $logTripAmount = $logTripList->sum('amount');
+                $tripCashAmount = $logTripList->filter(fn($l) => strtolower($l->payment_method ?? '') === 'cash')->sum('amount');
+                $tripDanaAmount = $logTripList->filter(fn($l) => strtolower($l->payment_method ?? '') === 'dana')->sum('amount');
+                $tripTransferAmount = $logTripList->filter(fn($l) => in_array(strtolower($l->payment_method ?? ''), ['transfer', 'transfer-bank', 'transfer bank', 'transfer_bank', 'bank_transfer']))->sum('amount');
+
                 $logCashAmount = $allLogs->filter(fn($l) => strtolower($l->payment_method ?? '') === 'cash')->sum('amount');
                 $logDanaAmount = $allLogs->filter(fn($l) => strtolower($l->payment_method ?? '') === 'dana')->sum('amount');
                 $logTransferAmount = $allLogs->filter(fn($l) => in_array(strtolower($l->payment_method ?? ''), ['transfer', 'transfer-bank', 'transfer bank', 'transfer_bank', 'bank_transfer']))->sum('amount');
@@ -628,51 +650,118 @@
                 $logBackdateAmount = $logBackdateList->sum('amount');
             @endphp
 
-            <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
-                    <h5 class="mb-0 fw-bold text-dark">
-                        <i class="fas fa-file-invoice-dollar text-success me-2"></i> Log Aktivitas Pelunasan Kasbon & Pengiriman ({{ $isToday ? 'Hari Ini' : $formattedDate }})
+                    <h5 class="mb-1 fw-bold text-dark d-flex align-items-center gap-2">
+                        <i class="fas fa-file-invoice-dollar text-success"></i> 
+                        <span>Log Aktivitas Pelunasan ({{ $isToday ? 'Hari Ini' : $formattedDate }})</span>
                     </h5>
-                    <small class="text-muted">Audit real-time setiap transaksi kasbon/pengiriman yang divalidasi lunas oleh kasir.</small>
+                    <small class="text-muted">Audit transaksi kasbon & trip pengiriman yang divalidasi kasir.</small>
                 </div>
-                <div>
-                    <span class="badge badge-soft-success px-3 py-2 fw-semibold" style="background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
-                        <i class="fas fa-check-double me-1"></i> Total: {{ $logTotalCount }} Pelunasan
-                        @if($logTotalCount > 0)
-                            (Rp {{ number_format($logTotalAmount, 0, ',', '.') }})
-                        @endif
-                    </span>
+
+                {{-- FILTER TABS NAVIGATION --}}
+                <div class="d-flex align-items-center gap-1 bg-light p-1 rounded-3 border" id="settlementFilterTabs">
+                    <button type="button" 
+                            class="btn btn-sm settlement-tab-btn active fw-bold px-3 py-1 rounded-2 shadow-sm" 
+                            data-tab="kasbon" 
+                            onclick="switchSettlementFilter('kasbon')"
+                            style="background-color: #b91c1c; color: #ffffff; border: 1px solid #991b1b; transition: all 0.2s ease;">
+                        <i class="fas fa-hand-holding-usd me-1"></i> Pelunasan Kasbon
+                        <span class="badge bg-white text-danger ms-1 fw-bold">{{ $logKasbonCount }}</span>
+                    </button>
+                    <button type="button" 
+                            class="btn btn-sm settlement-tab-btn btn-light text-secondary fw-semibold px-3 py-1 rounded-2" 
+                            data-tab="trip" 
+                            onclick="switchSettlementFilter('trip')"
+                            style="transition: all 0.2s ease;">
+                        <i class="fas fa-motorcycle me-1"></i> Order Trip Driver
+                        <span class="badge bg-secondary text-white ms-1">{{ $logTripCount }}</span>
+                    </button>
+                    <button type="button" 
+                            class="btn btn-sm settlement-tab-btn btn-light text-secondary fw-semibold px-3 py-1 rounded-2" 
+                            data-tab="all" 
+                            onclick="switchSettlementFilter('all')"
+                            style="transition: all 0.2s ease;">
+                        <i class="fas fa-list me-1"></i> Semua Aktivitas
+                        <span class="badge bg-secondary text-white ms-1">{{ $logTotalCount }}</span>
+                    </button>
+                    @if($logBackdateCount > 0)
+                    <button type="button" 
+                            class="btn btn-sm settlement-tab-btn btn-light text-warning fw-semibold px-3 py-1 rounded-2" 
+                            data-tab="backdate" 
+                            onclick="switchSettlementFilter('backdate')"
+                            style="transition: all 0.2s ease;">
+                        <i class="fas fa-calendar-alt me-1"></i> Koreksi Backdate
+                        <span class="badge bg-warning text-dark ms-1">{{ $logBackdateCount }}</span>
+                    </button>
+                    @endif
                 </div>
             </div>
 
-            {{-- [BARU] DERETAN SUMMARY BADGES LOG PELUNASAN HARI INI --}}
-            <div class="px-4 py-3 bg-light border-bottom d-flex flex-wrap gap-2 align-items-center">
-                <span class="badge py-2 px-3 fs-6" style="background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1;">
-                    🧾 <strong>Total Aktivitas:</strong> {{ $logTotalCount }} Transaksi (Rp {{ number_format($logTotalAmount, 0, ',', '.') }})
+            {{-- SUMMARY BADGES BAR (BERUBAH OTOMATIS SESUAI TAB YANG AKTIF) --}}
+            {{-- 1. Mode Kasbon (Default) --}}
+            <div id="summary-badges-kasbon" class="px-4 py-2 bg-light border-bottom d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge py-2 px-3 fs-6" style="background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;">
+                    📌 <strong>Pelunasan Kasbon:</strong> {{ $logKasbonCount }} Transaksi (Rp {{ number_format($logKasbonAmount, 0, ',', '.') }})
                 </span>
                 <span class="badge py-2 px-3 fs-6" style="background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">
-                    💵 <strong>Pelunasan CASH (Masuk Laci):</strong> Rp {{ number_format($logCashAmount, 0, ',', '.') }}
+                    💵 <strong>Kasbon CASH (Masuk Laci):</strong> Rp {{ number_format($kasbonCashAmount, 0, ',', '.') }}
                 </span>
                 <span class="badge py-2 px-3 fs-6" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
-                    📱 <strong>Pelunasan DANA (Non-Laci):</strong> Rp {{ number_format($logDanaAmount, 0, ',', '.') }}
+                    📱 <strong>Kasbon DANA (Non-Laci):</strong> Rp {{ number_format($kasbonDanaAmount, 0, ',', '.') }}
                 </span>
                 <span class="badge py-2 px-3 fs-6" style="background-color: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe;">
-                    🏦 <strong>Pelunasan TRANSFER BANK (Non-Laci):</strong> Rp {{ number_format($logTransferAmount, 0, ',', '.') }}
+                    🏦 <strong>Kasbon TRANSFER (Non-Laci):</strong> Rp {{ number_format($kasbonTransferAmount, 0, ',', '.') }}
                 </span>
-                @if($logBackdateCount > 0)
+            </div>
+
+            {{-- 2. Mode Trip Driver --}}
+            <div id="summary-badges-trip" class="px-4 py-2 bg-light border-bottom d-none flex-wrap gap-2 align-items-center">
+                <span class="badge py-2 px-3 fs-6" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                    🛵 <strong>Setoran Trip Driver:</strong> {{ $logTripCount }} Order (Rp {{ number_format($logTripAmount, 0, ',', '.') }})
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">
+                    💵 <strong>Trip CASH (Masuk Laci):</strong> Rp {{ number_format($tripCashAmount, 0, ',', '.') }}
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                    📱 <strong>Trip DANA (Non-Laci):</strong> Rp {{ number_format($tripDanaAmount, 0, ',', '.') }}
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe;">
+                    🏦 <strong>Trip TRANSFER (Non-Laci):</strong> Rp {{ number_format($tripTransferAmount, 0, ',', '.') }}
+                </span>
+            </div>
+
+            {{-- 3. Mode Semua Aktivitas --}}
+            <div id="summary-badges-all" class="px-4 py-2 bg-light border-bottom d-none flex-wrap gap-2 align-items-center">
+                <span class="badge py-2 px-3 fs-6" style="background-color: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1;">
+                    🧾 <strong>Total Semua Aktivitas:</strong> {{ $logTotalCount }} Transaksi (Rp {{ number_format($logTotalAmount, 0, ',', '.') }})
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">
+                    💵 <strong>Total CASH (Masuk Laci):</strong> Rp {{ number_format($logCashAmount, 0, ',', '.') }}
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                    📱 <strong>Total DANA (Non-Laci):</strong> Rp {{ number_format($logDanaAmount, 0, ',', '.') }}
+                </span>
+                <span class="badge py-2 px-3 fs-6" style="background-color: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe;">
+                    🏦 <strong>Total TRANSFER BANK (Non-Laci):</strong> Rp {{ number_format($logTransferAmount, 0, ',', '.') }}
+                </span>
+            </div>
+
+            {{-- 4. Mode Koreksi Backdate --}}
+            <div id="summary-badges-backdate" class="px-4 py-2 bg-light border-bottom d-none flex-wrap gap-2 align-items-center">
                 <span class="badge py-2 px-3 fs-6" style="background-color: #ffedd5; color: #9a3412; border: 1px solid #fed7aa;" title="Transaksi yang dialokasikan ke tanggal nota awal, tidak menambah laci hari ini">
                     ⚠️ <strong>Koreksi Backdate (Tgl Nota Lalu):</strong> {{ $logBackdateCount }} Transaksi (Rp {{ number_format($logBackdateAmount, 0, ',', '.') }})
                 </span>
-                @endif
+                <small class="text-muted fst-italic">Pelunasan untuk nota tanggal lampau yang uangnya dialokasikan ke tanggal nota (bukan laci hari ini).</small>
             </div>
 
             <div class="card-body p-0">
                 @if(isset($settlementLogs) && $settlementLogs->isNotEmpty())
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0" id="settlementLogsTable">
                         <thead class="table-light">
                             <tr>
-                                <th class="ps-4">Jam Klik</th>
+                                <th class="ps-4">Jam & Tipe</th>
                                 <th>Kasir</th>
                                 <th>Detail Nota & Pelanggan</th>
                                 <th class="text-end">Nominal</th>
@@ -687,12 +776,27 @@
                                 $pm = strtolower($log->payment_method ?? 'cash');
                                 $isSameDay = $log->date && $log->created_at && ($log->date->format('Y-m-d') === $log->created_at->format('Y-m-d'));
                                 $trx = $log->transaction;
+                                $isTrip = str_contains($log->description ?? '', 'Pelunasan Pengiriman');
+                                $isBackdate = !$isSameDay;
+                                $category = $isTrip ? 'trip' : 'kasbon';
                             @endphp
-                            <tr>
+                            {{-- Baris Trip di-hide secara default via style agar halaman langsung bersih tanpa flicker --}}
+                            <tr class="settlement-log-row" data-category="{{ $category }}" data-backdate="{{ $isBackdate ? '1' : '0' }}" style="{{ $isTrip ? 'display: none;' : '' }}">
                                 <td class="ps-4">
-                                    <span class="badge bg-secondary">
-                                        <i class="far fa-clock me-1"></i>{{ $log->created_at ? $log->created_at->format('H:i') : '-' }} WIB
-                                    </span>
+                                    <div class="d-flex flex-column gap-1 align-items-start">
+                                        <span class="badge bg-secondary">
+                                            <i class="far fa-clock me-1"></i>{{ $log->created_at ? $log->created_at->format('H:i') : '-' }} WIB
+                                        </span>
+                                        @if($isTrip)
+                                            <span class="badge px-2 py-0 border" style="background-color: #f0fdf4; color: #166534; border-color: #bbf7d0 !important; font-size: 0.68rem;">
+                                                <i class="fas fa-motorcycle me-1"></i>Driver Trip
+                                            </span>
+                                        @else
+                                            <span class="badge px-2 py-0 border" style="background-color: #fef2f2; color: #991b1b; border-color: #fecaca !important; font-size: 0.68rem;">
+                                                <i class="fas fa-hand-holding-usd me-1"></i>Kasbon
+                                            </span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td>
                                     <span class="fw-bold text-dark">
@@ -758,6 +862,13 @@
                                 </td>
                             </tr>
                             @endforeach
+                            <tr id="settlement-empty-filter-row" style="{{ $logKasbonCount === 0 ? '' : 'display: none;' }}">
+                                <td colspan="7" class="py-4 text-center text-muted">
+                                    <i class="fas fa-hand-holding-usd fa-2x mb-2 text-secondary opacity-50"></i>
+                                    <h6 class="fw-bold text-secondary mb-1" id="settlement-empty-filter-title">Tidak Ada Pelunasan Kasbon</h6>
+                                    <p class="small mb-0" id="settlement-empty-filter-desc">Belum ada transaksi kasbon/piutang yang dilunasi pada tanggal {{ $formattedDate }}.</p>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -1567,6 +1678,16 @@
                     currPecah.innerHTML = newPecah.innerHTML;
                 }
 
+                // 6. Perbarui Settlement Audit Log
+                const newSettlement = doc.querySelector('#settlement-audit-container');
+                const currSettlement = document.querySelector('#settlement-audit-container');
+                if (newSettlement && currSettlement) {
+                    currSettlement.innerHTML = newSettlement.innerHTML;
+                    if (typeof applySettlementFilter === 'function') {
+                        applySettlementFilter(currentSettlementFilter);
+                    }
+                }
+
                 // Efek denyut hijau tanda data baru sukses masuk
                 if (liveDot) {
                     liveDot.style.boxShadow = '0 0 15px #00ff00';
@@ -1675,6 +1796,122 @@
         }
     };
 
+    // ==========================================
+    // LOGIKA FILTER TAB AUDIT LOG PELUNASAN KASBON & TRIP
+    // ==========================================
+    let currentSettlementFilter = 'kasbon';
+
+    window.switchSettlementFilter = function(tab) {
+        currentSettlementFilter = tab;
+        applySettlementFilter(tab);
+    };
+
+    window.applySettlementFilter = function(tab) {
+        // 1. Update button tab active state
+        const tabBtns = document.querySelectorAll('.settlement-tab-btn');
+        tabBtns.forEach(btn => {
+            const btnTab = btn.getAttribute('data-tab');
+            if (btnTab === tab) {
+                btn.classList.remove('btn-light', 'text-secondary', 'text-muted');
+                btn.classList.add('active', 'shadow-sm');
+                if (tab === 'kasbon') {
+                    btn.style.setProperty('background-color', '#b91c1c', 'important');
+                    btn.style.setProperty('color', '#ffffff', 'important');
+                    btn.style.setProperty('border', '1px solid #991b1b', 'important');
+                } else if (tab === 'trip') {
+                    btn.style.setProperty('background-color', '#0284c7', 'important');
+                    btn.style.setProperty('color', '#ffffff', 'important');
+                    btn.style.setProperty('border', '1px solid #0369a1', 'important');
+                } else if (tab === 'backdate') {
+                    btn.style.setProperty('background-color', '#d97706', 'important');
+                    btn.style.setProperty('color', '#ffffff', 'important');
+                    btn.style.setProperty('border', '1px solid #b45309', 'important');
+                } else {
+                    btn.style.setProperty('background-color', '#334155', 'important');
+                    btn.style.setProperty('color', '#ffffff', 'important');
+                    btn.style.setProperty('border', '1px solid #1e293b', 'important');
+                }
+            } else {
+                btn.classList.remove('active', 'shadow-sm');
+                btn.style.removeProperty('background-color');
+                btn.style.removeProperty('color');
+                btn.style.removeProperty('border');
+                btn.classList.add('btn-light', 'text-secondary');
+            }
+        });
+
+        // 2. Toggle summary badge containers
+        const summaryContainers = {
+            'kasbon': document.getElementById('summary-badges-kasbon'),
+            'trip': document.getElementById('summary-badges-trip'),
+            'all': document.getElementById('summary-badges-all'),
+            'backdate': document.getElementById('summary-badges-backdate'),
+        };
+        Object.keys(summaryContainers).forEach(key => {
+            if (summaryContainers[key]) {
+                if (key === tab) {
+                    summaryContainers[key].classList.remove('d-none');
+                    summaryContainers[key].classList.add('d-flex');
+                } else {
+                    summaryContainers[key].classList.remove('d-flex');
+                    summaryContainers[key].classList.add('d-none');
+                }
+            }
+        });
+
+        // 3. Filter Table Rows
+        const rows = document.querySelectorAll('.settlement-log-row');
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const cat = row.getAttribute('data-category');
+            const isBackdate = row.getAttribute('data-backdate') === '1';
+
+            let show = false;
+            if (tab === 'all') {
+                show = true;
+            } else if (tab === 'kasbon') {
+                show = (cat === 'kasbon');
+            } else if (tab === 'trip') {
+                show = (cat === 'trip');
+            } else if (tab === 'backdate') {
+                show = isBackdate;
+            }
+
+            if (show) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // 4. Show empty placeholder if 0 visible rows
+        const emptyRow = document.getElementById('settlement-empty-filter-row');
+        const emptyTitle = document.getElementById('settlement-empty-filter-title');
+        const emptyDesc = document.getElementById('settlement-empty-filter-desc');
+        if (emptyRow) {
+            if (visibleCount === 0 && rows.length > 0) {
+                emptyRow.style.display = '';
+                if (tab === 'kasbon') {
+                    if (emptyTitle) emptyTitle.textContent = 'Tidak Ada Pelunasan Kasbon';
+                    if (emptyDesc) emptyDesc.textContent = 'Belum ada transaksi kasbon/piutang yang dilunasi pada tanggal ini.';
+                } else if (tab === 'trip') {
+                    if (emptyTitle) emptyTitle.textContent = 'Tidak Ada Order Trip Driver';
+                    if (emptyDesc) emptyDesc.textContent = 'Belum ada pelunasan dari trip pengiriman driver pada tanggal ini.';
+                } else if (tab === 'backdate') {
+                    if (emptyTitle) emptyTitle.textContent = 'Tidak Ada Koreksi Backdate';
+                    if (emptyDesc) emptyDesc.textContent = 'Semua pelunasan hari ini sesuai dengan tanggal nota.';
+                } else {
+                    if (emptyTitle) emptyTitle.textContent = 'Belum Ada Aktivitas';
+                    if (emptyDesc) emptyDesc.textContent = 'Tidak ada data aktivitas pelunasan.';
+                }
+            } else {
+                emptyRow.style.display = 'none';
+            }
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         startReloadCountdown();
 
@@ -1682,6 +1919,11 @@
         const hasActive = document.querySelectorAll('.cashier-card-col[data-status="active"]').length > 0;
         currentCashierFilter = hasActive ? 'active' : 'all';
         applyCashierFilter(currentCashierFilter);
+
+        // Inisialisasi filter log pelunasan: default kasbon
+        if (typeof applySettlementFilter === 'function') {
+            applySettlementFilter(currentSettlementFilter);
+        }
     });
 </script>
 @endpush
