@@ -213,10 +213,10 @@
                     </div>
                     {{-- Badge Penerimaan Non-Tunai (Rekening Owner / Non-Laci) --}}
                     <div class="pt-2 border-top d-flex gap-2 flex-wrap" style="font-size: 0.73rem;">
-                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 py-1 px-2" title="Penerimaan Transfer Bank langsung ke Rekening Owner (Tidak masuk laci fisik)">
+                        <span class="badge badge-soft-primary py-1 px-2" style="background-color: #ede9fe !important; color: #5b21b6 !important; border: 1px solid #ddd6fe !important;" title="Penerimaan Transfer Bank langsung ke Rekening Owner (Tidak masuk laci fisik)">
                             <i class="fas fa-university me-1"></i> Transfer: Rp {{ number_format($nonCashTransfer ?? 0, 0, ',', '.') }}
                         </span>
-                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-1 px-2" title="Penerimaan DANA langsung ke E-Wallet Owner (Tidak masuk laci fisik)">
+                        <span class="badge badge-soft-info py-1 px-2" style="background-color: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #bae6fd !important;" title="Penerimaan DANA langsung ke E-Wallet Owner (Tidak masuk laci fisik)">
                             <i class="fas fa-mobile-alt me-1"></i> DANA: Rp {{ number_format($nonCashDana ?? 0, 0, ',', '.') }}
                         </span>
                     </div>
@@ -300,7 +300,7 @@
                                     - Rp {{ number_format($data['expense'], 0, ',', '.') }}
                                 </td>
                                 <td class="text-end fw-bold fs-6">
-                                    <span class="badge {{ $data['balance'] >= 0 ? 'bg-success' : 'bg-danger' }} px-3 py-2 fs-6">
+                                    <span class="badge {{ $data['balance'] >= 0 ? 'bg-success text-white' : 'bg-danger text-white' }} px-3 py-2 fs-6">
                                         Rp {{ number_format($data['balance'], 0, ',', '.') }}
                                     </span>
                                 </td>

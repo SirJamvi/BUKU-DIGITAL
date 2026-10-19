@@ -214,7 +214,7 @@
             <div class="card-header text-white d-flex justify-content-between align-items-center py-3 flex-wrap gap-2" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;">
                 <div>
                     <h5 class="mb-0 fw-bold d-flex align-items-center">
-                        <span class="badge bg-success bg-opacity-25 text-success border border-success me-2 px-2 py-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">PRIORITAS</span>
+                        <span class="badge badge-soft-success me-2 px-2 py-1" style="font-size: 0.75rem; letter-spacing: 0.5px; background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">PRIORITAS</span>
                         <i class="fas fa-cash-register text-warning me-2"></i> Rekonsiliasi Kas Laci & Performa Kasir ({{ $isToday ? 'Hari Ini' : $formattedDate }})
                     </h5>
                     <small class="text-white-50">Monitoring uang kas fisik di laci kasir (Cash on Hand) dan estimasi laba bersih operasional shift.</small>
@@ -307,7 +307,7 @@
                             {{-- Header Card Kasir --}}
                             <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
                                 <div class="d-flex align-items-center">
-                                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2 me-2 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+                                    <div class="rounded-circle p-2 me-2 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; background-color: #eff6ff !important; color: #1d4ed8 !important;">
                                         <i class="fas fa-user-tie"></i>
                                     </div>
                                     <div>
@@ -319,11 +319,11 @@
                                 </div>
                                 <div>
                                     @if($c['has_activity'])
-                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
+                                    <span class="badge badge-soft-success px-2 py-1" style="background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
                                         <i class="fas fa-circle-dot me-1"></i>Aktif
                                     </span>
                                     @else
-                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border px-2 py-1">
+                                    <span class="badge badge-soft-secondary border px-2 py-1" style="background-color: #f1f5f9 !important; color: #475569 !important; border: 1px solid #cbd5e1 !important;">
                                         Standby
                                     </span>
                                     @endif
@@ -338,7 +338,7 @@
                                         Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}
                                     </h3>
                                     <div class="d-flex justify-content-center align-items-center mt-2">
-                                        <span class="badge {{ $c['shift_net_profit'] >= 0 ? 'bg-success bg-opacity-10 text-success border border-success' : 'bg-danger bg-opacity-10 text-danger border border-danger' }} px-2 py-1" style="font-size: 0.78rem;">
+                                        <span class="badge {{ $c['shift_net_profit'] >= 0 ? 'badge-soft-success' : 'badge-soft-danger' }} px-2 py-1" style="font-size: 0.78rem; {{ $c['shift_net_profit'] >= 0 ? 'background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;' : 'background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fca5a5 !important;' }}">
                                             <i class="fas {{ $c['shift_net_profit'] >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down' }} me-1"></i>
                                             Estimasi Laba Shift: <strong>{{ $c['shift_net_profit'] >= 0 ? '+' : '' }}Rp {{ number_format($c['shift_net_profit'], 0, ',', '.') }}</strong>
                                         </span>
@@ -463,7 +463,7 @@
                             <tr>
                                 <td class="ps-3">
                                     <div class="d-flex align-items-center">
-                                        <div class="p-2 rounded-circle bg-warning bg-opacity-10 text-warning me-3">
+                                        <div class="p-2 rounded-circle me-3" style="background-color: #fef3c7 !important; color: #d97706 !important;">
                                             <i class="fas fa-motorcycle fa-lg"></i>
                                         </div>
                                         <div>
@@ -636,7 +636,7 @@
                     <small class="text-muted">Audit real-time setiap transaksi kasbon/pengiriman yang divalidasi lunas oleh kasir.</small>
                 </div>
                 <div>
-                    <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 fw-semibold">
+                    <span class="badge badge-soft-success px-3 py-2 fw-semibold" style="background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
                         <i class="fas fa-check-double me-1"></i> Total: {{ $logTotalCount }} Pelunasan
                         @if($logTotalCount > 0)
                             (Rp {{ number_format($logTotalAmount, 0, ',', '.') }})
@@ -738,16 +738,16 @@
                                 <td class="text-center">
                                     @if($isSameDay)
                                         @if($pm === 'cash')
-                                            <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">
+                                            <span class="badge badge-soft-success px-2 py-1" style="background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
                                                 <i class="fas fa-check-circle me-1"></i> Masuk Laci Kasir Hari Ini
                                             </span>
                                         @else
-                                            <span class="badge bg-info bg-opacity-10 text-info border border-info px-2 py-1">
+                                            <span class="badge badge-soft-info px-2 py-1" style="background-color: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #7dd3fc !important;">
                                                 <i class="fas fa-university me-1"></i> Masuk Rekening/Non-Tunai Hari Ini
                                             </span>
                                         @endif
                                     @else
-                                        <span class="badge bg-warning bg-opacity-25 text-dark border border-warning px-2 py-1 fw-bold" title="Uang dialokasikan ke tanggal nota awal, tidak menambah laci hari ini">
+                                        <span class="badge badge-soft-warning px-2 py-1 fw-bold" style="background-color: #fef3c7 !important; color: #92400e !important; border: 1px solid #fde68a !important;" title="Uang dialokasikan ke tanggal nota awal, tidak menambah laci hari ini">
                                             <i class="fas fa-triangle-exclamation text-warning me-1"></i> ⚠️ Koreksi ke Tgl Nota ({{ $log->date ? $log->date->format('d/m/Y') : '-' }})
                                         </span>
                                         <div class="small text-muted mt-1" style="font-size: 0.72rem;">Oleh: <strong>{{ $log->createdBy->name ?? 'Kasir' }}</strong></div>
@@ -970,7 +970,7 @@
                                                     {{ $icon }} (Lunas)
                                                 </span>
                                             @else
-                                                <span class="badge bg-danger px-2 py-1">
+                                                <span class="badge bg-danger text-white px-2 py-1" style="background-color: #dc3545 !important; color: #ffffff !important;">
                                                     ⚠️ Kasbon / Pending
                                                 </span>
                                             @endif
@@ -1140,7 +1140,7 @@
                                                 <span class="badge {{ $isCogs ? 'bg-primary' : 'bg-warning text-dark' }}">
                                                     {{ $exp->category->name ?? ($isCogs ? 'Refill Es Batu' : 'Operasional') }}
                                                 </span>
-                                                <span class="badge {{ $isCogs ? 'bg-info bg-opacity-10 text-info border border-info' : 'bg-secondary bg-opacity-10 text-secondary border' }}" style="font-size: 0.72rem;">
+                                                <span class="badge {{ $isCogs ? 'badge-soft-info' : 'badge-soft-secondary' }}" style="font-size: 0.72rem; {{ $isCogs ? 'background-color: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #7dd3fc !important;' : 'background-color: #f1f5f9 !important; color: #475569 !important; border: 1px solid #cbd5e1 !important;' }}">
                                                     {{ $isCogs ? 'Pembelian Stok (HPP)' : 'Beban Operasional Murni' }}
                                                 </span>
                                                 @if(!$affectsDrawer)
@@ -1148,7 +1148,7 @@
                                                     <i class="fas fa-shield-alt me-1"></i>Uang Bos / Non-Laci
                                                 </span>
                                                 @else
-                                                <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size: 0.7rem;">
+                                                <span class="badge badge-soft-success" style="font-size: 0.7rem; background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
                                                     <i class="fas fa-cash-register me-1"></i>Potong Laci
                                                 </span>
                                                 @endif
@@ -1204,7 +1204,7 @@
                         {{-- 3. Kasbon Baru Hari Ini (Belum Bayar) --}}
                         <div class="col-md-3 text-md-end">
                             <div class="small text-muted fw-bold mb-1"><i class="fas fa-clock text-danger me-1"></i>Kasbon Baru Hari Ini:</div>
-                            <span class="badge py-1 px-2 {{ ($c['kasbon'] ?? 0) > 0 ? 'bg-danger bg-opacity-10 text-danger border border-danger' : 'bg-light text-muted border' }}" style="font-size: 0.78rem;">
+                            <span class="badge py-1 px-2 {{ ($c['kasbon'] ?? 0) > 0 ? 'badge-soft-danger' : 'bg-light text-muted border' }}" style="font-size: 0.78rem; {{ ($c['kasbon'] ?? 0) > 0 ? 'background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fca5a5 !important;' : '' }}">
                                 <strong>Rp {{ number_format($c['kasbon'] ?? 0, 0, ',', '.') }}</strong>
                             </span>
                         </div>

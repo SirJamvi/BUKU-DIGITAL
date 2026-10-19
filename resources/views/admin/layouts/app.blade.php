@@ -415,6 +415,63 @@
             border-radius: 2px;
         }
 
+        /* Soft Badges & High-Contrast Utility Classes */
+        .badge-soft-danger,
+        .badge.bg-danger.bg-opacity-10,
+        .badge.bg-danger.bg-opacity-25 {
+            background-color: #fee2e2 !important;
+            color: #b91c1c !important;
+            border: 1px solid #fca5a5 !important;
+        }
+
+        .badge-soft-success,
+        .badge.bg-success.bg-opacity-10,
+        .badge.bg-success.bg-opacity-25 {
+            background-color: #dcfce7 !important;
+            color: #15803d !important;
+            border: 1px solid #86efac !important;
+        }
+
+        .badge-soft-info,
+        .badge.bg-info.bg-opacity-10,
+        .badge.bg-info.bg-opacity-25 {
+            background-color: #e0f2fe !important;
+            color: #0369a1 !important;
+            border: 1px solid #7dd3fc !important;
+        }
+
+        .badge-soft-warning,
+        .badge.bg-warning.bg-opacity-10,
+        .badge.bg-warning.bg-opacity-25 {
+            background-color: #fef3c7 !important;
+            color: #92400e !important;
+            border: 1px solid #fde68a !important;
+        }
+
+        .badge-soft-primary,
+        .badge.bg-primary.bg-opacity-10,
+        .badge.bg-primary.bg-opacity-25 {
+            background-color: #eff6ff !important;
+            color: #1d4ed8 !important;
+            border: 1px solid #bfdbfe !important;
+        }
+
+        .badge-soft-secondary,
+        .badge.bg-secondary.bg-opacity-10,
+        .badge.bg-secondary.bg-opacity-25 {
+            background-color: #f1f5f9 !important;
+            color: #475569 !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        /* Solid Badges High-Contrast Safeguards */
+        .badge.bg-danger:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #ffffff !important; }
+        .badge.bg-success:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #ffffff !important; }
+        .badge.bg-primary:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #ffffff !important; }
+        .badge.bg-dark:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #ffffff !important; }
+        .badge.bg-info:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #1e293b !important; }
+        .badge.bg-warning:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #1e293b !important; }
+
         /* User Avatar - Responsive */
         .user-avatar img,
         .user-avatar > div {

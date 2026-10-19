@@ -515,18 +515,75 @@
 }
 
 /* Utility Classes */
-.bg-primary { background: #007bff !important; }
-.bg-success { background: #28a745 !important; }
-.bg-info { background: #17a2b8 !important; }
-.bg-warning { background: #ffc107 !important; }
-.bg-danger { background: #dc3545 !important; }
+.bg-primary:not([class*="bg-opacity-"]):not([class*="badge-soft-"]) { background-color: #007bff !important; }
+.bg-success:not([class*="bg-opacity-"]):not([class*="badge-soft-"]) { background-color: #28a745 !important; }
+.bg-info:not([class*="bg-opacity-"]):not([class*="badge-soft-"]) { background-color: #17a2b8 !important; }
+.bg-warning:not([class*="bg-opacity-"]):not([class*="badge-soft-"]) { background-color: #ffc107 !important; }
+.bg-danger:not([class*="bg-opacity-"]):not([class*="badge-soft-"]) { background-color: #dc3545 !important; }
 .bg-gold { background: linear-gradient(135deg, #f9d423 0%, #ff4e50 100%) !important; }
 
-.text-primary { color: #007bff !important; }
-.text-success { color: #28a745 !important; }
-.text-info { color: #17a2b8 !important; }
-.text-warning { color: #ffc107 !important; }
-.text-danger { color: #dc3545 !important; }
+.text-primary:not([class*="badge-soft-"]) { color: #007bff !important; }
+.text-success:not([class*="badge-soft-"]) { color: #28a745 !important; }
+.text-info:not([class*="badge-soft-"]) { color: #17a2b8 !important; }
+.text-warning:not([class*="badge-soft-"]) { color: #ffc107 !important; }
+.text-danger:not([class*="badge-soft-"]) { color: #dc3545 !important; }
+
+/* Soft Badges & High-Contrast Utility Classes */
+.badge-soft-danger,
+.badge.bg-danger.bg-opacity-10,
+.badge.bg-danger.bg-opacity-25 {
+    background-color: #fee2e2 !important;
+    color: #b91c1c !important;
+    border: 1px solid #fca5a5 !important;
+}
+
+.badge-soft-success,
+.badge.bg-success.bg-opacity-10,
+.badge.bg-success.bg-opacity-25 {
+    background-color: #dcfce7 !important;
+    color: #15803d !important;
+    border: 1px solid #86efac !important;
+}
+
+.badge-soft-info,
+.badge.bg-info.bg-opacity-10,
+.badge.bg-info.bg-opacity-25 {
+    background-color: #e0f2fe !important;
+    color: #0369a1 !important;
+    border: 1px solid #7dd3fc !important;
+}
+
+.badge-soft-warning,
+.badge.bg-warning.bg-opacity-10,
+.badge.bg-warning.bg-opacity-25 {
+    background-color: #fef3c7 !important;
+    color: #92400e !important;
+    border: 1px solid #fde68a !important;
+}
+
+.badge-soft-primary,
+.badge.bg-primary.bg-opacity-10,
+.badge.bg-primary.bg-opacity-25 {
+    background-color: #eff6ff !important;
+    color: #1d4ed8 !important;
+    border: 1px solid #bfdbfe !important;
+}
+
+.badge-soft-secondary,
+.badge.bg-secondary.bg-opacity-10,
+.badge.bg-secondary.bg-opacity-25 {
+    background-color: #f1f5f9 !important;
+    color: #475569 !important;
+    border: 1px solid #cbd5e1 !important;
+}
+
+/* Solid Badges High-Contrast Safeguards */
+.badge.bg-danger:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #ffffff !important; }
+.badge.bg-success:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #ffffff !important; }
+.badge.bg-primary:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #ffffff !important; }
+.badge.bg-dark:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #ffffff !important; }
+.badge.bg-info:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #1e293b !important; }
+.badge.bg-warning:not([class*="badge-soft-"]):not([class*="bg-opacity-"]) { color: #1e293b !important; }
 
 /* Buttons */
 .btn-gold {

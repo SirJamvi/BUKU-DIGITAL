@@ -293,8 +293,8 @@
 
                     {{-- Badge Status Kasbon saat Mode Pengiriman Driver Aktif --}}
                     <div id="multi-order-payment-badge" class="d-none mb-3 text-center">
-                        <div class="badge bg-danger bg-opacity-10 text-danger border border-danger w-100 py-2 fs-6 text-wrap text-start px-3">
-                            <div class="fw-bold" id="delivery-badge-title"><i class="fas fa-motorcycle me-1"></i> STATUS: DIKIRIM VIA DRIVER</div>
+                        <div class="badge badge-soft-danger w-100 py-2 fs-6 text-wrap text-start px-3" style="background-color: #fee2e2 !important; color: #991b1b !important; border: 1px solid #fca5a5 !important;">
+                            <div class="fw-bold" id="delivery-badge-title" style="color: #991b1b !important;"><i class="fas fa-motorcycle me-1"></i> STATUS: DIKIRIM VIA DRIVER</div>
                             <small class="text-dark d-block mt-1" id="delivery-badge-subtitle" style="font-size: 0.78rem;">
                                 Pembayaran diset sementara sebagai <strong>Kasbon / Pending</strong>. Kasir menginput pembayaran riil (Cash/DANA/Transfer) di Dashboard saat Driver kembali.
                             </small>
@@ -545,7 +545,8 @@
                     const driverBadge = safeEl('driver-badge-status');
                     if (driverBadge) {
                         driverBadge.innerText = 'Wajib Diisi';
-                        driverBadge.className = 'badge bg-danger bg-opacity-10 text-danger border border-danger fw-bold';
+                        driverBadge.className = 'badge badge-soft-danger fw-bold';
+                        driverBadge.style.cssText = 'background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fca5a5 !important;';
                     }
 
                     const driverHelp = safeEl('driver-help-text');

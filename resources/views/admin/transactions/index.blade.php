@@ -146,11 +146,11 @@
                     $isPaid = $transaction->payment_status === 'paid';
                 @endphp
                 @if($isPaid)
-                    <span class="badge bg-success bg-opacity-10 text-success border border-success py-1 px-2" style="font-size: 0.75rem;">
+                    <span class="badge badge-soft-success py-1 px-2" style="font-size: 0.75rem; background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
                         <i class="fas fa-check-circle me-1"></i>Lunas ({{ strtoupper($pm) }})
                     </span>
                 @else
-                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger py-1 px-2" style="font-size: 0.75rem;">
+                    <span class="badge badge-soft-danger py-1 px-2" style="font-size: 0.75rem; background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fca5a5 !important;">
                         <i class="fas fa-clock me-1"></i>Kasbon
                     </span>
                 @endif
