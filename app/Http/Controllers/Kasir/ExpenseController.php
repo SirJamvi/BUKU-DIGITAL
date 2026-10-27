@@ -66,8 +66,39 @@ class ExpenseController extends Controller
             'funding_source' => 'nullable|string|in:drawer,external',
         ]);
         
-        $this->financialService->createExpense($request->all());
-        
+        $categoryName = $request->input('category_name');
+        $user = Auth::user();
+
+        if ($categoryName === '__NEW__' && ($user->isAdmin() || $user->role === 'admin')) {
+            $request->validate([
+                'new_category_name' => 'required|string|max:191',
+                'new_category_type' => 'required|in:HPP,Operasional,Piutang Karyawan,Non-usaha',
+            ]);
+
+            $categoryName = trim($request->input('new_category_name'));
+            $isCogs = ($request->input('new_category_type') === 'HPP');
+
+            $categoryPayload = [
+                'type'       => $request->input('new_category_type'),
+                'is_active'  => true,
+                'created_by' => $user->id,
+                'is_cogs'    => $isCogs,
+            ];
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('expense_categories', 'category_type')) {
+                $categoryPayload['category_type'] = $request->input('new_category_type');
+            }
+
+            ExpenseCategory::firstOrCreate(
+                ['business_id' => $user->business_id, 'name' => $categoryName],
+                $categoryPayload
+            );
+        }
+
+        $payload = $request->all();
+        $payload['category_name'] = $categoryName;
+        $this->financialService->createExpense($payload);
+
         return redirect()->route('kasir.expenses.index')->with('success', 'Data pengeluaran berhasil dicatat.');
     }
 }

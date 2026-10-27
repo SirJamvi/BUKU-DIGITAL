@@ -17,6 +17,7 @@ class CashFlow extends Model
         'business_id',
         'type',
         'category_id',
+        'is_cogs',
         'payment_method',
         'funding_source',
         'affects_drawer',
@@ -30,7 +31,22 @@ class CashFlow extends Model
     protected $casts = [
         'date' => 'date',
         'affects_drawer' => 'boolean',
+        'is_cogs' => 'boolean',
     ];
+
+    protected static function booted()
+    {
+        static::creating(function ($cashFlow) {
+            if ($cashFlow->is_cogs === null && $cashFlow->category_id) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('cash_flow', 'is_cogs')) {
+                    $category = ExpenseCategory::find($cashFlow->category_id);
+                    if ($category) {
+                        $cashFlow->is_cogs = (bool) $category->is_cogs;
+                    }
+                }
+            }
+        });
+    }
 
     /**
      * [BARU] Mutator Otomatis untuk payment_method

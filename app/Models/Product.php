@@ -16,6 +16,7 @@ class Product extends Model
         'name',
         'category_id',
         'unit',
+        'is_service',
         'base_price',
         'cost_price',
         'description',
@@ -32,7 +33,25 @@ class Product extends Model
     protected $casts = [
         'is_active'   => 'boolean',
         'is_featured' => 'boolean',
+        'is_service'  => 'boolean',
     ];
+
+    /**
+     * Satu sumber kebenaran penentuan produk jasa/ongkir.
+     * Bernilai true jika is_service=true ATAU nama mengandung ongkir/ongkos kirim ATAU unit 'Jalan'.
+     * Aman dipanggil sebelum kolom is_service dimigrasi di database.
+     */
+    public function isService(): bool
+    {
+        if (array_key_exists('is_service', $this->attributes) && $this->attributes['is_service'] !== null) {
+            return (bool) $this->attributes['is_service'];
+        }
+
+        $nameLower = strtolower($this->name ?? '');
+        return str_contains($nameLower, 'ongkir')
+            || str_contains($nameLower, 'ongkos kirim')
+            || ($this->unit ?? '') === 'Jalan';
+    }
 
     public function business(): BelongsTo
     {

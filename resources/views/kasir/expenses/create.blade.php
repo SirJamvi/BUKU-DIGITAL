@@ -26,16 +26,42 @@
             </div>
 
             <div class="col-md-6">
-                <label class="form-label fw-bold">Kategori / Tulis Baru <span class="text-danger">*</span></label>
-                <input class="form-control @error('category_name') is-invalid @enderror" list="categoryOptions" name="category_name" value="{{ old('category_name') }}" placeholder="Ketik atau pilih kategori..." required>
-                <datalist id="categoryOptions">
+                <label class="form-label fw-bold">Kategori Pengeluaran <span class="text-danger">*</span></label>
+                <select name="category_name" id="category_select" class="form-select @error('category_name') is-invalid @enderror" required>
+                    <option value="" disabled {{ old('category_name') ? '' : 'selected' }}>-- Pilih Kategori Pengeluaran --</option>
                     @foreach($categories as $category)
-                    <option value="{{ $category->name }}">
-                        @endforeach
-                </datalist>
+                    <option value="{{ $category->name }}" {{ old('category_name') == $category->name ? 'selected' : '' }}>
+                        {{ $category->name }} ({{ $category->is_cogs ? 'HPP' : 'Operasional' }})
+                    </option>
+                    @endforeach
+                    @if(auth()->user()->isAdmin() || auth()->user()->role === 'admin')
+                    <option value="__NEW__" {{ old('category_name') == '__NEW__' ? 'selected' : '' }}>+ Buat Kategori Baru (Khusus Admin)...</option>
+                    @endif
+                </select>
                 @error('category_name') <div class="invalid-feedback">{{ $message }}</div> @enderror
             </div>
         </div>
+
+        {{-- Form Kategori Baru Khusus Admin --}}
+        @if(auth()->user()->isAdmin() || auth()->user()->role === 'admin')
+        <div id="new_category_section" class="row mb-3 p-3 bg-light rounded border {{ old('category_name') == '__NEW__' ? '' : 'd-none' }}">
+            <div class="col-md-6 mb-2">
+                <label class="form-label fw-bold text-primary">Nama Kategori Baru <span class="text-danger">*</span></label>
+                <input type="text" name="new_category_name" id="new_category_name" class="form-control @error('new_category_name') is-invalid @enderror" value="{{ old('new_category_name') }}" placeholder="Contoh: Perbaikan Mesin">
+                @error('new_category_name') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            </div>
+            <div class="col-md-6 mb-2">
+                <label class="form-label fw-bold text-primary">Jenis Klasifikasi Akuntansi <span class="text-danger">*</span></label>
+                <select name="new_category_type" id="new_category_type" class="form-select @error('new_category_type') is-invalid @enderror">
+                    <option value="Operasional" {{ old('new_category_type') == 'Operasional' ? 'selected' : '' }}>Operasional (Beban Usaha Rutin)</option>
+                    <option value="HPP" {{ old('new_category_type') == 'HPP' ? 'selected' : '' }}>HPP (Harga Pokok Penjualan)</option>
+                    <option value="Piutang Karyawan" {{ old('new_category_type') == 'Piutang Karyawan' ? 'selected' : '' }}>Piutang Karyawan (Kasbon)</option>
+                    <option value="Non-usaha" {{ old('new_category_type') == 'Non-usaha' ? 'selected' : '' }}>Non-usaha (Prive / Pengeluaran Luar Usaha)</option>
+                </select>
+                @error('new_category_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            </div>
+        </div>
+        @endif
 
         <div class="row mb-3">
             <div class="col-md-6">
@@ -112,6 +138,21 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        const categorySelect = document.getElementById('category_select');
+        const newCatSection = document.getElementById('new_category_section');
+        const newCatName = document.getElementById('new_category_name');
+        if (categorySelect && newCatSection) {
+            categorySelect.addEventListener('change', function() {
+                if (this.value === '__NEW__') {
+                    newCatSection.classList.remove('d-none');
+                    if (newCatName) newCatName.setAttribute('required', 'required');
+                } else {
+                    newCatSection.classList.add('d-none');
+                    if (newCatName) newCatName.removeAttribute('required');
+                }
+            });
+        }
+
         const displayInput = document.getElementById('amount_display');
         const rawInput = document.getElementById('amount_raw');
         const form = document.getElementById('expenseForm');

@@ -52,6 +52,19 @@
     </a>
     @endslot
 
+    @if(!empty($reportData['missing_cogs_count']) && $reportData['missing_cogs_count'] > 0)
+    <div class="alert alert-warning border-0 shadow-sm d-flex align-items-center mb-4" role="alert">
+        <i class="fas fa-exclamation-triangle fa-2x me-3 text-warning"></i>
+        <div>
+            <h6 class="alert-heading fw-bold mb-1">Perhatian: Ditemukan Baris Penjualan Tanpa Snapshot HPP</h6>
+            <p class="mb-0 small">
+                Terdapat <strong>{{ number_format($reportData['missing_cogs_count']) }} baris detail transaksi</strong> dengan total nilai omset <strong>Rp {{ number_format($reportData['missing_cogs_revenue'], 0, ',', '.') }}</strong> yang belum memiliki snapshot HPP tersimpan. 
+                Sistem saat ini menggunakan fallback HPP master produk untuk menghitung estimasi keuntungan kotor. Silakan lakukan audit atau backfill data historis.
+            </p>
+        </div>
+    </div>
+    @endif
+
     {{-- ========================================== --}}
     {{-- SECTION 1: Ringkasan Profitabilitas --}}
     {{-- ========================================== --}}

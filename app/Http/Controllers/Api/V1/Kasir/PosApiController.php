@@ -10,7 +10,9 @@ use App\Models\PaymentMethod;
 use App\Models\Transaction;
 use App\Models\CashFlow;
 use App\Models\User;
+use App\Models\Inventory;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class PosApiController extends Controller
@@ -104,14 +106,51 @@ class PosApiController extends Controller
 
                 foreach ($request->items as $item) {
                     $product = Product::find($item['product_id']);
+                    $inventory = Inventory::where('product_id', $item['product_id'])
+                        ->where('business_id', $businessId)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$inventory) {
+                        throw new \Exception("Data inventaris untuk produk '{$product->name}' (ID: {$item['product_id']}) belum ada di sistem.");
+                    }
+                    if ($inventory->current_stock < $item['quantity']) {
+                        throw new \Exception("Stok untuk produk '{$product->name}' tidak mencukupi.");
+                    }
+
+                    // Tentukan snapshot cost_price
+                    $snapshotCost = 0.0;
+                    if ($product && !$product->isService()) {
+                        $masterCost = (float) ($product->cost_price ?? 0);
+                        if ($masterCost > 0) {
+                            $snapshotCost = $masterCost;
+                        } else {
+                            // Rata-rata snapshot positif 7 hari terakhir untuk product_id & business_id
+                            $avg7Days = DB::table('transaction_details')
+                                ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
+                                ->where('transactions.business_id', $businessId)
+                                ->where('transaction_details.product_id', $product->id)
+                                ->where('transaction_details.cost_price', '>', 0)
+                                ->where('transactions.transaction_date', '>=', now()->subDays(7))
+                                ->avg('transaction_details.cost_price');
+
+                            if ($avg7Days !== null && (float) $avg7Days > 0) {
+                                $snapshotCost = round((float) $avg7Days, 2);
+                            } else {
+                                $snapshotCost = $masterCost;
+                                Log::warning("POS API Snapshot Fallback: Produk {$product->name} (ID: {$product->id}, Business: {$businessId}) master cost_price <= 0 dan tidak ada riwayat snapshot positif 7 hari terakhir.");
+                            }
+                        }
+                    }
+
                     $transaction->details()->create([
                         'product_id' => $item['product_id'],
                         'quantity' => $item['quantity'],
-                        'cost_price' => $product->cost_price ?? 0,
+                        'cost_price' => $snapshotCost,
                         'unit_price' => $item['unit_price'],
                         'total_price' => $item['total_price'],
                     ]);
-                    $product->inventory->decrement('current_stock', $item['quantity']);
+                    $inventory->decrement('current_stock', $item['quantity']);
                 }
 
                 return $transaction;

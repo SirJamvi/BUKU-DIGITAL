@@ -71,6 +71,12 @@ class TransactionService
     public function updateTransaction(Transaction $transaction, array $data): Transaction
     {
         return DB::transaction(function () use ($transaction, $data) {
+            // Kumpulkan snapshot lama per product_id menurut urutan id detail (FIFO queue)
+            $oldSnapshotsByProduct = [];
+            foreach ($transaction->details()->orderBy('id')->get() as $oldDetail) {
+                $oldSnapshotsByProduct[$oldDetail->product_id][] = (float) ($oldDetail->cost_price ?? 0);
+            }
+
             // 1. Kembalikan stok dari item-item lama ke inventaris
             foreach ($transaction->details as $oldDetail) {
                 if ($oldDetail->product && $oldDetail->product->inventory) {
@@ -92,8 +98,19 @@ class TransactionService
                 // Kurangi stok inventaris
                 $product->inventory->decrement('current_stock', $item['quantity']);
 
-                // Buat detail transaksi yang baru dengan snapshot cost_price
-                $item['cost_price'] = $item['cost_price'] ?? $product->cost_price ?? 0;
+                // Snapshot cost_price:
+                // - Produk jasa = 0
+                // - Antrian snapshot lama jika ada untuk product_id ini
+                // - Item baru memakai master berjalan
+                if ($product->isService()) {
+                    $snapshotCost = 0.0;
+                } elseif (!empty($oldSnapshotsByProduct[$product->id])) {
+                    $snapshotCost = array_shift($oldSnapshotsByProduct[$product->id]);
+                } else {
+                    $snapshotCost = (float) ($product->cost_price ?? 0);
+                }
+
+                $item['cost_price'] = $snapshotCost;
                 $transaction->details()->create($item);
             }
 

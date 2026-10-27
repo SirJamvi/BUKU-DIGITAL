@@ -54,110 +54,140 @@ class InventoryController extends Controller
             'record_expense' => 'nullable|boolean',
             'payment_method' => 'required_if:record_expense,1|nullable|string',
             'notes'          => 'nullable|string|max:500',
+            'confirm'        => 'nullable|boolean',
         ]);
 
         try {
-            DB::beginTransaction();
-
             $businessId = Auth::user()->business_id;
             $userId = Auth::id();
 
             // 1. Dapatkan relasi produk & supplier untuk mengecek harga pivot
-            $supplier = Supplier::findOrFail($request->supplier_id);
-            $productPivot = $supplier->products()->where('product_id', $request->product_id)->first();
+            $supplier = Supplier::where('id', $request->supplier_id)
+                ->where('business_id', $businessId)
+                ->firstOrFail();
 
+            $productPivot = $supplier->products()->where('product_id', $request->product_id)->first();
             if (!$productPivot) {
                 throw new \Exception("Produk ini belum diatur harganya untuk supplier yang dipilih.");
             }
 
-            // 2. Ambil input harga beli per unit & jumlah masuk
+            // 2. Ambil input harga beli per unit & jumlah masuk (Didefinisikan sebelum closure)
             $purchasePricePerUnit = (float) ($request->filled('purchase_price') && $request->purchase_price > 0 
                 ? $request->purchase_price 
                 : $productPivot->pivot->price);
             $addedQty = (float) $request->quantity;
             $grandTotalExpense = $purchasePricePerUnit * $addedQty;
 
-            // 3. Ambil data produk & inventory saat ini SEBELUM stok ditambahkan
-            $product = Product::findOrFail($request->product_id);
-            $inventory = Inventory::firstOrCreate(
-                ['product_id' => $request->product_id, 'business_id' => $businessId],
-                ['current_stock' => 0]
-            );
-
-            $currentStock = (float) $inventory->current_stock;
+            $product = Product::where('id', $request->product_id)
+                ->where('business_id', $businessId)
+                ->firstOrFail();
             $currentCogs = (float) ($product->cost_price ?? 0);
+            $lastSupplierPrice = (float) ($productPivot->pivot->price ?? 0);
 
-            // 4. Hitung Moving Average Cost (HPP Rata-Rata Bergerak)
-            if ($currentStock <= 0) {
-                // Edge case: Stok habis atau minus, HPP baru langsung menggunakan harga beli terbaru
-                $newCogs = $purchasePricePerUnit;
-            } else {
-                // Rumus Moving Average Cost
-                $newCogs = (($currentStock * $currentCogs) + ($addedQty * $purchasePricePerUnit)) / ($currentStock + $addedQty);
+            // 3. Evaluasi Peringatan Deviasi >40% & Stok <= 0 Sebelum Transaksi (A4)
+            $warnings = [];
+            $cogsDeviation = $currentCogs > 0 ? abs($purchasePricePerUnit - $currentCogs) / $currentCogs : 0;
+            if ($currentCogs > 0 && $cogsDeviation > 0.40) {
+                $warnings[] = "Harga beli (Rp " . number_format($purchasePricePerUnit, 0, ',', '.') . ") menyimpang " . round($cogsDeviation * 100) . "% dari HPP berjalan (Rp " . number_format($currentCogs, 0, ',', '.') . ").";
+            }
+            if ($lastSupplierPrice > 0 && abs($purchasePricePerUnit - $lastSupplierPrice) / $lastSupplierPrice > 0.40) {
+                $warnings[] = "Harga beli menyimpang >40% dari harga kontrak master supplier (Rp " . number_format($lastSupplierPrice, 0, ',', '.') . ").";
             }
 
-            $newCogs = round($newCogs, 2);
-            $product->update(['cost_price' => $newCogs]);
+            $existingInv = Inventory::where('product_id', $request->product_id)->where('business_id', $businessId)->first();
+            $preStock = $existingInv ? (float) $existingInv->current_stock : 0;
+            if ($preStock <= 0) {
+                $warnings[] = "Stok sebelum restock berada pada posisi 0 atau minus ({$preStock}). HPP baru akan langsung mereset ke harga beli baru.";
+            }
 
-            // 5. Update Inventory & Catat Stock Movement
-            $inventory->increment('current_stock', $request->quantity);
+            // Jika ada deviasi dan kasir belum menekan tombol konfirmasi, kembalikan banner peringatan (A4)
+            if (!empty($warnings) && !$request->boolean('confirm')) {
+                return back()->with('warning_confirmation', [
+                    'messages' => $warnings,
+                    'input'    => $request->all(),
+                ])->withInput();
+            }
 
-            StockMovement::create([
-                'business_id' => $businessId,
-                'product_id'  => $request->product_id,
-                'type'        => 'in',
-                'quantity'    => $request->quantity,
-                'reference_id' => 'supplier:' . $supplier->id,
-                'notes'       => 'Restock dari ' . $supplier->name . " @ Rp " . number_format($purchasePricePerUnit, 0, ',', '.') . " (HPP Moving Avg: Rp " . number_format($newCogs, 0, ',', '.') . "). " . $request->notes,
-                'created_by'  => $userId,
-            ]);
-
-            $message = 'Stok berhasil ditambahkan dan HPP disesuaikan menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ' (Tanpa mencatat pengeluaran).';
-
-            // 6. Catat ke Expenses (Cash Flow) JIKA toggle dicentang
-            if ($request->has('record_expense') && $request->record_expense == 1) {
-                // Cari atau buat kategori "Refill Es Batu" khusus untuk bisnis ini dengan flag is_cogs = 1
-                $expenseCategory = ExpenseCategory::firstOrCreate(
-                    [
-                        'business_id' => $businessId,
-                        'name'        => 'Refill Es Batu',
-                    ],
-                    [
-                        'type'        => 'Operasional',
-                        'is_cogs'     => 1,
-                        'is_active'   => 1,
-                    ]
+            // 4. Jalankan Transaksi Database Tunggal (Satu Pola Closure DB::transaction)
+            return DB::transaction(function () use (
+                $request, $businessId, $userId, $product, $supplier, 
+                $purchasePricePerUnit, $addedQty, $grandTotalExpense, 
+                $currentCogs, $warnings
+            ) {
+                // A2: Pastikan baris inventory ada dulu, baru lockForUpdate pada baris inventory
+                $inventory = Inventory::firstOrCreate(
+                    ['product_id' => $request->product_id, 'business_id' => $businessId],
+                    ['current_stock' => 0]
                 );
+                $inventory = Inventory::where('id', $inventory->id)->lockForUpdate()->first();
+                $currentStock = (float) $inventory->current_stock;
 
-                // Pastikan flag is_cogs aktif jika kategori sudah ada sebelumnya
-                if (!$expenseCategory->is_cogs) {
-                    $expenseCategory->update(['is_cogs' => 1]);
+                // Hitung Moving Average HPP
+                if ($currentStock <= 0) {
+                    $newCogs = $purchasePricePerUnit;
+                } else {
+                    $newCogs = (($currentStock * $currentCogs) + ($addedQty * $purchasePricePerUnit)) / ($currentStock + $addedQty);
                 }
+                $newCogs = round($newCogs, 2);
+                $product->update(['cost_price' => $newCogs]);
 
-                $fundingSource = $request->input('funding_source', 'drawer');
-                $affectsDrawer = ($fundingSource === 'drawer');
+                // Update stok inventaris & catat notes terstruktur (A3)
+                $stockBefore = $currentStock;
+                $inventory->increment('current_stock', $request->quantity);
+                $stockAfter = $stockBefore + $addedQty;
 
-                CashFlow::create([
-                    'business_id'    => $businessId,
-                    'type'           => 'expense',
-                    'category_id'    => $expenseCategory->id, 
-                    'amount'         => $grandTotalExpense,
-                    'payment_method' => $request->payment_method,
-                    'funding_source' => $fundingSource,
-                    'affects_drawer' => $affectsDrawer,
-                    'description'    => "Pembelian " . $request->quantity . " unit " . $product->name . " dari " . $supplier->name . " (@ Rp " . number_format($purchasePricePerUnit, 0, ',', '.') . ") [" . ($affectsDrawer ? 'Laci Kasir' : 'Dana Bos / Non-Laci') . "]",
-                    'date'           => now()->toDateString(),
-                    'created_by'     => $userId,
+                $isConfirmed = $request->boolean('confirm');
+                $auditNote = "Restock {$supplier->name} | Beli " . number_format($purchasePricePerUnit, 2, '.', '') .
+                    " | HPP {$currentCogs} -> {$newCogs} | Stok {$stockBefore} -> {$stockAfter}" .
+                    ($isConfirmed ? " [KONFIRMASI DITERIMA]" : "") .
+                    ($request->notes ? " | " . $request->notes : "");
+
+                StockMovement::create([
+                    'business_id'  => $businessId,
+                    'product_id'   => $request->product_id,
+                    'type'         => 'in',
+                    'quantity'     => $request->quantity,
+                    'reference_id' => 'supplier:' . $supplier->id,
+                    'notes'        => $auditNote,
+                    'created_by'   => $userId,
                 ]);
 
-                $message = 'Stok berhasil ditambahkan, HPP diperbarui menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ', dan biaya otomatis tercatat di Pengeluaran (' . ($affectsDrawer ? 'Memotong Saldo Laci' : 'Dana Bos/Luar Laci - Tidak Memotong Laci') . ').';
-            }
+                $message = 'Stok berhasil ditambahkan dan HPP disesuaikan menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ' (Tanpa mencatat pengeluaran).';
 
-            DB::commit();
-            return redirect()->back()->with('success', $message);
+                // Catat ke Cash Flow jika dicentang
+                if ($request->has('record_expense') && $request->record_expense == 1) {
+                    $expenseCategory = ExpenseCategory::firstOrCreate(
+                        ['business_id' => $businessId, 'name' => 'Refill Es Batu'],
+                        ['type' => 'Operasional', 'is_cogs' => 1, 'is_active' => 1]
+                    );
 
-        } catch (\Exception $e) {
-            DB::rollBack();
+                    if (!$expenseCategory->is_cogs) {
+                        $expenseCategory->update(['is_cogs' => 1]);
+                    }
+
+                    $fundingSource = $request->input('funding_source', 'drawer');
+                    $affectsDrawer = ($fundingSource === 'drawer');
+
+                    CashFlow::create([
+                        'business_id'    => $businessId,
+                        'type'           => 'expense',
+                        'category_id'    => $expenseCategory->id, 
+                        'amount'         => $grandTotalExpense,
+                        'payment_method' => $request->payment_method,
+                        'funding_source' => $fundingSource,
+                        'affects_drawer' => $affectsDrawer,
+                        'description'    => "Pembelian " . $request->quantity . " unit " . $product->name . " dari " . $supplier->name . " (@ Rp " . number_format($purchasePricePerUnit, 0, ',', '.') . ") [" . ($affectsDrawer ? 'Laci Kasir' : 'Dana Bos / Non-Laci') . "]",
+                        'date'           => now()->toDateString(),
+                        'created_by'     => $userId,
+                    ]);
+
+                    $message = 'Stok berhasil ditambahkan, HPP diperbarui menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ', dan biaya otomatis tercatat di Pengeluaran (' . ($affectsDrawer ? 'Memotong Saldo Laci' : 'Dana Bos/Luar Laci - Tidak Memotong Laci') . ').';
+                }
+
+                return redirect()->back()->with('success', $message);
+            });
+
+        } catch (\Throwable $e) {
             logger()->error('Kasir error adding stock & expenses: ' . $e->getMessage());
             return back()->with('error', 'Gagal menambahkan stok: ' . $e->getMessage())->withInput();
         }
@@ -177,18 +207,24 @@ class InventoryController extends Controller
 
     public function processBreakUnit(Request $request): RedirectResponse
     {
-        // Validasi input dinamis
+        // Validasi input dinamis (A1: different:source_product_id)
         $request->validate([
             'source_product_id' => 'required|exists:products,id',
             'source_qty' => 'required|integer|min:1',
             'targets' => 'required|array|min:1',
-            'targets.*.product_id' => 'required|exists:products,id',
+            'targets.*.product_id' => 'required|exists:products,id|different:source_product_id',
             'targets.*.qty' => 'required|integer|min:1',
+            'confirm' => 'nullable|boolean',
         ]);
 
-        try {
-            DB::beginTransaction();
+        // Cek manual source != target setelah cast int di luar transaksi (A1)
+        foreach ($request->targets as $target) {
+            if ((int) $target['product_id'] === (int) $request->source_product_id) {
+                return back()->with('error', 'Produk asal dan produk tujuan pecahan tidak boleh sama.')->withInput();
+            }
+        }
 
+        try {
             $businessId = Auth::user()->business_id;
             $userId = Auth::id();
 
@@ -205,32 +241,15 @@ class InventoryController extends Controller
                 throw new \Exception("Data inventaris untuk produk ini belum ada di sistem.");
             }
 
-            // Ambil stok saat ini
-            $currentStock = $sourceInventory->current_stock ?? 0;
-
-            // Proteksi: Cek apakah stok mencukupi
+            $currentStock = (float) ($sourceInventory->current_stock ?? 0);
             if ($currentStock < $request->source_qty) {
                 throw new \Exception("Stok produk asal tidak mencukupi. Sisa stok saat ini: " . $currentStock . ". Anda mencoba memecah: " . $request->source_qty);
             }
-
-            // Kurangi stok utama
-            $sourceInventory->decrement('current_stock', $request->source_qty);
-
-            // Catat pergerakan stok keluar
-            StockMovement::create([
-                'business_id' => $businessId,
-                'product_id' => $request->source_product_id,
-                'type' => 'out',
-                'quantity' => $request->source_qty,
-                'notes' => 'Pecah Ball (Bahan Baku): ' . $sourceProduct->name,
-                'created_by' => $userId,
-            ]);
 
             // 2. Hitung Modal Induk yang Dipecah & Alokasikan ke Hasil Pecahan
             $sourceCostPrice = (float) ($sourceProduct->cost_price ?? 0);
             $totalSourceCost = (float) $request->source_qty * $sourceCostPrice;
 
-            // Helper untuk mengekstrak bobot produk (misal: "Es Kristal 5 Kg" -> 5)
             $extractWeight = function ($productName) {
                 if (preg_match('/(\d+(?:[\.,]\d+)?)\s*(kg|kilo|gram|gr)\b/i', $productName, $matches)) {
                     $val = (float) str_replace(',', '.', $matches[1]);
@@ -243,7 +262,6 @@ class InventoryController extends Controller
                 return null;
             };
 
-            // Hitung bobot atau nilai relatif jika target lebih dari 1
             $targetProducts = [];
             $totalRelativeShare = 0;
             $allHaveWeight = true;
@@ -270,78 +288,128 @@ class InventoryController extends Controller
                 }
             }
 
-            // 3. Tambahkan stok & update Moving Average HPP untuk setiap produk pecahan
-            $totalHasilPecahan = 0;
+            // Pra-kalkulasi untuk mendeteksi lonjakan HPP anak >40% (A4 / 1.4)
+            $warnings = [];
             foreach ($request->targets as $target) {
                 $tId = $target['product_id'];
                 $yieldQty = (float) $target['qty'];
                 $targetProduct = $targetProducts[$tId]['product'] ?? Product::find($tId);
+                if (!$targetProduct) continue;
 
-                if (!$targetProduct) {
-                    continue;
-                }
-
-                // Hitung modal per unit pecahan baru
                 if (count($request->targets) === 1) {
-                    // Rumus langsung untuk 1 target: (Qty Induk * cost_price Induk) / Yield Qty
-                    $modalPerUnitPecahanBaru = ($yieldQty > 0) ? ($totalSourceCost / $yieldQty) : 0;
+                    $modalUnit = ($yieldQty > 0) ? ($totalSourceCost / $yieldQty) : 0;
                 } else {
-                    // Proporsional berdasarkan bobot atau nilai relatif
-                    if ($allHaveWeight) {
-                        $targetWeightShare = $yieldQty * ($targetProducts[$tId]['weight'] ?? 1);
-                    } else {
-                        $pPrice = (float) ($targetProduct->base_price ?? 1);
-                        $targetWeightShare = $yieldQty * ($pPrice > 0 ? $pPrice : 1);
-                    }
-                    $proportion = ($totalRelativeShare > 0) ? ($targetWeightShare / $totalRelativeShare) : (1 / count($request->targets));
-                    $targetTotalCost = $totalSourceCost * $proportion;
-                    $modalPerUnitPecahanBaru = ($yieldQty > 0) ? ($targetTotalCost / $yieldQty) : 0;
+                    $proportion = ($totalRelativeShare > 0) ? (($yieldQty * ($targetProducts[$tId]['weight'] ?? 1)) / $totalRelativeShare) : (1 / count($request->targets));
+                    $modalUnit = ($yieldQty > 0) ? (($totalSourceCost * $proportion) / $yieldQty) : 0;
                 }
 
-                // Cari target inventory
-                $targetInventory = Inventory::firstOrCreate(
-                    ['product_id' => $tId, 'business_id' => $businessId],
-                    ['current_stock' => 0]
-                );
+                $tInv = Inventory::where('product_id', $tId)->where('business_id', $businessId)->first();
+                $cStock = $tInv ? (float) $tInv->current_stock : 0;
+                $cCost = (float) ($targetProduct->cost_price ?? 0);
+                $predCogs = ($cStock > 0 && $cCost > 0)
+                    ? (($cStock * $cCost) + ($yieldQty * $modalUnit)) / ($cStock + $yieldQty)
+                    : $modalUnit;
 
-                // Rumus Moving Average HPP:
-                // ((Stok Sisa * HPP Lama) + (Yield Qty * Modal Pecahan Baru)) / (Stok Sisa + Yield Qty)
-                $currentChildStock = (float) $targetInventory->current_stock;
-                $currentChildCostPrice = (float) ($targetProduct->cost_price ?? 0);
-
-                if ($currentChildStock > 0 && $currentChildCostPrice > 0) {
-                    $newChildCostPrice = (($currentChildStock * $currentChildCostPrice) + ($yieldQty * $modalPerUnitPecahanBaru)) / ($currentChildStock + $yieldQty);
-                } else {
-                    $newChildCostPrice = $modalPerUnitPecahanBaru;
+                if ($cCost > 0 && abs($predCogs - $cCost) / $cCost > 0.40) {
+                    $warnings[] = "HPP produk '{$targetProduct->name}' menyimpang >40% (dari Rp " . number_format($cCost, 0, ',', '.') . " menjadi Rp " . number_format($predCogs, 0, ',', '.') . ").";
                 }
+            }
 
-                // Update cost_price produk pecahan agar HPP selalu tersinkronisasi
-                $targetProduct->update([
-                    'cost_price' => round($newChildCostPrice, 2)
-                ]);
+            if (!empty($warnings) && !$request->boolean('confirm')) {
+                return back()->with('warning_confirmation', [
+                    'messages' => $warnings,
+                    'input'    => $request->all(),
+                ])->withInput();
+            }
 
-                // Tambahkan stok hasil
-                $targetInventory->increment('current_stock', $target['qty']);
+            // Jalankan transaksi
+            return DB::transaction(function () use ($request, $businessId, $userId, $sourceProduct, $totalSourceCost, $targetProducts, $totalRelativeShare, $allHaveWeight) {
+                // Kunci inventory sumber
+                $sourceInventory = Inventory::where('product_id', $request->source_product_id)
+                    ->where('business_id', $businessId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-                // Catat pergerakan stok masuk
+                $sourceStockBefore = (float) $sourceInventory->current_stock;
+                $sourceInventory->decrement('current_stock', $request->source_qty);
+                $sourceStockAfter = $sourceStockBefore - (float) $request->source_qty;
+
+                // Catat mutasi keluar terstruktur (1.4)
                 StockMovement::create([
                     'business_id' => $businessId,
-                    'product_id'  => $tId,
-                    'type'        => 'in',
-                    'quantity'    => $target['qty'],
-                    'notes'       => 'Hasil Pecahan dari ' . $sourceProduct->name . ' (HPP Moving Avg: Rp ' . number_format($newChildCostPrice, 0, ',', '.') . ')',
+                    'product_id'  => $request->source_product_id,
+                    'type'        => 'out',
+                    'quantity'    => $request->source_qty,
+                    'notes'       => "Pecah Ball: {$sourceProduct->name} | Qty: {$request->source_qty} | Stok: {$sourceStockBefore} -> {$sourceStockAfter}",
                     'created_by'  => $userId,
                 ]);
 
-                $totalHasilPecahan += $target['qty'];
-            }
+                $totalHasilPecahan = 0;
+                foreach ($request->targets as $target) {
+                    $tId = $target['product_id'];
+                    $yieldQty = (float) $target['qty'];
+                    $targetProduct = $targetProducts[$tId]['product'] ?? Product::find($tId);
 
-            DB::commit();
-            return redirect()->back()->with('success', "Berhasil memecah {$request->source_qty} unit menjadi total {$totalHasilPecahan} kemasan baru.");
-        } catch (\Exception $e) {
-            DB::rollBack();
+                    if (!$targetProduct) continue;
+
+                    if (count($request->targets) === 1) {
+                        $modalPerUnitPecahanBaru = ($yieldQty > 0) ? ($totalSourceCost / $yieldQty) : 0;
+                    } else {
+                        if ($allHaveWeight) {
+                            $targetWeightShare = $yieldQty * ($targetProducts[$tId]['weight'] ?? 1);
+                        } else {
+                            $pPrice = (float) ($targetProduct->base_price ?? 1);
+                            $targetWeightShare = $yieldQty * ($pPrice > 0 ? $pPrice : 1);
+                        }
+                        $proportion = ($totalRelativeShare > 0) ? ($targetWeightShare / $totalRelativeShare) : (1 / count($request->targets));
+                        $targetTotalCost = $totalSourceCost * $proportion;
+                        $modalPerUnitPecahanBaru = ($yieldQty > 0) ? ($targetTotalCost / $yieldQty) : 0;
+                    }
+
+                    $targetInventory = Inventory::firstOrCreate(
+                        ['product_id' => $tId, 'business_id' => $businessId],
+                        ['current_stock' => 0]
+                    );
+                    $targetInventory = Inventory::where('id', $targetInventory->id)->lockForUpdate()->first();
+
+                    $currentChildStock = (float) $targetInventory->current_stock;
+                    $currentChildCostPrice = (float) ($targetProduct->cost_price ?? 0);
+
+                    if ($currentChildStock > 0 && $currentChildCostPrice > 0) {
+                        $newChildCostPrice = (($currentChildStock * $currentChildCostPrice) + ($yieldQty * $modalPerUnitPecahanBaru)) / ($currentChildStock + $yieldQty);
+                    } else {
+                        $newChildCostPrice = $modalPerUnitPecahanBaru;
+                    }
+
+                    $newChildCostPrice = round($newChildCostPrice, 2);
+                    $targetProduct->update(['cost_price' => $newChildCostPrice]);
+
+                    $targetStockBefore = $currentChildStock;
+                    $targetInventory->increment('current_stock', $target['qty']);
+                    $targetStockAfter = $targetStockBefore + (float) $target['qty'];
+
+                    $isConfirmed = $request->boolean('confirm');
+                    $childNote = "Hasil Pecahan dari {$sourceProduct->name} ke {$targetProduct->name} | Qty: {$yieldQty} | HPP: {$currentChildCostPrice} -> {$newChildCostPrice} | Stok: {$targetStockBefore} -> {$targetStockAfter}" .
+                        ($isConfirmed ? " [KONFIRMASI DITERIMA]" : "");
+
+                    StockMovement::create([
+                        'business_id' => $businessId,
+                        'product_id'  => $tId,
+                        'type'        => 'in',
+                        'quantity'    => $target['qty'],
+                        'notes'       => $childNote,
+                        'created_by'  => $userId,
+                    ]);
+
+                    $totalHasilPecahan += $target['qty'];
+                }
+
+                return redirect()->back()->with('success', "Berhasil memecah {$request->source_qty} unit menjadi total {$totalHasilPecahan} kemasan baru.");
+            });
+
+        } catch (\Throwable $e) {
             logger()->error('Kasir error breaking unit dinamis: ' . $e->getMessage());
-            return back()->with('error', $e->getMessage());
+            return back()->with('error', $e->getMessage())->withInput();
         }
     }
 
