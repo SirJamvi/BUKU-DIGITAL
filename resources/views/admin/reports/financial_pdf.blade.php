@@ -26,6 +26,12 @@
     @endif
     {{-- ====================================================================== --}}
 
+    @if (!empty($reportData['missing_cogs_count']) && $reportData['missing_cogs_count'] > 0)
+    <div style="background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 10px; margin-bottom: 15px; border-radius: 4px; font-size: 11px;">
+        <strong>PERINGATAN AUDIT HPP:</strong> Terdapat {{ number_format($reportData['missing_cogs_count']) }} baris transaksi (Total Omset: Rp {{ number_format($reportData['missing_cogs_revenue'], 0, ',', '.') }}) tanpa snapshot HPP tersimpan. Menggunakan estimasi HPP master.
+    </div>
+    @endif
+
     <div class="summary">
         <div class="summary-item">
             <p>Total Pemasukan</p>

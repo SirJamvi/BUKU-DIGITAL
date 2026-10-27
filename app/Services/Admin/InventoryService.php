@@ -47,19 +47,48 @@ class InventoryService
     public function addStock(array $data): void
     {
         DB::transaction(function () use ($data) {
-            $product = Product::with('inventory')->findOrFail($data['product_id']);
+            $businessId = Auth::user()->business_id;
+            $product = Product::findOrFail($data['product_id']);
 
-            // Tambah stok di inventory
-            $product->inventory->increment('current_stock', $data['quantity']);
+            // Buat inventory dulu jika belum ada, lalu kunci (A2)
+            $inventory = Inventory::firstOrCreate(
+                ['product_id' => $product->id, 'business_id' => $businessId],
+                ['current_stock' => 0]
+            );
+            $inventory = Inventory::where('id', $inventory->id)->lockForUpdate()->first();
 
-            // Catat pergerakan stok sebagai 'in' (masuk)
+            $stockBefore = (float) $inventory->current_stock;
+            $cogsBefore = (float) ($product->cost_price ?? 0);
+            $addedQty = (float) $data['quantity'];
+
+            // Jika membawa purchase_price, hitung moving average; jika tidak, jangan ubah HPP (1.3)
+            $hasPrice = isset($data['purchase_price']) && is_numeric($data['purchase_price']) && (float) $data['purchase_price'] > 0;
+            if ($hasPrice) {
+                $purchasePrice = (float) $data['purchase_price'];
+                $newCogs = $stockBefore <= 0
+                    ? $purchasePrice
+                    : (($stockBefore * $cogsBefore) + ($addedQty * $purchasePrice)) / ($stockBefore + $addedQty);
+                $newCogs = round($newCogs, 2);
+                $product->update(['cost_price' => $newCogs]);
+                $auditNote = "Restock Admin | Beli " . number_format($purchasePrice, 2, '.', '') . " | HPP {$cogsBefore} -> {$newCogs} | Stok {$stockBefore} -> " . ($stockBefore + $addedQty);
+            } else {
+                $newCogs = $cogsBefore;
+                $auditNote = "Restock Admin (Tanpa Harga Beli - HPP Tetap) | HPP {$cogsBefore} | Stok {$stockBefore} -> " . ($stockBefore + $addedQty);
+            }
+
+            if (!empty($data['notes'])) {
+                $auditNote .= " | " . $data['notes'];
+            }
+
+            $inventory->increment('current_stock', $data['quantity']);
+
             StockMovement::create([
-                'business_id' => Auth::user()->business_id,
-                'product_id' => $data['product_id'],
-                'type' => 'in',
-                'quantity' => $data['quantity'],
-                'notes' => $data['notes'] ?? 'Stok masuk manual oleh admin.',
-                'created_by' => Auth::id(),
+                'business_id' => $businessId,
+                'product_id'  => $data['product_id'],
+                'type'        => 'in',
+                'quantity'    => $data['quantity'],
+                'notes'       => $auditNote,
+                'created_by'  => Auth::id(),
             ]);
         });
     }
@@ -128,6 +157,11 @@ class InventoryService
      */
     public function breakUnit(int $fromProductId, int $toProductId, int $quantityToBreak, int $yieldAmount): void
     {
+        // Validasi source != target setelah cast (int) di luar transaksi (1.1)
+        if ((int) $fromProductId === (int) $toProductId) {
+            throw new \InvalidArgumentException("Produk asal dan produk tujuan pecahan tidak boleh sama.");
+        }
+
         DB::transaction(function () use ($fromProductId, $toProductId, $quantityToBreak, $yieldAmount) {
             $fromInventory = $this->getInventoryByProductId($fromProductId);
             $toInventory = $this->getInventoryByProductId($toProductId);
@@ -139,41 +173,51 @@ class InventoryService
                 throw new \Exception("Inventory untuk produk eceran belum dibuat.");
             }
 
+            // Kunci baris inventory
+            $fromInventory = Inventory::where('id', $fromInventory->id)->lockForUpdate()->first();
+            $toInventory = Inventory::where('id', $toInventory->id)->lockForUpdate()->first();
+
             $fromProduct = $fromInventory->product;
             $toProduct = $toInventory->product;
+
+            $fromStockBefore = (float) $fromInventory->current_stock;
+            $toStockBefore = (float) $toInventory->current_stock;
 
             // Hitung modal per unit pecahan baru
             $sourceCostPrice = (float) ($fromProduct->cost_price ?? 0);
             $modalPerUnitPecahanBaru = ($yieldAmount > 0) ? (($quantityToBreak * $sourceCostPrice) / $yieldAmount) : 0;
 
             // Rumus Moving Average HPP produk pecahan:
-            $currentChildStock = (float) $toInventory->current_stock;
             $currentChildCostPrice = (float) ($toProduct->cost_price ?? 0);
 
-            if ($currentChildStock > 0 && $currentChildCostPrice > 0) {
-                $newChildCostPrice = (($currentChildStock * $currentChildCostPrice) + ($yieldAmount * $modalPerUnitPecahanBaru)) / ($currentChildStock + $yieldAmount);
+            if ($toStockBefore > 0 && $currentChildCostPrice > 0) {
+                $newChildCostPrice = (($toStockBefore * $currentChildCostPrice) + ($yieldAmount * $modalPerUnitPecahanBaru)) / ($toStockBefore + $yieldAmount);
             } else {
                 $newChildCostPrice = $modalPerUnitPecahanBaru;
             }
 
+            $newChildCostPrice = round($newChildCostPrice, 2);
             if ($toProduct) {
-                $toProduct->update(['cost_price' => round($newChildCostPrice, 2)]);
+                $toProduct->update(['cost_price' => $newChildCostPrice]);
             }
 
-            // 1. Kurangi stok karung besar (Gunakan type 'out' agar sesuai dengan enum database Anda)
+            $fromStockAfter = $fromStockBefore - $quantityToBreak;
+            $toStockAfter = $toStockBefore + $yieldAmount;
+
+            // 1. Kurangi stok karung besar terstruktur (1.4)
             $this->updateStock(
                 $fromInventory->id,
                 $quantityToBreak,
                 'out',
-                "Pecah ball ke eceran (menjadi {$yieldAmount} pcs)"
+                "Pecah ball ke eceran | Dari: {$fromProduct->name} ke {$toProduct->name} | Qty: {$quantityToBreak} | Stok: {$fromStockBefore} -> {$fromStockAfter}"
             );
 
-            // 2. Tambah stok eceran (Gunakan type 'in')
+            // 2. Tambah stok eceran terstruktur (1.4)
             $this->updateStock(
                 $toInventory->id,
                 $yieldAmount,
                 'in',
-                "Hasil pecah ball dari karung " . $fromInventory->product->name . " (HPP Moving Avg: Rp " . number_format($newChildCostPrice, 0, ',', '.') . ")"
+                "Hasil pecah ball dari {$fromProduct->name} ke {$toProduct->name} | Qty: {$yieldAmount} | HPP: {$currentChildCostPrice} -> {$newChildCostPrice} | Stok: {$toStockBefore} -> {$toStockAfter}"
             );
         });
     }

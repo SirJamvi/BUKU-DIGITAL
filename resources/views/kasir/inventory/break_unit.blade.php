@@ -25,6 +25,41 @@
     </div>
     @endif
 
+    @if(session('warning_confirmation'))
+    <div class="alert alert-warning border-0 shadow-sm rounded-4 p-4 mb-4">
+        <div class="d-flex align-items-center mb-2">
+            <i class="fas fa-exclamation-triangle fa-2x text-warning me-3"></i>
+            <div>
+                <h5 class="fw-bold text-dark mb-1">Perhatian: Penyimpangan Nilai HPP Hasil Pecahan</h5>
+                <p class="text-muted mb-0 small">Sistem mendeteksi perubahan HPP lebih dari 40% pada produk pecahan:</p>
+            </div>
+        </div>
+        <ul class="mb-3 ps-4">
+            @foreach(session('warning_confirmation.messages') as $msg)
+                <li class="fw-semibold text-danger">{{ $msg }}</li>
+            @endforeach
+        </ul>
+        <form action="{{ route('kasir.inventory.process_break_unit') }}" method="POST">
+            @csrf
+            <input type="hidden" name="source_product_id" value="{{ session('warning_confirmation.input.source_product_id') }}">
+            <input type="hidden" name="source_qty" value="{{ session('warning_confirmation.input.source_qty') }}">
+            @if(isset(session('warning_confirmation.input')['targets']))
+                @foreach(session('warning_confirmation.input')['targets'] as $idx => $tgt)
+                    <input type="hidden" name="targets[{{ $idx }}][product_id]" value="{{ $tgt['product_id'] }}">
+                    <input type="hidden" name="targets[{{ $idx }}][qty]" value="{{ $tgt['qty'] }}">
+                @endforeach
+            @endif
+            <input type="hidden" name="confirm" value="1">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-warning fw-bold px-4 text-dark">
+                    <i class="fas fa-check-circle me-1"></i> Lanjutkan (Konfirmasi)
+                </button>
+                <a href="{{ route('kasir.inventory.break_unit') }}" class="btn btn-secondary px-3">Batal / Input Ulang</a>
+            </div>
+        </form>
+    </div>
+    @endif
+
     <div class="row">
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm rounded-4">
@@ -37,7 +72,7 @@
                             <div class="row">
                                 <div class="col-md-8 mb-3 mb-md-0">
                                     <label class="form-label">Pilih Produk (Karung/Ball)</label>
-                                    <select class="form-select @error('source_product_id') is-invalid @enderror" name="source_product_id" required>
+                                    <select class="form-select @error('source_product_id') is-invalid @enderror" name="source_product_id" id="source_product_id" required>
                                         <option value="" disabled selected>-- Pilih Produk Asal --</option>
                                         @foreach($products as $product)
                                         <option value="{{ $product->id }}">{{ $product->name }}</option>
@@ -111,6 +146,23 @@
         let targetIndex = 1; // Mulai index dari 1 karena 0 sudah ada di HTML default
         const container = document.getElementById('target-container');
         const btnAdd = document.getElementById('btn-add-target');
+        const sourceSelect = document.getElementById('source_product_id');
+
+        function syncTargetOptions() {
+            const selectedSource = sourceSelect.value;
+            container.querySelectorAll('select').forEach(sel => {
+                Array.from(sel.options).forEach(opt => {
+                    if (opt.value && opt.value === selectedSource) {
+                        opt.disabled = true;
+                        if (sel.value === selectedSource) sel.value = "";
+                    } else {
+                        opt.disabled = false;
+                    }
+                });
+            });
+        }
+
+        sourceSelect.addEventListener('change', syncTargetOptions);
 
         btnAdd.addEventListener('click', function() {
             // Clone baris pertama
@@ -137,7 +189,13 @@
             // Masukkan baris baru ke dalam container
             container.appendChild(newRow);
             targetIndex++;
+
+            // Sinkronkan status disabled opsi sumber pada baris baru
+            syncTargetOptions();
         });
+
+        // Jalankan sinkronisasi awal saat halaman dimuat
+        syncTargetOptions();
     });
 </script>
 @endsection

@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use App\Models\ExpenseCategory;
+use App\Models\User;
 
 class ExpenseSyncController extends Controller
 {
@@ -20,69 +22,81 @@ class ExpenseSyncController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        // 2. Validasi Data (Tambahkan user_id)
+        // 2. Validasi Data
         $request->validate([
-            'user_id' => 'required|integer',  // ID Driver yang checkout
-            'amount' => 'required|numeric',
-            'description' => 'required|string',
-            'date' => 'required|date',
+            'user_id'      => 'required|integer',  // ID Driver / Karyawan
+            'amount'       => 'required|numeric',
+            'description'  => 'required|string',
+            'date'         => 'required|date',
             'reference_id' => 'required|string',
         ]);
 
         try {
-            // 3. Cari Kategori Gaji untuk Business ID 10
-            $category = DB::table('expense_categories')
-                ->where('name', 'LIKE', '%Gaji%')
-                ->where('business_id', 10)
-                ->first();
-
-            $categoryId = $category ? $category->id : null;
-
-            // Jika kategori tidak ditemukan, gunakan ID default atau return error
-            if (!$categoryId) {
-                Log::warning("⚠️ Kategori Gaji tidak ditemukan untuk Business ID 10");
-                // Opsi 1: Return error
-                // return response()->json(['message' => 'Kategori Gaji tidak ditemukan untuk Business ID 10'], 404);
-                
-                // Opsi 2: Gunakan ID kategori default (sesuaikan dengan DB Anda)
-                $categoryId = 2; // Sesuaikan dengan ID kategori 'Gaji' milik Business 10
+            // 3. Ambil user pengirim untuk menentukan business_id dinamis
+            $user = User::find($request->user_id);
+            if (!$user || !$user->business_id) {
+                return response()->json([
+                    'message' => "User ID {$request->user_id} tidak ditemukan atau belum terafiliasi dengan unit bisnis."
+                ], 422);
             }
 
-            // 4. Cek Duplikasi berdasarkan reference_id
+            $businessId = (int) $user->business_id;
+
+            // 4. Cari Kategori Gaji dinamis berdasarkan business_id
+            $category = ExpenseCategory::where('business_id', $businessId)
+                ->where('name', 'LIKE', '%Gaji%')
+                ->first();
+
+            if (!$category) {
+                Log::warning("⚠️ Kategori Gaji tidak ditemukan untuk Business ID {$businessId}");
+                return response()->json([
+                    'message' => "Kategori pengeluaran 'Gaji' tidak ditemukan untuk bisnis ID {$businessId}. Harap buat kategori terlebih dahulu."
+                ], 422);
+            }
+
+            $categoryId = $category->id;
+            $referenceId = 'ATT-' . $request->reference_id;
+
+            // 5. Cegah Duplikasi berdasarkan reference_id (Idempotent)
             $exists = DB::table('cash_flow')
-                ->where('reference_id', 'ATT-' . $request->reference_id)
-                ->where('business_id', 10)
+                ->where('reference_id', $referenceId)
+                ->where('business_id', $businessId)
                 ->exists();
 
             if ($exists) {
-                Log::info("ℹ️ Data sudah ada: ATT-{$request->reference_id}");
+                Log::info("ℹ️ Data sudah ada: {$referenceId}");
                 return response()->json(['message' => 'Data already synced'], 200);
             }
 
-            // 5. Insert Data ke cash_flow
-            $id = DB::table('cash_flow')->insertGetId([
-                'business_id' => 10,
-                'type' => 'expense',
-                'category_id' => $categoryId,
-                'amount' => $request->amount,
-                'description' => $request->description,
-                'date' => $request->date,
-                'reference_id' => 'ATT-' . $request->reference_id,
-                
-                // ✅ BENAR: Masukkan user_id ke kolom created_by (kolom yang ada di tabel)
-                'created_by' => $request->user_id,
-                
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            // 6. Siapkan Payload Insert
+            $insertData = [
+                'business_id'  => $businessId,
+                'type'         => 'expense',
+                'category_id'  => $categoryId,
+                'amount'       => $request->amount,
+                'description'  => $request->description,
+                'date'         => $request->date,
+                'reference_id' => $referenceId,
+                'created_by'   => $request->user_id,
+                'created_at'   => now(),
+                'updated_at'   => now(),
+            ];
 
-            Log::info("✅ Sukses Insert Gaji ke Buku Digital | ID: {$id} | Driver: {$request->user_id} | Amount: {$request->amount} | Ref: ATT-{$request->reference_id}");
+            // Tulis is_cogs jika kolom sudah ada di database
+            if (Schema::hasColumn('cash_flow', 'is_cogs')) {
+                $insertData['is_cogs'] = (bool) $category->is_cogs;
+            }
+
+            $id = DB::table('cash_flow')->insertGetId($insertData);
+
+            Log::info("✅ Sukses Insert Gaji ke Buku Digital | ID: {$id} | User: {$request->user_id} | Business: {$businessId} | Amount: {$request->amount} | Ref: {$referenceId}");
 
             return response()->json([
-                'message' => 'Sukses sync gaji',
-                'id' => $id,
-                'user_id' => $request->user_id,
-                'amount' => $request->amount
+                'message'     => 'Sukses sync gaji',
+                'id'          => $id,
+                'user_id'     => $request->user_id,
+                'business_id' => $businessId,
+                'amount'      => $request->amount,
             ], 200);
 
         } catch (\Exception $e) {

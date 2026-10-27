@@ -136,9 +136,8 @@ class DashboardController extends Controller
                 foreach ($trxs as $trx) {
                     foreach ($trx->details as $detail) {
                         $pName = $detail->product->name ?? 'Produk';
-                        $isOngkir = str_contains(strtolower($pName), 'ongkos kirim') || str_contains(strtolower($pName), 'ongkir');
-                        if ($isOngkir) {
-                            continue; // Abaikan ongkos kirim dari hitungan muatan fisik ball
+                        if ($detail->product && $detail->product->isService()) {
+                            continue; // Abaikan produk jasa/ongkir dari hitungan muatan fisik ball
                         }
                         $qty = (int) $detail->quantity;
                         $totalQty += $qty;
@@ -168,9 +167,8 @@ class DashboardController extends Controller
                     foreach ($tripItems as $tItem) {
                         foreach ($tItem->details as $d) {
                             $pName = $d->product->name ?? 'Produk';
-                            $isOngkir = str_contains(strtolower($pName), 'ongkos kirim') || str_contains(strtolower($pName), 'ongkir');
-                            if ($isOngkir) {
-                                continue; // Abaikan ongkos kirim dari hitungan muatan ritase
+                            if ($d->product && $d->product->isService()) {
+                                continue; // Abaikan produk jasa/ongkir dari hitungan muatan ritase
                             }
                             $qty = (int) $d->quantity;
                             $tripQty += $qty;

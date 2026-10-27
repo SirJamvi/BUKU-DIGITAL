@@ -25,6 +25,38 @@
     </div>
     @endif
 
+    @if(session('warning_confirmation'))
+    <div class="alert alert-warning border-0 shadow-sm rounded-4 p-4 mb-4">
+        <div class="d-flex align-items-center mb-2">
+            <i class="fas fa-exclamation-triangle fa-2x text-warning me-3"></i>
+            <div>
+                <h5 class="fw-bold text-dark mb-1">Perhatian: Penyimpangan Nilai Restock Terdeteksi</h5>
+                <p class="text-muted mb-0 small">Sistem mendeteksi deviasi signifikan pada transaksi restock ini:</p>
+            </div>
+        </div>
+        <ul class="mb-3 ps-4">
+            @foreach(session('warning_confirmation.messages') as $msg)
+                <li class="fw-semibold text-danger">{{ $msg }}</li>
+            @endforeach
+        </ul>
+        <form action="{{ route('kasir.inventory.store_stock') }}" method="POST">
+            @csrf
+            @foreach(session('warning_confirmation.input') as $key => $val)
+                @if(!is_array($val) && $key !== '_token' && $key !== 'confirm')
+                    <input type="hidden" name="{{ $key }}" value="{{ $val }}">
+                @endif
+            @endforeach
+            <input type="hidden" name="confirm" value="1">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-warning fw-bold px-4 text-dark">
+                    <i class="fas fa-check-circle me-1"></i> Lanjutkan (Konfirmasi)
+                </button>
+                <a href="{{ route('kasir.inventory.add_stock') }}" class="btn btn-secondary px-3">Batal / Input Ulang</a>
+            </div>
+        </form>
+    </div>
+    @endif
+
     <div class="card border-0 shadow-sm rounded-4">
         <div class="card-body p-4">
             <form action="{{ route('kasir.inventory.store_stock') }}" method="POST">

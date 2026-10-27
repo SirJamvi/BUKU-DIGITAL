@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use App\Services\Admin\FinancialService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use App\Services\Accounting\CogsCalculator;
 
 class DashboardService
 {
@@ -458,30 +459,31 @@ class DashboardService
 
             $totalSalesRevenue = (float) $allSalesToday->sum('total_amount');
 
-            // 4. Hitung COGS / HPP (Modal Es Kristal) Berdasarkan Snapshot cost_price Detail Transaksi
-            $cogsAmount = 0;
+            // 4. Hitung COGS / HPP Berdasarkan CogsCalculator Terpusat
+            $cogsResult = CogsCalculator::calculateForTransactions($allSalesToday);
+            $cogsAmount = $cogsResult['total_cogs'];
             $itemsSoldBreakdown = [];
+            $strict = (bool) config('accounting.strict_cogs', false);
 
             foreach ($allSalesToday as $trx) {
                 foreach ($trx->details as $detail) {
-                    $pName = optional($detail->product)->name ?? 'Produk';
-                    // Abaikan ongkos kirim dari hitungan COGS
-                    $isOngkir = str_contains(strtolower($pName), 'ongkos kirim') || str_contains(strtolower($pName), 'ongkir');
-                    if ($isOngkir) {
+                    $product = $detail->product;
+                    // Abaikan produk jasa (misal: ongkos kirim)
+                    if ($product && $product->isService()) {
                         continue;
                     }
 
+                    $pName = optional($product)->name ?? 'Produk';
                     $qty = (float) $detail->quantity;
-                    // Prioritaskan snapshot HPP dari detail transaksi, fallback ke master Product
-                    $costPrice = (float) ($detail->cost_price ?? optional($detail->product)->cost_price ?? 0);
+                    $rawCost = $detail->cost_price;
+                    $costPrice = ($rawCost === null) ? ($strict ? 0.0 : (float) (optional($product)->cost_price ?? 0)) : (float) $rawCost;
                     $subCogs = $costPrice * $qty;
-                    $cogsAmount += $subCogs;
 
                     if (!isset($itemsSoldBreakdown[$pName])) {
                         $itemsSoldBreakdown[$pName] = [
-                            'name' => $pName,
-                            'qty' => 0,
-                            'unit' => optional($detail->product)->unit ?? 'Ball',
+                            'name'       => $pName,
+                            'qty'        => 0,
+                            'unit'       => optional($product)->unit ?? 'Ball',
                             'cost_price' => $costPrice,
                             'total_cogs' => 0,
                         ];
@@ -635,6 +637,8 @@ class DashboardService
                 'pelunasan_transfer'       => $pelunasanTransferAmount,
                 'kasbon'                   => $kasbonAmount,
                 'has_activity'             => $hasActivity,
+                'missing_cogs_count'       => $cogsResult['missing_cogs_count'],
+                'missing_cogs_revenue'     => $cogsResult['missing_cogs_revenue'],
             ];
         }
 

@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\CashFlow;
 use App\Models\PaymentMethod;
+use App\Models\Inventory;
 use App\Exceptions\InsufficientStockException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -150,16 +151,52 @@ class PosService
 
                 foreach ($order['items'] as $item) {
                     $product = Product::find($item['product_id']);
+                    $inventory = Inventory::where('product_id', $item['product_id'])
+                        ->where('business_id', $businessId)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$inventory) {
+                        throw new \Exception("Data inventaris untuk produk '{$product->name}' (ID: {$item['product_id']}) belum ada di sistem.");
+                    }
+                    if ($inventory->current_stock < $item['quantity']) {
+                        throw new InsufficientStockException("Stok untuk produk '{$product->name}' tidak mencukupi.");
+                    }
+
+                    // Tentukan snapshot cost_price
+                    $snapshotCost = 0.0;
+                    if ($product && !$product->isService()) {
+                        $masterCost = (float) ($product->cost_price ?? 0);
+                        if ($masterCost > 0) {
+                            $snapshotCost = $masterCost;
+                        } else {
+                            // Rata-rata snapshot positif 7 hari terakhir untuk product_id & business_id
+                            $avg7Days = DB::table('transaction_details')
+                                ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
+                                ->where('transactions.business_id', $businessId)
+                                ->where('transaction_details.product_id', $product->id)
+                                ->where('transaction_details.cost_price', '>', 0)
+                                ->where('transactions.transaction_date', '>=', now()->subDays(7))
+                                ->avg('transaction_details.cost_price');
+
+                            if ($avg7Days !== null && (float) $avg7Days > 0) {
+                                $snapshotCost = round((float) $avg7Days, 2);
+                            } else {
+                                $snapshotCost = $masterCost;
+                                \Log::warning("POS Snapshot Fallback: Produk {$product->name} (ID: {$product->id}, Business: {$businessId}) master cost_price <= 0 dan tidak ada riwayat snapshot positif 7 hari terakhir.");
+                            }
+                        }
+                    }
 
                     $transaction->details()->create([
-                        'product_id' => $item['product_id'],
-                        'quantity' => $item['quantity'],
-                        'cost_price' => $product->cost_price ?? 0,
-                        'unit_price' => $item['unit_price'],
+                        'product_id'  => $item['product_id'],
+                        'quantity'    => $item['quantity'],
+                        'cost_price'  => $snapshotCost,
+                        'unit_price'  => $item['unit_price'],
                         'total_price' => $item['total_price'],
                     ]);
 
-                    $product->inventory->decrement('current_stock', $item['quantity']);
+                    $inventory->decrement('current_stock', $item['quantity']);
                 }
 
                 $createdTransactions[] = $transaction;
@@ -224,19 +261,56 @@ class PosService
                 'created_by' => Auth::id(),
             ]);
 
-            // 3. Simpan detail transaksi dan kurangi stok (TETAP SAMA)
+            // 3. Simpan detail transaksi dan kurangi stok
+            $businessId = (int) $transaction->business_id;
             foreach ($data['items'] as $item) {
                 $product = Product::find($item['product_id']);
+                $inventory = Inventory::where('product_id', $item['product_id'])
+                    ->where('business_id', $businessId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$inventory) {
+                    throw new \Exception("Data inventaris untuk produk '{$product->name}' (ID: {$item['product_id']}) belum ada di sistem.");
+                }
+                if ($inventory->current_stock < $item['quantity']) {
+                    throw new InsufficientStockException("Stok untuk produk '{$product->name}' tidak mencukupi.");
+                }
+
+                // Tentukan snapshot cost_price
+                $snapshotCost = 0.0;
+                if ($product && !$product->isService()) {
+                    $masterCost = (float) ($product->cost_price ?? 0);
+                    if ($masterCost > 0) {
+                        $snapshotCost = $masterCost;
+                    } else {
+                        // Rata-rata snapshot positif 7 hari terakhir untuk product_id & business_id
+                        $avg7Days = DB::table('transaction_details')
+                            ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
+                            ->where('transactions.business_id', $businessId)
+                            ->where('transaction_details.product_id', $product->id)
+                            ->where('transaction_details.cost_price', '>', 0)
+                            ->where('transactions.transaction_date', '>=', now()->subDays(7))
+                            ->avg('transaction_details.cost_price');
+
+                        if ($avg7Days !== null && (float) $avg7Days > 0) {
+                            $snapshotCost = round((float) $avg7Days, 2);
+                        } else {
+                            $snapshotCost = $masterCost;
+                            \Log::warning("POS Snapshot Fallback: Produk {$product->name} (ID: {$product->id}, Business: {$businessId}) master cost_price <= 0 dan tidak ada riwayat snapshot positif 7 hari terakhir.");
+                        }
+                    }
+                }
 
                 $transaction->details()->create([
                     'product_id' => $item['product_id'],
                     'quantity' => $item['quantity'],
-                    'cost_price' => $product->cost_price ?? 0,
+                    'cost_price' => $snapshotCost,
                     'unit_price' => $item['unit_price'],
                     'total_price' => $item['total_price'],
                 ]);
 
-                $product->inventory->decrement('current_stock', $item['quantity']);
+                $inventory->decrement('current_stock', $item['quantity']);
             }
 
             // 4. Catat ke Cash Flow HANYA JIKA LUNAS

@@ -11,6 +11,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\PaymentMethod;
+use App\Services\Accounting\CogsCalculator;
 use Carbon\Carbon;
 
 class FinancialService
@@ -82,37 +83,13 @@ class FinancialService
         $this->applyDateFilters($transactionsQuery, $filters, 'transaction_date');
         $transactions = $transactionsQuery->get();
 
-        $totalIncome = 0;
-        $totalCogs = 0;
-        $totalGrossProfit = 0;
-
-        foreach ($transactions as $transaction) {
-            $transactionCogs = 0;
-            if ($transaction->details) {
-                foreach ($transaction->details as $detail) {
-                    // Fallback dinamis: Cari harga modal di transaction_detail, jika kosong ambil dari master Product
-                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
-                    $transactionCogs += ($costPrice * $detail->quantity);
-                }
-            }
-
-            // Perbaikan Akuntansi: Gross Profit = Revenue Aktual - COGS Aktual
-            $transactionGrossProfit = $transaction->total_amount - $transactionCogs;
-
-            $transaction->cogs = $transactionCogs;
-            $transaction->gross_profit = $transactionGrossProfit;
-
-            $totalCogs += $transactionCogs;
-            $totalGrossProfit += $transactionGrossProfit;
-            $totalIncome += $transaction->total_amount;
-        }
+        $cogsResult = CogsCalculator::calculateForTransactions($transactions);
+        $totalIncome = $cogsResult['total_income'];
+        $totalCogs = $cogsResult['total_cogs'];
+        $totalGrossProfit = $cogsResult['total_gross_profit'];
 
         // Beban Operasional — SUM langsung di database (Murni Expense, is_cogs = 0)
-        $expenseQuery = CashFlow::where('business_id', $businessId)
-            ->where('type', 'expense')
-            ->whereHas('category', function ($q) {
-                $q->where('is_cogs', 0);
-            });
+        $expenseQuery = $this->basePureExpenseQuery($businessId);
         $this->applyDateFilters($expenseQuery, $filters, 'date');
         $totalExpense = $expenseQuery->sum('amount');
 
@@ -128,21 +105,23 @@ class FinancialService
             ->withQueryString();
 
         return [
-            'transactions'       => $transactions,
-            'cash_flows'         => $cashFlows,
-            'total_income'       => $totalIncome,
-            'total_cogs'         => $totalCogs,
-            'total_expense'      => $totalExpense,
-            'total_gross_profit' => $totalGrossProfit,
-            'net_profit'         => $netProfit,
-            'balances'           => $balances,
-            'filters'            => $filters,
+            'transactions'         => $transactions,
+            'cash_flows'           => $cashFlows,
+            'total_income'         => $totalIncome,
+            'total_cogs'           => $totalCogs,
+            'total_expense'        => $totalExpense,
+            'total_gross_profit'   => $totalGrossProfit,
+            'net_profit'           => $netProfit,
+            'balances'             => $balances,
+            'filters'              => $filters,
+            'missing_cogs_count'   => $cogsResult['missing_cogs_count'],
+            'missing_cogs_revenue' => $cogsResult['missing_cogs_revenue'],
         ];
     }
 
     /**
      * Versi khusus untuk export PDF — ambil SEMUA data arus kas tanpa pagination.
-     * [FIXED]: Sinkronisasi rumus Laba Kotor & HPP dengan fungsi laporan utama.
+     * [FIXED]: Sinkronisasi rumus Laba Kotor & HPP dengan fungsi laporan utama via CogsCalculator.
      */
     public function getFinancialReportForExport(array $filters): array
     {
@@ -156,35 +135,25 @@ class FinancialService
         $this->applyDateFilters($transactionsQuery, $filters, 'transaction_date');
         $transactions = $transactionsQuery->get();
 
-        $totalIncome = 0;
-        $totalCogs = 0;
-        $totalGrossProfit = 0;
-
-        foreach ($transactions as $transaction) {
-            $transactionCogs = 0;
-            if ($transaction->details) {
-                foreach ($transaction->details as $detail) {
-                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
-                    $transactionCogs += ($costPrice * $detail->quantity);
-                }
-            }
-
-            $transactionGrossProfit = $transaction->total_amount - $transactionCogs;
-            $transaction->cogs = $transactionCogs;
-            $transaction->gross_profit = $transactionGrossProfit;
-
-            $totalCogs += $transactionCogs;
-            $totalGrossProfit += $transactionGrossProfit;
-            $totalIncome += $transaction->total_amount;
-        }
+        $cogsResult = CogsCalculator::calculateForTransactions($transactions);
+        $totalIncome = $cogsResult['total_income'];
+        $totalCogs = $cogsResult['total_cogs'];
+        $totalGrossProfit = $cogsResult['total_gross_profit'];
 
         $cashFlowQuery = CashFlow::where('business_id', $businessId)->with('category');
         $this->applyDateFilters($cashFlowQuery, $filters, 'date');
         $cashFlows = $cashFlowQuery->latest('date')->get();
 
         // Total beban operasional murni (is_cogs = 0)
-        $totalExpense = $cashFlows->filter(function ($flow) {
-            return $flow->type === 'expense' && $flow->category && $flow->category->is_cogs == 0;
+        $useCashflowIsCogs = (bool) config('accounting.use_cashflow_is_cogs', false);
+        $totalExpense = $cashFlows->filter(function ($flow) use ($useCashflowIsCogs) {
+            if ($flow->type !== 'expense') {
+                return false;
+            }
+            if ($useCashflowIsCogs) {
+                return (int) ($flow->is_cogs ?? 0) === 0;
+            }
+            return $flow->category && (int) $flow->category->is_cogs === 0;
         })->sum('amount');
 
         $netProfit = $totalGrossProfit - $totalExpense;
@@ -192,21 +161,22 @@ class FinancialService
         $balances = $this->calculatePaymentBalances($filters);
 
         return [
-            'transactions'       => $transactions,
-            'cash_flows'         => $cashFlows,
-            'total_income'       => $totalIncome,
-            'total_cogs'         => $totalCogs,
-            'total_expense'      => $totalExpense,
-            'total_gross_profit' => $totalGrossProfit,
-            'net_profit'         => $netProfit,
-            'balances'           => $balances,
-            'filters'            => $filters,
+            'transactions'         => $transactions,
+            'cash_flows'           => $cashFlows,
+            'total_income'         => $totalIncome,
+            'total_cogs'           => $totalCogs,
+            'total_expense'        => $totalExpense,
+            'total_gross_profit'   => $totalGrossProfit,
+            'net_profit'           => $netProfit,
+            'balances'             => $balances,
+            'filters'              => $filters,
+            'missing_cogs_count'   => $cogsResult['missing_cogs_count'],
+            'missing_cogs_revenue' => $cogsResult['missing_cogs_revenue'],
         ];
     }
 
     /**
      * Ringkasan finansial dashboard
-     * [FIXED]: Menggunakan lazy() untuk optimalisasi memory dan perbaikan rumus.
      */
     public function getFinancialSummary(): array
     {
@@ -217,32 +187,18 @@ class FinancialService
             ->where('status', 'completed')
             ->sum('total_amount');
 
-        $totalExpense = CashFlow::where('type', 'expense')
-            ->where('business_id', $businessId)
-            ->whereHas('category', function ($q) {
-                $q->where('is_cogs', 0);
-            })
-            ->sum('amount');
+        $totalExpense = $this->basePureExpenseQuery($businessId)->sum('amount');
 
-        $grossProfit = 0;
-
-        // PERBAIKAN: Gunakan lazy() untuk mencegah RAM penuh
+        // Ambil transaksi penjualan untuk kalkulasi terstandarisasi CogsCalculator
         $transactions = Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('status', 'completed')
             ->with('details.product')
-            ->lazy();
+            ->get();
 
-        foreach ($transactions as $transaction) {
-            $transactionCogs = 0;
-            if ($transaction->details) {
-                foreach ($transaction->details as $detail) {
-                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
-                    $transactionCogs += ($costPrice * $detail->quantity);
-                }
-            }
-            $grossProfit += ($transaction->total_amount - $transactionCogs);
-        }
+        $cogsResult = CogsCalculator::calculateForTransactions($transactions);
+        $grossProfit = $cogsResult['total_gross_profit'];
+        $totalIncome = $cogsResult['total_income'];
 
         $netProfit = $grossProfit - $totalExpense;
 
@@ -252,11 +208,13 @@ class FinancialService
         $netCashFlow = $totalCashIn - $totalCashOut;
 
         return [
-            'total_income'  => $totalIncome,
-            'total_expense' => $totalExpense,
-            'gross_profit'  => $grossProfit,
-            'net_profit'    => $netProfit,
-            'net_cash_flow' => $netCashFlow,
+            'total_income'         => $totalIncome,
+            'total_expense'        => $totalExpense,
+            'gross_profit'         => $grossProfit,
+            'net_profit'           => $netProfit,
+            'net_cash_flow'        => $netCashFlow,
+            'missing_cogs_count'   => $cogsResult['missing_cogs_count'],
+            'missing_cogs_revenue' => $cogsResult['missing_cogs_revenue'],
         ];
     }
 
@@ -315,7 +273,7 @@ class FinancialService
     }
 
     /**
-     * [FIXED]: lazy() and Revenue - COGS calculation.
+     * [FIXED]: Standardisasi CogsCalculator dan Revenue - COGS calculation.
      */
     public function processMonthlyClosing(string $period): OwnerProfit
     {
@@ -336,40 +294,20 @@ class FinancialService
         $startOfMonth = $date->copy()->startOfMonth();
         $endOfMonth = $date->copy()->endOfMonth();
 
-        $monthlyIncome = Transaction::where('business_id', $businessId)
-            ->where('type', 'sale')
-            ->where('status', 'completed')
-            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
-            ->sum('total_amount');
-
-        $monthlyGrossProfit = 0;
-
-        // PERBAIKAN: Gunakan lazy()
         $transactions = Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('status', 'completed')
             ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
             ->with(['details.product'])
-            ->lazy();
+            ->get();
 
-        foreach ($transactions as $transaction) {
-            $transactionCogs = 0;
-            if ($transaction->details) {
-                foreach ($transaction->details as $detail) {
-                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
-                    $transactionCogs += ($costPrice * $detail->quantity);
-                }
-            }
-            $monthlyGrossProfit += ($transaction->total_amount - $transactionCogs);
-        }
+        $cogsResult = CogsCalculator::calculateForTransactions($transactions);
+        $monthlyIncome = $cogsResult['total_income'];
+        $monthlyGrossProfit = $cogsResult['total_gross_profit'];
 
-        $monthlyOpex = CashFlow::where('business_id', $businessId)
-            ->where('type', 'expense')
-            ->whereBetween('date', [$startOfMonth, $endOfMonth])
-            ->whereHas('category', function ($query) {
-                $query->where('is_cogs', 0);
-            })
-            ->sum('amount');
+        $monthlyOpexQuery = $this->basePureExpenseQuery($businessId)
+            ->whereBetween('date', [$startOfMonth, $endOfMonth]);
+        $monthlyOpex = $monthlyOpexQuery->sum('amount');
 
         $netProfit = $monthlyGrossProfit - $monthlyOpex;
 
@@ -462,33 +400,20 @@ class FinancialService
             ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
             ->sum('total_amount');
 
-        $monthlyGrossProfit = 0;
-
         $transactions = Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('status', 'completed')
             ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
             ->with(['details.product'])
-            ->lazy();
+            ->get();
 
-        foreach ($transactions as $transaction) {
-            $transactionCogs = 0;
-            if ($transaction->details) {
-                foreach ($transaction->details as $detail) {
-                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
-                    $transactionCogs += ($costPrice * $detail->quantity);
-                }
-            }
-            $monthlyGrossProfit += ($transaction->total_amount - $transactionCogs);
-        }
+        $cogsResult = CogsCalculator::calculateForTransactions($transactions);
+        $monthlyIncome = $cogsResult['total_income'];
+        $monthlyGrossProfit = $cogsResult['total_gross_profit'];
 
-        $monthlyOpex = CashFlow::where('business_id', $businessId)
-            ->where('type', 'expense')
-            ->whereBetween('date', [$startOfMonth, $endOfMonth])
-            ->whereHas('category', function ($query) {
-                $query->where('is_cogs', 0);
-            })
-            ->sum('amount');
+        $monthlyOpexQuery = $this->basePureExpenseQuery($businessId)
+            ->whereBetween('date', [$startOfMonth, $endOfMonth]);
+        $monthlyOpex = $monthlyOpexQuery->sum('amount');
 
         $netProfit = $monthlyGrossProfit - $monthlyOpex;
 
@@ -513,11 +438,13 @@ class FinancialService
             'net_profit'         => (float) $netProfit,
             'is_already_closed'  => $existingClosing ? true : false,
             'closing_data'       => $existingClosing,
-            'transactions_count' => $transactionsCount,
-            'expenses_count'     => CashFlow::where('business_id', $businessId)
+            'transactions_count'   => $transactionsCount,
+            'expenses_count'       => CashFlow::where('business_id', $businessId)
                 ->where('type', 'expense')
                 ->whereBetween('date', [$startOfMonth, $endOfMonth])
                 ->count(),
+            'missing_cogs_count'   => $cogsResult['missing_cogs_count'],
+            'missing_cogs_revenue' => $cogsResult['missing_cogs_revenue'],
         ];
     }
 
@@ -736,37 +663,40 @@ class FinancialService
     {
         $businessId = Auth::user()->business_id;
 
-        // Gunakan lazy() dan batasi field select agar hemat memori
         $transactions = Transaction::where('type', 'sale')
             ->where('business_id', $businessId)
             ->where('status', 'completed')
-            ->select('id', 'total_amount', 'transaction_date')
-            ->with(['details:id,transaction_id,product_id,quantity,unit_price,total_price', 'details.product:id,cost_price']);
+            ->with(['details.product']);
 
         $this->applyDateFilters($transactions, $filters, 'transaction_date');
-        $transactions = $transactions->lazy();
+        $transactions = $transactions->get();
 
-        $totalGrossProfit = 0;
-        foreach ($transactions as $transaction) {
-            $transactionCogs = 0;
-            if ($transaction->details) {
-                foreach ($transaction->details as $detail) {
-                    $costPrice = $detail->cost_price ?? $detail->unit_cost ?? $detail->purchase_price ?? optional($detail->product)->cost_price ?? 0;
-                    $transactionCogs += ($costPrice * $detail->quantity);
-                }
-            }
-            $totalGrossProfit += ($transaction->total_amount - $transactionCogs);
-        }
+        $cogsResult = CogsCalculator::calculateForTransactions($transactions);
+        $totalGrossProfit = $cogsResult['total_gross_profit'];
 
-        $expenseQuery = CashFlow::where('business_id', $businessId)
-            ->where('type', 'expense')
-            ->whereHas('category', function ($q) {
-                $q->where('is_cogs', 0);
-            });
+        $expenseQuery = $this->basePureExpenseQuery($businessId);
         $this->applyDateFilters($expenseQuery, $filters, 'date');
         $totalExpense = $expenseQuery->sum('amount');
 
         return $totalGrossProfit - $totalExpense;
+    }
+
+    /**
+     * Membangun base query beban operasional murni (is_cogs = 0).
+     * Jika accounting.use_cashflow_is_cogs aktif, membaca langsung kolom cash_flow.is_cogs.
+     * Jika tidak aktif (default), membaca relasi category.is_cogs.
+     */
+    private function basePureExpenseQuery(int $businessId)
+    {
+        $query = CashFlow::where('business_id', $businessId)->where('type', 'expense');
+
+        if (config('accounting.use_cashflow_is_cogs', false)) {
+            return $query->where('is_cogs', 0);
+        }
+
+        return $query->whereHas('category', function ($q) {
+            $q->where('is_cogs', 0);
+        });
     }
 
     private function applyDateFilters($query, array $filters, string $dateColumn): void
