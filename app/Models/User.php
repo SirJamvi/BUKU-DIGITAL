@@ -14,10 +14,28 @@ use Laravel\Sanctum\HasApiTokens;
 /**
  * @method bool hasRole(string|array $roleName)
  * @method bool hasPermission(string $permissionName)
+ * @method bool isAdmin()
+ * @method bool isKasir()
  */
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, HasRoles, HasPermissions;
+
+    /**
+     * Cek apakah user adalah admin atau owner.
+     */
+    public function isAdmin(): bool
+    {
+        return in_array($this->role, ['admin', 'owner']) || $this->hasRole('admin');
+    }
+
+    /**
+     * Cek apakah user adalah kasir.
+     */
+    public function isKasir(): bool
+    {
+        return $this->role === 'kasir' || $this->hasRole('kasir');
+    }
 
     protected $fillable = [
         'business_id',

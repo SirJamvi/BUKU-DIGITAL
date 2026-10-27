@@ -540,16 +540,30 @@ class FinancialService
 
     public function createExpense(array $data): void
     {
-        $category = ExpenseCategory::firstOrCreate(
-            ['business_id' => Auth::user()->business_id, 'name' => trim($data['category_name'])],
-            ['type' => 'Operasional', 'is_active' => true, 'created_by' => Auth::id(), 'is_cogs' => false]
-        );
+        $rawCategoryName = trim($data['category_name']);
+        $businessId = Auth::user()->business_id;
+
+        // Cek case-insensitive agar tidak terjadi duplikasi seperti 'Bensin' vs 'bensin'
+        $category = ExpenseCategory::where('business_id', $businessId)
+            ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($rawCategoryName)])
+            ->first();
+
+        if (!$category) {
+            $category = ExpenseCategory::create([
+                'business_id' => $businessId,
+                'name'        => $rawCategoryName,
+                'type'        => $data['type'] ?? 'Operasional',
+                'is_active'   => true,
+                'created_by'  => Auth::id(),
+                'is_cogs'     => $data['is_cogs'] ?? false,
+            ]);
+        }
 
         $fundingSource = $data['funding_source'] ?? 'drawer';
         $affectsDrawer = ($fundingSource === 'drawer');
 
         CashFlow::create([
-            'business_id'    => Auth::user()->business_id,
+            'business_id'    => $businessId,
             'type'           => 'expense',
             'category_id'    => $category->id,
             'amount'         => $data['amount'],
@@ -564,15 +578,24 @@ class FinancialService
 
     public function updateExpense(CashFlow $expense, array $data): void
     {
-        $category = ExpenseCategory::firstOrCreate(
-            ['business_id' => Auth::user()->business_id, 'name' => trim($data['category_name'])],
-            [
-                'type'       => 'Operasional',
-                'is_active'  => true,
-                'created_by' => Auth::id(),
-                'is_cogs'    => false,
-            ]
-        );
+        $rawCategoryName = trim($data['category_name']);
+        $businessId = Auth::user()->business_id;
+
+        // Cek case-insensitive agar tidak terjadi duplikasi
+        $category = ExpenseCategory::where('business_id', $businessId)
+            ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($rawCategoryName)])
+            ->first();
+
+        if (!$category) {
+            $category = ExpenseCategory::create([
+                'business_id' => $businessId,
+                'name'        => $rawCategoryName,
+                'type'        => 'Operasional',
+                'is_active'   => true,
+                'created_by'  => Auth::id(),
+                'is_cogs'     => false,
+            ]);
+        }
 
         $updateData = [
             'category_id'    => $category->id,
@@ -597,15 +620,23 @@ class FinancialService
 
     public function createExpenseCategory(array $data): void
     {
-        ExpenseCategory::firstOrCreate(
-            ['business_id' => Auth::user()->business_id, 'name' => trim($data['name'])],
-            [
-                'type'       => $data['type'] ?? 'Operasional',
-                'is_active'  => true,
-                'created_by' => Auth::id(),
-                'is_cogs'    => $data['is_cogs'] ?? false,
-            ]
-        );
+        $rawName = trim($data['name']);
+        $businessId = Auth::user()->business_id;
+
+        $existing = ExpenseCategory::where('business_id', $businessId)
+            ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($rawName)])
+            ->first();
+
+        if (!$existing) {
+            ExpenseCategory::create([
+                'business_id' => $businessId,
+                'name'        => $rawName,
+                'type'        => $data['type'] ?? 'Operasional',
+                'is_active'   => true,
+                'created_by'  => Auth::id(),
+                'is_cogs'     => $data['is_cogs'] ?? false,
+            ]);
+        }
     }
 
     public function getAllocationHistory(): array

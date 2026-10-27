@@ -69,30 +69,46 @@ class ExpenseController extends Controller
         $categoryName = $request->input('category_name');
         $user = Auth::user();
 
-        if ($categoryName === '__NEW__' && ($user->isAdmin() || $user->role === 'admin')) {
+        if ($categoryName === '__NEW__') {
             $request->validate([
                 'new_category_name' => 'required|string|max:191',
-                'new_category_type' => 'required|in:HPP,Operasional,Piutang Karyawan,Non-usaha',
+                'new_category_type' => 'nullable|in:HPP,Operasional,Piutang Karyawan,Non-usaha',
             ]);
 
-            $categoryName = trim($request->input('new_category_name'));
-            $isCogs = ($request->input('new_category_type') === 'HPP');
+            $rawCategoryName = trim($request->input('new_category_name'));
 
-            $categoryPayload = [
-                'type'       => $request->input('new_category_type'),
-                'is_active'  => true,
-                'created_by' => $user->id,
-                'is_cogs'    => $isCogs,
-            ];
+            // 1. Cek case-insensitive apakah kategori sudah ada untuk mencegah duplikasi nama seperti 'Bensin' vs 'bensin'
+            $existing = ExpenseCategory::where('business_id', $user->business_id)
+                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($rawCategoryName)])
+                ->first();
 
-            if (\Illuminate\Support\Facades\Schema::hasColumn('expense_categories', 'category_type')) {
-                $categoryPayload['category_type'] = $request->input('new_category_type');
+            if ($existing) {
+                // Re-use nama kategori yang sudah ada
+                $categoryName = $existing->name;
+            } else {
+                // Buat kategori baru: Kasir default Operasional (is_cogs = false) agar margin HPP terjaga, admin tetap bisa pilih
+                $type = ($user->isAdmin() && $request->filled('new_category_type'))
+                    ? $request->input('new_category_type')
+                    : 'Operasional';
+
+                $isCogs = ($type === 'HPP');
+
+                $categoryPayload = [
+                    'business_id' => $user->business_id,
+                    'name'        => $rawCategoryName,
+                    'type'        => $type,
+                    'is_active'   => true,
+                    'created_by'  => $user->id,
+                    'is_cogs'     => $isCogs,
+                ];
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('expense_categories', 'category_type')) {
+                    $categoryPayload['category_type'] = $type;
+                }
+
+                $newCategory = ExpenseCategory::create($categoryPayload);
+                $categoryName = $newCategory->name;
             }
-
-            ExpenseCategory::firstOrCreate(
-                ['business_id' => $user->business_id, 'name' => $categoryName],
-                $categoryPayload
-            );
         }
 
         $payload = $request->all();
