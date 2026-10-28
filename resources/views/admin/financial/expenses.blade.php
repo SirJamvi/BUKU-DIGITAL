@@ -261,6 +261,7 @@
                         <th>Tanggal</th>
                         <th>Kategori</th>
                         <th class="d-none d-md-table-cell">Deskripsi</th>
+                        <th class="text-center">Bukti Nota</th>
                         <th class="text-end">Jumlah</th>
                         <th class="d-none d-lg-table-cell">Dicatat oleh</th>
                         <th class="text-center">Aksi</th>
@@ -277,6 +278,15 @@
                         </td>
                         <td data-label="Deskripsi" class="d-none d-md-table-cell">
                             {{ Str::limit($expense->description, 50) }}
+                        </td>
+                        <td data-label="Bukti Nota" class="text-center">
+                            @if(!empty($expense->receipt_image))
+                                <a href="{{ asset($expense->receipt_image) }}" target="_blank" class="badge bg-success text-white text-decoration-none">
+                                    <i class="fas fa-receipt me-1"></i> Ada Nota
+                                </a>
+                            @else
+                                <span class="badge bg-light text-muted border">-</span>
+                            @endif
                         </td>
                         <td data-label="Jumlah" class="text-end text-danger fw-bold">
                             <span class="d-none d-sm-inline">Rp </span>{{ number_format($expense->amount, 0, ',', '.') }}
@@ -373,7 +383,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6" class="text-center py-4">
+                        <td colspan="7" class="text-center py-4">
                             <i class="fas fa-inbox fa-3x text-muted mb-3 d-block"></i>
                             <p class="text-muted mb-0">Tidak ada data pengeluaran yang ditemukan.</p>
                             @if(request()->has('start_date') || request()->has('end_date'))

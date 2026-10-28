@@ -562,7 +562,7 @@ class FinancialService
         $fundingSource = $data['funding_source'] ?? 'drawer';
         $affectsDrawer = ($fundingSource === 'drawer');
 
-        CashFlow::create([
+        $expensePayload = [
             'business_id'    => $businessId,
             'type'           => 'expense',
             'category_id'    => $category->id,
@@ -573,7 +573,13 @@ class FinancialService
             'description'    => $data['description'],
             'date'           => $data['date'],
             'created_by'     => Auth::id(),
-        ]);
+        ];
+
+        if (!empty($data['receipt_image'])) {
+            $expensePayload['receipt_image'] = $data['receipt_image'];
+        }
+
+        CashFlow::create($expensePayload);
     }
 
     public function updateExpense(CashFlow $expense, array $data): void
@@ -610,11 +616,21 @@ class FinancialService
             $updateData['affects_drawer'] = ($data['funding_source'] === 'drawer');
         }
 
+        if (!empty($data['receipt_image'])) {
+            if ($expense->receipt_image && $expense->receipt_image !== $data['receipt_image']) {
+                \App\Services\ProofUploadService::deleteProof($expense->receipt_image);
+            }
+            $updateData['receipt_image'] = $data['receipt_image'];
+        }
+
         $expense->update($updateData);
     }
 
     public function deleteExpense(CashFlow $expense): void
     {
+        if ($expense->receipt_image) {
+            \App\Services\ProofUploadService::deleteProof($expense->receipt_image);
+        }
         $expense->delete();
     }
 

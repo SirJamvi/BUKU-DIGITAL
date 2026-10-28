@@ -15,7 +15,7 @@
     </a>
     @endslot
 
-    <form action="{{ route('kasir.expenses.store') }}" method="POST" id="expenseForm">
+    <form action="{{ route('kasir.expenses.store') }}" method="POST" id="expenseForm" enctype="multipart/form-data">
         @csrf
 
         <div class="row mb-3">
@@ -50,8 +50,13 @@
                 {{-- Alert 1: Feedback Real-time untuk Cegah Duplikasi Anomali --}}
                 <div id="category_feedback" class="mt-2"></div>
             </div>
-            <div class="col-md-6 mb-2">
-                @if(auth()->user()->isAdmin())
+                @php
+                    $isUserAdmin = auth()->check() && (
+                        (method_exists(auth()->user(), 'isAdmin') && auth()->user()->isAdmin()) 
+                        || in_array(auth()->user()->role ?? '', ['admin', 'owner'])
+                    );
+                @endphp
+                @if($isUserAdmin)
                 <label class="form-label fw-bold text-primary">Jenis Klasifikasi Akuntansi <span class="text-danger">*</span></label>
                 <select name="new_category_type" id="new_category_type" class="form-select @error('new_category_type') is-invalid @enderror">
                     <option value="Operasional" {{ old('new_category_type') == 'Operasional' ? 'selected' : '' }}>Operasional (Beban Usaha Rutin)</option>
@@ -136,6 +141,29 @@
             @error('description') <div class="invalid-feedback">{{ $message }}</div> @enderror
         </div>
 
+        {{-- Upload Bukti Nota Pengeluaran (Tablet Friendly) --}}
+        <div class="mb-4 p-3 bg-light rounded border">
+            <label class="form-label fw-bold text-dark mb-1">
+                <i class="fas fa-camera text-primary me-1"></i> Upload Bukti Nota / Struk Fisik <span class="badge bg-secondary ms-1">Opsional</span>
+            </label>
+            <div class="small text-muted mb-2">Kasir dapat memotret struk menggunakan kamera tablet atau memilih file dari galeri.</div>
+            <input type="file" name="receipt_image" id="receipt_image" class="form-control @error('receipt_image') is-invalid @enderror" accept="image/*,application/pdf" onchange="previewReceiptImage(this)">
+            @error('receipt_image') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            
+            {{-- Preview box khusus tablet --}}
+            <div id="receipt_preview_container" class="mt-2 d-none">
+                <div class="d-flex align-items-center gap-2">
+                    <img id="receipt_preview_img" src="#" alt="Preview Nota" class="img-thumbnail" style="max-height: 120px; border-radius: 6px;">
+                    <div>
+                        <span id="receipt_preview_name" class="small fw-bold d-block text-truncate" style="max-width: 250px;"></span>
+                        <button type="button" class="btn btn-outline-danger btn-sm mt-1" onclick="clearReceiptImage()">
+                            <i class="fas fa-times me-1"></i> Batal Foto
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="text-end">
             <x-button type="submit" variant="primary" class="px-4">
                 <i class="fas fa-save me-1"></i> Simpan Data
@@ -145,6 +173,33 @@
 </x-card>
 
 <script>
+    function previewReceiptImage(input) {
+        const container = document.getElementById('receipt_preview_container');
+        const img = document.getElementById('receipt_preview_img');
+        const name = document.getElementById('receipt_preview_name');
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            name.textContent = file.name;
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    img.src = e.target.result;
+                    img.classList.remove('d-none');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                img.classList.add('d-none');
+            }
+            container.classList.remove('d-none');
+        }
+    }
+
+    function clearReceiptImage() {
+        const input = document.getElementById('receipt_image');
+        input.value = '';
+        document.getElementById('receipt_preview_container').classList.add('d-none');
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         const categorySelect = document.getElementById('category_select');
         const newCatSection = document.getElementById('new_category_section');

@@ -64,6 +64,7 @@ class ExpenseController extends Controller
             'date'           => 'required|date',
             'payment_method' => 'required|exists:payment_methods,slug',
             'funding_source' => 'nullable|string|in:drawer,external',
+            'receipt_image'  => 'nullable|file|mimes:jpeg,png,jpg,webp,pdf|max:10240',
         ]);
         
         $categoryName = $request->input('category_name');
@@ -87,7 +88,8 @@ class ExpenseController extends Controller
                 $categoryName = $existing->name;
             } else {
                 // Buat kategori baru: Kasir default Operasional (is_cogs = false) agar margin HPP terjaga, admin tetap bisa pilih
-                $type = ($user->isAdmin() && $request->filled('new_category_type'))
+                $isUserAdmin = (method_exists($user, 'isAdmin') && $user->isAdmin()) || in_array($user->role ?? '', ['admin', 'owner']);
+                $type = ($isUserAdmin && $request->filled('new_category_type'))
                     ? $request->input('new_category_type')
                     : 'Operasional';
 
@@ -113,6 +115,11 @@ class ExpenseController extends Controller
 
         $payload = $request->all();
         $payload['category_name'] = $categoryName;
+
+        if ($request->hasFile('receipt_image')) {
+            $payload['receipt_image'] = \App\Services\ProofUploadService::uploadReceipt($request->file('receipt_image'));
+        }
+
         $this->financialService->createExpense($payload);
 
         return redirect()->route('kasir.expenses.index')->with('success', 'Data pengeluaran berhasil dicatat.');

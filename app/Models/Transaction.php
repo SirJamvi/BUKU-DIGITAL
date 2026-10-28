@@ -29,12 +29,15 @@ class Transaction extends Model
         'transaction_date',
         'notes',
         'created_by',
+        'payment_proof',
+        'proof_verified_at',
+        'proof_verified_by',
     ];
-
 
     protected $casts = [
         'transaction_date' => 'datetime',
         'delivered_at' => 'datetime',
+        'proof_verified_at' => 'datetime',
     ];
 
     /**
@@ -79,5 +82,10 @@ class Transaction extends Model
     public function payments()
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function proofVerifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'proof_verified_by');
     }
 }

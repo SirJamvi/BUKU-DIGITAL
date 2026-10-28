@@ -103,9 +103,15 @@ class FinancialController extends Controller
             
             // [BARU] Validasi Payment Method: Wajib diisi & harus ada di kolom 'slug' tabel payment_methods
             'payment_method' => 'required|exists:payment_methods,slug',
+            'receipt_image'  => 'nullable|file|mimes:jpeg,png,jpg,webp,pdf|max:10240',
         ]);
         
-        $this->financialService->createExpense($request->all());
+        $payload = $request->all();
+        if ($request->hasFile('receipt_image')) {
+            $payload['receipt_image'] = \App\Services\ProofUploadService::uploadReceipt($request->file('receipt_image'));
+        }
+
+        $this->financialService->createExpense($payload);
         return redirect()->route('admin.financial.expenses')->with('success', 'Data pengeluaran berhasil disimpan.');
     }
 

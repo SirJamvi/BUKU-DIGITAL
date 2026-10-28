@@ -498,7 +498,7 @@ $modalId = 'modalGroup_' . $groupKey;
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             {{-- FORM DIMULAI DARI SINI, MEMBUNGKUS SELURUH MODAL --}}
-            <form action="{{ route('kasir.transactions.bulkMarkAsPaid') }}" method="POST">
+            <form action="{{ route('kasir.transactions.bulkMarkAsPaid') }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 <div class="modal-header bg-dark text-white">
                     <h5 class="modal-title">
@@ -587,8 +587,8 @@ $modalId = 'modalGroup_' . $groupKey;
                         <div class="col-md-5">
                             <label class="small fw-bold text-muted mb-1">Alokasi Tanggal Pembukuan:</label>
                             <select name="settlement_date_mode" id="bulk_settlement_date_mode" class="form-select form-select-sm" onchange="checkBulkSettlementMode()">
-                                <option value="today" selected>💵 Uang Baru Diterima Hari Ini (Masuk Laci / Kas Hari Ini)</option>
-                                <option value="nota_date">⚠️ Koreksi Lupa Update (Uang Sudah Diterima Saat Tanggal Nota)</option>
+                                <option value="today" id="bulk_opt_today" selected>💵 Uang Baru Diterima Hari Ini (Masuk Laci / Kas Hari Ini)</option>
+                                <option value="nota_date" id="bulk_opt_nota_date">⚠️ Koreksi Lupa Update (Uang Sudah Diterima Saat Tanggal Nota)</option>
                             </select>
                             <div id="bulk_warning_nota" class="text-danger small mt-1 fw-bold d-none" style="font-size: 0.72rem;">
                                 ⚠️ Perhatian: Memilih opsi ini tidak akan menambah catatan Saldo Laci hari ini karena uang dianggap sudah masuk pada tanggal nota dibuat.
@@ -597,6 +597,16 @@ $modalId = 'modalGroup_' . $groupKey;
                         <div class="col-md-4">
                             <label class="small fw-bold text-muted mb-1">Catatan Pelunasan (Opsional):</label>
                             <input type="text" name="settlement_notes" class="form-control form-control-sm" placeholder="Misal: Bukti transfer terlampir">
+                        </div>
+                        <div class="col-12 mt-2 pt-2 border-top">
+                            <label class="small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
+                                <span><i class="fab fa-whatsapp text-success me-1"></i> Bukti Pembayaran / Transfer Non-Tunai (WhatsApp):</span>
+                                <span id="bulk_proof_required_badge"><span class="badge bg-light text-muted border">Opsional (Cash)</span></span>
+                            </label>
+                            <input type="file" name="payment_proof" id="bulk_payment_proof" class="form-control form-control-sm" accept="image/*">
+                            <div id="bulk_proof_help" class="text-muted" style="font-size: 0.72rem;">
+                                *Opsional untuk Cash. Cukup upload <strong>1 file bukti</strong> dari galeri tablet untuk melunasi seluruh nota yang dicentang di atas.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -618,17 +628,52 @@ $modalId = 'modalGroup_' . $groupKey;
 </div>
 <script>
 function checkBulkSettlementMode() {
-    const isNota = document.getElementById('bulk_settlement_date_mode')?.value === 'nota_date';
     const method = document.getElementById('bulk_payment_method')?.value;
+    const selectDate = document.getElementById('bulk_settlement_date_mode');
+    const optNota = document.getElementById('bulk_opt_nota_date');
     const warn = document.getElementById('bulk_warning_nota');
-    if (warn) {
-        if (isNota && method === 'cash') {
-            warn.classList.remove('d-none');
+    const proofInput = document.getElementById('bulk_payment_proof');
+    const proofBadge = document.getElementById('bulk_proof_required_badge');
+    const proofHelp = document.getElementById('bulk_proof_help');
+
+    const isCash = (method === 'cash');
+
+    // 1. Jika Cash, alokasi pembukuan 'koreksi lupa update' tidak boleh muncul atau dikunci
+    if (optNota && selectDate) {
+        if (isCash) {
+            optNota.disabled = true;
+            optNota.style.display = 'none';
+            selectDate.value = 'today';
+            if (warn) warn.classList.add('d-none');
         } else {
-            warn.classList.add('d-none');
+            optNota.disabled = false;
+            optNota.style.display = '';
+            if (warn) {
+                if (selectDate.value === 'nota_date') {
+                    warn.classList.remove('d-none');
+                } else {
+                    warn.classList.add('d-none');
+                }
+            }
+        }
+    }
+
+    // 2. Jika selain cash, wajib upload bukti nota transfer
+    if (proofInput) {
+        if (isCash) {
+            proofInput.removeAttribute('required');
+            if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-light text-muted border">Opsional (Cash)</span>';
+            if (proofHelp) proofHelp.innerHTML = '*Opsional jika bayar Cash. Cukup upload <strong>1 file bukti</strong> jika ada.';
+        } else {
+            proofInput.setAttribute('required', 'required');
+            if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-danger text-white"><i class="fas fa-asterisk me-1"></i>Wajib Upload Bukti WA</span>';
+            if (proofHelp) proofHelp.innerHTML = '<strong class="text-danger">*Wajib diunggah!</strong> Lampirkan 1 screenshot bukti transfer WA pelanggan untuk melunasi nota terpilih.';
         }
     }
 }
+document.addEventListener('DOMContentLoaded', function() {
+    checkBulkSettlementMode();
+});
 </script>
 
 {{-- ============================================================= --}}

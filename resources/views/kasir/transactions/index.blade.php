@@ -92,7 +92,7 @@
     @if($transaction->payment_status === 'pending')
     <div class="modal fade" id="payModalIndex{{ $transaction->id }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
-            <form action="{{ route('kasir.transactions.markAsPaid', $transaction->id) }}" method="POST">
+            <form action="{{ route('kasir.transactions.markAsPaid', $transaction->id) }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
                 <div class="modal-content text-start">
@@ -134,7 +134,7 @@
                                     <br><small class="text-muted">Gunakan jika pelanggan/driver baru menyerahkan uangnya hari ini (Cash, DANA, Transfer).</small>
                                 </label>
                             </div>
-                            <div class="form-check">
+                            <div class="form-check" id="container_idx_nota_{{ $transaction->id }}">
                                 <input class="form-check-input" type="radio" name="settlement_date_mode" id="settle_idx_nota_{{ $transaction->id }}" value="nota_date" onchange="checkSettlementModeIdx_{{ $transaction->id }}()">
                                 <label class="form-check-label" for="settle_idx_nota_{{ $transaction->id }}">
                                     <strong>Koreksi Lupa Update (Uang Sudah Diterima Saat Tanggal Nota: {{ $transaction->transaction_date ? \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') : '' }})</strong>
@@ -165,6 +165,15 @@
                         @endif
 
                         <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark d-flex justify-content-between align-items-center">
+                                <span><i class="fab fa-whatsapp text-success me-1"></i> Bukti Pembayaran / Transfer Non-Tunai (WhatsApp):</span>
+                                <span id="proof_badge_idx_{{ $transaction->id }}"><span class="badge bg-light text-muted border">Opsional (Cash)</span></span>
+                            </label>
+                            <input type="file" name="payment_proof" id="proof_idx_{{ $transaction->id }}" class="form-control form-control-sm" accept="image/*">
+                            <div id="proof_help_idx_{{ $transaction->id }}" class="text-muted" style="font-size: 0.72rem;">*Opsional untuk Cash. Ambil dari galeri tablet jika bayar transfer/DANA.</div>
+                        </div>
+
+                        <div class="mb-3">
                             <label class="form-label small text-muted">Catatan Pelunasan (Opsional)</label>
                             <input type="text" name="settlement_notes" class="form-control form-control-sm" placeholder="Misal: Bukti transfer terlampir">
                         </div>
@@ -180,16 +189,58 @@
     <script>
     function checkSettlementModeIdx_{{ $transaction->id }}() {
         const method = document.getElementById('pm_idx_{{ $transaction->id }}')?.value;
-        const isNota = document.getElementById('settle_idx_nota_{{ $transaction->id }}')?.checked;
+        const isCash = (method === 'cash');
+        const optToday = document.getElementById('settle_idx_today_{{ $transaction->id }}');
+        const optNota = document.getElementById('settle_idx_nota_{{ $transaction->id }}');
+        const containerNota = document.getElementById('container_idx_nota_{{ $transaction->id }}');
         const warn = document.getElementById('warning_nota_idx_{{ $transaction->id }}');
-        if (warn) {
-            if (isNota && method === 'cash') {
-                warn.classList.remove('d-none');
-            } else {
-                warn.classList.add('d-none');
+        const proofInput = document.getElementById('proof_idx_{{ $transaction->id }}');
+        const proofBadge = document.getElementById('proof_badge_idx_{{ $transaction->id }}');
+        const proofHelp = document.getElementById('proof_help_idx_{{ $transaction->id }}');
+
+        if (isCash) {
+            if (optNota) {
+                optNota.disabled = true;
+                optNota.checked = false;
+            }
+            if (optToday) {
+                optToday.checked = true;
+            }
+            if (containerNota) {
+                containerNota.classList.add('d-none');
+            }
+            if (warn) warn.classList.add('d-none');
+
+            if (proofInput) {
+                proofInput.removeAttribute('required');
+                if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-light text-muted border">Opsional (Cash)</span>';
+                if (proofHelp) proofHelp.innerText = '*Opsional jika pelunasan secara Cash / Tunai.';
+            }
+        } else {
+            if (optNota) {
+                optNota.disabled = false;
+            }
+            if (containerNota) {
+                containerNota.classList.remove('d-none');
+            }
+            if (warn) {
+                if (optNota && optNota.checked) {
+                    warn.classList.remove('d-none');
+                } else {
+                    warn.classList.add('d-none');
+                }
+            }
+
+            if (proofInput) {
+                proofInput.setAttribute('required', 'required');
+                if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-danger text-white"><i class="fas fa-asterisk me-1"></i>Wajib Upload Bukti WA</span>';
+                if (proofHelp) proofHelp.innerHTML = '<strong class="text-danger">*Wajib diunggah!</strong> Lampirkan screenshot bukti transfer WhatsApp pelanggan.';
             }
         }
     }
+    document.addEventListener('DOMContentLoaded', function() {
+        checkSettlementModeIdx_{{ $transaction->id }}();
+    });
     </script>
     @endif
     @endforeach

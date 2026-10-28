@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\FundAllocationController;
 use App\Http\Controllers\Admin\BusinessIntelligenceController;
 use App\Http\Controllers\Admin\SupplierController;
+use App\Http\Controllers\Admin\ProofAuditController;
 
 // Dashboard
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -77,6 +78,15 @@ Route::prefix('financial')->name('financial.')->group(function () {
 
     // Rute baru untuk proses tutup buku / sinkronisasi profit
     Route::post('/process-monthly-closing', [FinancialController::class, 'processMonthlyClosing'])->name('process-monthly-closing');
+});
+
+// Audit Bukti Transaksi & Pengeluaran Kasir
+Route::prefix('proof-audit')->name('proof-audit.')->group(function () {
+    Route::get('/', [ProofAuditController::class, 'index'])->name('index');
+    Route::post('/verify-expense/{expense}', [ProofAuditController::class, 'verifyExpense'])->name('verify-expense');
+    Route::post('/unverify-expense/{expense}', [ProofAuditController::class, 'unverifyExpense'])->name('unverify-expense');
+    Route::post('/verify-payment/{transaction}', [ProofAuditController::class, 'verifyPayment'])->name('verify-payment');
+    Route::post('/unverify-payment/{transaction}', [ProofAuditController::class, 'unverifyPayment'])->name('unverify-payment');
 });
 
 // Inventory

@@ -48,6 +48,7 @@
                         <th>Tanggal</th>
                         <th>Kategori</th>
                         <th>Deskripsi</th>
+                        <th class="text-center">Bukti Nota</th>
                         <th class="text-end">Jumlah</th>
                         <th>Dicatat Oleh</th>
                     </tr>
@@ -57,12 +58,21 @@
                         <td>{{ \Carbon\Carbon::parse($expense->date)->isoFormat('D MMM YYYY') }}</td>
                         <td><span class="badge bg-secondary">{{ $expense->category->name ?? 'N/A' }}</span></td>
                         <td>{{ Str::limit($expense->description, 50) }}</td>
+                        <td class="text-center">
+                            @if(!empty($expense->receipt_image))
+                                <a href="{{ asset($expense->receipt_image) }}" target="_blank" class="badge bg-success text-white text-decoration-none">
+                                    <i class="fas fa-receipt me-1"></i> Ada Nota
+                                </a>
+                            @else
+                                <span class="badge bg-light text-muted border">-</span>
+                            @endif
+                        </td>
                         <td class="text-end text-danger fw-bold">Rp {{ number_format($expense->amount, 0, ',', '.') }}</td>
                         <td>{{ $expense->createdBy->name ?? 'Sistem' }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5" class="text-center py-4">
+                        <td colspan="6" class="text-center py-4">
                             <i class="fas fa-inbox fa-3x text-muted mb-3 d-block"></i>
                             <p class="text-muted mb-0">Tidak ada data pengeluaran yang ditemukan.</p>
                         </td>

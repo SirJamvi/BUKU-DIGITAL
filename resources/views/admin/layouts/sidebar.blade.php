@@ -70,6 +70,13 @@
             @endpermission
 
             @permission('financial.view_all')
+            <a href="{{ route('admin.proof-audit.index') }}" class="sidebar-item {{ request()->routeIs('admin.proof-audit.*') ? 'active' : '' }}">
+                <i class="fas fa-clipboard-check"></i>
+                <span>Audit Bukti Kasir</span>
+            </a>
+            @endpermission
+
+            @permission('financial.view_all')
             <a href="{{ route('admin.financial.index') }}" class="sidebar-item {{ request()->routeIs('admin.financial.*') ? 'active' : '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
                 <span>Finansial</span>

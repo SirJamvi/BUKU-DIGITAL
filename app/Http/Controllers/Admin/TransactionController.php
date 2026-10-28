@@ -61,25 +61,40 @@ class TransactionController extends Controller
      */
     public function markAsPaid(Request $request, Transaction $transaction): RedirectResponse
     {
+        $isCash = strtolower($request->payment_method ?? '') === 'cash';
+
         $request->validate([
             'payment_method'       => 'required|string',
             'settlement_date_mode' => 'nullable|string|in:today,nota_date',
             'settlement_notes'     => 'nullable|string|max:255',
             'cash_destination'     => 'nullable|string|in:drawer,owner',
+            'payment_proof'        => ($isCash ? 'nullable' : 'required') . '|file|mimes:jpeg,png,jpg,webp|max:10240',
+        ], [
+            'payment_proof.required' => 'Bukti pembayaran / transfer WhatsApp wajib diunggah untuk metode pelunasan non-tunai (' . strtoupper($request->payment_method ?? '') . ').',
         ]);
 
         try {
-            $isCash = strtolower($request->payment_method) === 'cash';
             $cashDestination = $request->cash_destination ?? 'drawer';
 
-            $settlementDate = ($request->settlement_date_mode === 'nota_date')
+            $proofPath = null;
+            if ($request->hasFile('payment_proof')) {
+                $proofPath = \App\Services\ProofUploadService::uploadPaymentProof($request->file('payment_proof'));
+            }
+
+            // Tentukan tanggal buku pencatatan cash flow:
+            // Jika Cash, selalu masuk kas hari ini (koreksi lupa update dikunci)
+            $settlementDate = (!$isCash && $request->settlement_date_mode === 'nota_date')
                 ? Carbon::parse($transaction->transaction_date)->startOfDay()
                 : now();
 
-            $transaction->update([
+            $txUpdate = [
                 'payment_status' => 'paid',
                 'payment_method' => $request->payment_method
-            ]);
+            ];
+            if ($proofPath) {
+                $txUpdate['payment_proof'] = $proofPath;
+            }
+            $transaction->update($txUpdate);
 
             if ($request->filled('settlement_notes')) {
                 $transaction->update([

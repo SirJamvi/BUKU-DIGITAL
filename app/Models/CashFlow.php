@@ -26,12 +26,16 @@ class CashFlow extends Model
         'date',
         'reference_id',
         'created_by',
+        'receipt_image',
+        'proof_verified_at',
+        'proof_verified_by',
     ];
 
     protected $casts = [
         'date' => 'date',
         'affects_drawer' => 'boolean',
         'is_cogs' => 'boolean',
+        'proof_verified_at' => 'datetime',
     ];
 
     protected static function booted()
@@ -69,5 +73,10 @@ class CashFlow extends Model
     public function transaction()
     {
         return $this->belongsTo(Transaction::class, 'reference_id');
+    }
+
+    public function proofVerifiedBy()
+    {
+        return $this->belongsTo(User::class, 'proof_verified_by');
     }
 }
