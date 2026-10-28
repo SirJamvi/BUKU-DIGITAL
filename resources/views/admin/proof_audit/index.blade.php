@@ -147,7 +147,7 @@
                     </div>
                 </div>
                 <div class="small text-muted">
-                    <i class="fas fa-check-circle text-success me-1"></i><strong>{{ $paymentsWithProofCount }}</strong> dari {{ $totalPaymentsCount }} transaksi memiliki bukti transfer WA.
+                    <i class="fas fa-layer-group text-primary me-1"></i><strong>{{ $totalPaymentBatchesCount ?? $totalPaymentsCount }}</strong> Transfer Mutasi (<strong>{{ $totalPaymentsCount }}</strong> Nota).
                 </div>
             </div>
         </div>
@@ -186,7 +186,7 @@
                     <button class="nav-link {{ $activeTab === 'payments' ? 'active' : '' }}" 
                             id="payments-tab" data-bs-toggle="tab" data-bs-target="#payments-pane" type="button" role="tab">
                         <i class="fab fa-whatsapp me-1 text-success"></i> Bukti Pelunasan Non-Tunai WA
-                        <span class="badge bg-success ms-1">{{ $totalPaymentsCount }}</span>
+                        <span class="badge bg-success ms-1">{{ ($viewMode ?? 'grouped') === 'grouped' ? ($totalPaymentBatchesCount ?? $totalPaymentsCount) . ' Transfer' : $totalPaymentsCount . ' Nota' }}</span>
                     </button>
                 </li>
             </ul>
@@ -327,149 +327,402 @@
                 {{-- TAB 2: BUKTI PELUNASAN NON-TUNAI WA (TRANSACTIONS) --}}
                 <div class="tab-pane fade {{ $activeTab === 'payments' ? 'show active' : '' }}" id="payments-pane" role="tabpanel">
                     
-                    {{-- Filter Opsi Tab Pelunasan --}}
+                    {{-- Filter Opsi & Mode Tampilan Tab Pelunasan --}}
                     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <div class="text-muted small">
                             Menampilkan transaksi pelunasan non-tunai tanggal: <strong>{{ \Carbon\Carbon::parse($startDate)->format('d/m/Y') }}</strong> s/d <strong>{{ \Carbon\Carbon::parse($endDate)->format('d/m/Y') }}</strong>
                         </div>
-                        <div class="btn-group btn-group-sm">
-                            <a href="{{ request()->fullUrlWithQuery(['payment_filter' => 'all', 'tab' => 'payments']) }}" 
-                               class="btn {{ !request('payment_filter') || request('payment_filter') === 'all' ? 'btn-secondary' : 'btn-outline-secondary' }}">Semua</a>
-                            <a href="{{ request()->fullUrlWithQuery(['payment_filter' => 'with_proof', 'tab' => 'payments']) }}" 
-                               class="btn {{ request('payment_filter') === 'with_proof' ? 'btn-primary' : 'btn-outline-secondary' }}">Hanya Ada Bukti WA</a>
-                            <a href="{{ request()->fullUrlWithQuery(['payment_filter' => 'without_proof', 'tab' => 'payments']) }}" 
-                               class="btn {{ request('payment_filter') === 'without_proof' ? 'btn-warning' : 'btn-outline-secondary' }}">Belum Ada Bukti</a>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            {{-- View Mode Toggle --}}
+                            <div class="btn-group btn-group-sm border rounded shadow-xs bg-white p-1" role="group">
+                                <a href="{{ request()->fullUrlWithQuery(['view_mode' => 'grouped', 'tab' => 'payments']) }}" 
+                                   class="btn btn-sm {{ ($viewMode ?? 'grouped') === 'grouped' ? 'btn-primary fw-bold' : 'btn-light text-muted' }}"
+                                   title="Rangkum transaksi per Bukti Transfer / Mutasi Rekening (Rapi & Tidak Menumpuk)">
+                                    <i class="fas fa-layer-group me-1"></i> Rangkuman Transfer (Ringkas)
+                                </a>
+                                <a href="{{ request()->fullUrlWithQuery(['view_mode' => 'detailed', 'tab' => 'payments']) }}" 
+                                   class="btn btn-sm {{ ($viewMode ?? 'grouped') === 'detailed' ? 'btn-primary fw-bold' : 'btn-light text-muted' }}"
+                                   title="Tampilkan seluruh nota satuan satu per satu">
+                                    <i class="fas fa-list me-1"></i> Seluruh Nota Satuan (Rinci)
+                                </a>
+                            </div>
+
+                            {{-- Filter Bukti --}}
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ request()->fullUrlWithQuery(['payment_filter' => 'all', 'tab' => 'payments']) }}" 
+                                   class="btn {{ !request('payment_filter') || request('payment_filter') === 'all' ? 'btn-secondary' : 'btn-outline-secondary' }}">Semua</a>
+                                <a href="{{ request()->fullUrlWithQuery(['payment_filter' => 'with_proof', 'tab' => 'payments']) }}" 
+                                   class="btn {{ request('payment_filter') === 'with_proof' ? 'btn-primary' : 'btn-outline-secondary' }}">Hanya Ada Bukti WA</a>
+                                <a href="{{ request()->fullUrlWithQuery(['payment_filter' => 'without_proof', 'tab' => 'payments']) }}" 
+                                   class="btn {{ request('payment_filter') === 'without_proof' ? 'btn-warning' : 'btn-outline-secondary' }}">Belum Ada Bukti</a>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width: 80px;">Bukti WA</th>
-                                    <th>No. Struk</th>
-                                    <th>Waktu Transaksi</th>
-                                    <th>Pelanggan</th>
-                                    <th>Kasir</th>
-                                    <th>Metode Bayar</th>
-                                    <th>Catatan</th>
-                                    <th class="text-end">Total Pelunasan</th>
-                                    <th class="text-center" style="width: 140px;">Cocok Mutasi</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($payments as $tx)
-                                @php
-                                    $bulkGroup = ($tx->payment_proof && isset($bulkGroups[$tx->payment_proof])) ? $bulkGroups[$tx->payment_proof] : collect([$tx]);
-                                    $bulkCount = $bulkGroup->count();
-                                    $isBulk = $bulkCount > 1;
-                                    $bulkTotalAmount = $bulkGroup->sum('total_amount');
-                                    $bulkHash = md5($tx->payment_proof ?? $tx->id);
-                                    $bulkInvoiceList = $bulkGroup->map(fn($item) => '#' . str_pad($item->id, 6, '0', STR_PAD_LEFT))->implode(', ');
-                                @endphp
-                                <tr>
-                                    <td>
-                                        @if(!empty($tx->payment_proof))
-                                            <div class="position-relative d-inline-block">
-                                                <img src="{{ asset($tx->payment_proof) }}" 
-                                                     alt="Bukti Transfer" 
-                                                     class="proof-thumbnail" 
-                                                     onclick="showLightbox('{{ asset($tx->payment_proof) }}', '{{ addslashes($isBulk ? "Bukti Transfer Bulk ({$bulkCount} Nota) - Total: Rp " . number_format($bulkTotalAmount, 0, ',', '.') : "Bukti Transfer Transaksi #{$tx->id} - Rp " . number_format($tx->total_amount, 0, ',', '.')) }}', '{{ addslashes($isBulk ? "Melunasi Nota: {$bulkInvoiceList} | Pelanggan: " . ($tx->customer->name ?? 'Umum') . " | " . strtoupper($tx->payment_method) : "Pelanggan: " . ($tx->customer->name ?? 'Umum') . " | Metode: " . strtoupper($tx->payment_method)) }}')">
-                                                @if($isBulk)
-                                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark border border-white shadow-sm" style="font-size: 0.65rem;" title="{{ $bulkCount }} Transaksi Dilunasi Sekaligus">
-                                                        {{ $bulkCount }}x
+                    @if(($viewMode ?? 'grouped') === 'grouped')
+                        {{-- ========================================================================= --}}
+                        {{-- MODE RANGKUMAN PER TRANSFER (RINGKAS - DEFAULT):                          --}}
+                        {{-- 1 Baris Utama = 1 Bukti Transfer WA / Mutasi Rekening Bank/DANA            --}}
+                        {{-- ========================================================================= --}}
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 80px;">Bukti WA</th>
+                                        <th>No. Struk / Batch</th>
+                                        <th>Waktu Transaksi</th>
+                                        <th>Pelanggan</th>
+                                        <th>Kasir</th>
+                                        <th>Metode Bayar</th>
+                                        <th>Catatan / Keterangan</th>
+                                        <th class="text-end">Total Mutasi Bank</th>
+                                        <th class="text-center" style="width: 140px;">Cocok Mutasi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($payments as $batch)
+                                        @php
+                                            $batchKey = $batch->batch_key;
+                                            $items = ($loadedTransactions ?? collect())->get($batchKey, collect());
+                                            $firstTx = $items->first();
+                                            $batchCount = $batch->batch_count;
+                                            $isBulk = $batchCount > 1;
+                                            $totalAmount = $batch->total_batch_amount;
+                                            $isVerified = !empty($batch->batch_verified_at);
+                                            $hash = md5($batchKey);
+                                            
+                                            $uniqueCustomers = $items->pluck('customer.name')->filter()->unique();
+                                            $customerName = $uniqueCustomers->first() ?? ($firstTx->customer->name ?? 'Pelanggan Umum');
+                                            $customerPhone = $firstTx->customer->phone ?? null;
+                                            
+                                            $uniqueCashiers = $items->pluck('createdBy.name')->filter()->unique()->values();
+                                            $cashierNames = $uniqueCashiers->take(2)->implode(', ') . ($uniqueCashiers->count() > 2 ? ' +' . ($uniqueCashiers->count() - 2) : '');
+                                            $bulkInvoiceList = $items->map(fn($item) => '#' . str_pad($item->id, 6, '0', STR_PAD_LEFT))->implode(', ');
+                                        @endphp
+                                        <tr>
+                                            <td>
+                                                @if($firstTx && !empty($firstTx->payment_proof))
+                                                    <div class="position-relative d-inline-block">
+                                                        <img src="{{ asset($firstTx->payment_proof) }}" 
+                                                             alt="Bukti Transfer" 
+                                                             class="proof-thumbnail" 
+                                                             onclick="showLightbox('{{ asset($firstTx->payment_proof) }}', '{{ addslashes($isBulk ? "Bukti Transfer Bulk ({$batchCount} Nota) - Total: Rp " . number_format($totalAmount, 0, ',', '.') : "Bukti Transfer Transaksi #" . str_pad($firstTx->id, 6, "0", STR_PAD_LEFT) . " - Rp " . number_format($totalAmount, 0, ',', '.')) }}', '{{ addslashes($isBulk ? "Melunasi Nota: {$bulkInvoiceList} | Pelanggan: {$customerName} | " . strtoupper($firstTx->payment_method ?? "TRANSFER") : "Pelanggan: {$customerName} | Metode: " . strtoupper($firstTx->payment_method ?? "TRANSFER")) }}')">
+                                                        @if($isBulk)
+                                                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark border border-white shadow-sm" style="font-size: 0.65rem;" title="{{ $batchCount }} Transaksi Dilunasi Sekaligus">
+                                                                {{ $batchCount }}x
+                                                            </span>
+                                                        @endif
+                                                    </div>
+                                                @else
+                                                    <span class="badge bg-light text-muted border" style="font-size: 0.72rem;">
+                                                        <i class="fas fa-exclamation-circle text-warning me-1"></i>Belum Ada
                                                     </span>
                                                 @endif
-                                            </div>
-                                        @else
-                                            <span class="badge bg-light text-muted border" style="font-size: 0.72rem;">
-                                                <i class="fas fa-exclamation-circle text-warning me-1"></i>Belum Ada
-                                            </span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        <a href="{{ route('admin.transactions.show', $tx->id) }}" class="fw-bold text-primary text-decoration-none">
-                                            #{{ str_pad($tx->id, 6, '0', STR_PAD_LEFT) }}
-                                        </a>
+                                            </td>
+                                            <td>
+                                                @if($firstTx)
+                                                    <a href="{{ route('admin.transactions.show', $firstTx->id) }}" class="fw-bold text-primary text-decoration-none">
+                                                        #{{ str_pad($firstTx->id, 6, '0', STR_PAD_LEFT) }}
+                                                    </a>
+                                                @endif
+                                                @if($isBulk)
+                                                    <span class="small text-muted">+ {{ $batchCount - 1 }} Nota</span>
+                                                    <div class="mt-1">
+                                                        <button type="button" 
+                                                                class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold d-inline-flex align-items-center gap-1 shadow-xs" 
+                                                                style="font-size: 0.72rem; border-radius: 6px;"
+                                                                data-bs-toggle="collapse" 
+                                                                data-bs-target="#batch_collapse_{{ $hash }}"
+                                                                aria-expanded="false"
+                                                                title="Klik untuk membuka/menutup rincian seluruh nota dalam transfer ini">
+                                                            <i class="fas fa-layer-group text-warning"></i>
+                                                            <span>Rincian {{ $batchCount }} Nota</span>
+                                                            <i class="fas fa-chevron-down fa-xs ms-1"></i>
+                                                        </button>
+                                                    </div>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                <span class="fw-semibold">{{ \Carbon\Carbon::parse($batch->batch_updated_at)->format('d/m/Y') }}</span><br>
+                                                <small class="text-muted">{{ \Carbon\Carbon::parse($batch->batch_updated_at)->format('H:i') }} WIB</small>
+                                            </td>
+                                            <td>
+                                                <div class="fw-bold text-dark">{{ $customerName }}</div>
+                                                @if($customerPhone)
+                                                    <small class="text-muted"><i class="fab fa-whatsapp text-success me-1"></i>{{ $customerPhone }}</small>
+                                                @endif
+                                                @if($uniqueCustomers->count() > 1)
+                                                    <span class="badge bg-light text-secondary border mt-1" style="font-size: 0.68rem;">+ {{ $uniqueCustomers->count() - 1 }} Pelanggan Lain</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                <span class="small fw-semibold text-dark">
+                                                    <i class="fas fa-user text-muted me-1"></i>{{ $cashierNames ?: 'Kasir' }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-primary text-white">
+                                                    {{ strtoupper($firstTx->payment_method ?? 'NON-TUNAI') }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @if($isBulk)
+                                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle mb-1" style="font-size: 0.72rem;">
+                                                        <i class="fas fa-check-circle me-1"></i>Pelunasan Bulk ({{ $batchCount }} Nota)
+                                                    </span>
+                                                    @php
+                                                        $noteItems = $items->pluck('notes')->filter()->values();
+                                                    @endphp
+                                                    @if($noteItems->isNotEmpty())
+                                                        <div class="small text-muted text-truncate" style="max-width: 200px;" title="{{ $noteItems->implode('; ') }}">
+                                                            {{ $noteItems->first() }}
+                                                        </div>
+                                                    @endif
+                                                @else
+                                                    <span class="small text-muted">{{ $firstTx->notes ?? '-' }}</span>
+                                                @endif
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="fw-bold text-success fs-6">
+                                                    Rp {{ number_format($totalAmount, 0, ',', '.') }}
+                                                </div>
+                                                @if($isBulk)
+                                                    <div class="small fw-semibold text-primary mt-1" style="font-size: 0.70rem;" title="Total mutasi uang masuk pada rekening bank yang dilunasi sekaligus">
+                                                        <i class="fas fa-money-bill-wave me-1"></i>Total Mutasi Bank
+                                                    </div>
+                                                @endif
+                                            </td>
+                                            <td class="text-center">
+                                                @if($firstTx)
+                                                    @if($isVerified)
+                                                        <span class="badge bg-success text-white mb-1" style="font-size: 0.75rem;" title="Cocok Mutasi: {{ $batch->batch_verified_at ? \Carbon\Carbon::parse($batch->batch_verified_at)->format('d/m/Y H:i') : '' }}">
+                                                            <i class="fas fa-check-double me-1"></i> Cocok Mutasi
+                                                        </span>
+                                                        <form action="{{ route('admin.proof-audit.unverify-payment', $firstTx->id) }}" method="POST" class="d-inline">
+                                                            @csrf
+                                                            <button type="submit" class="btn btn-link text-danger p-0 d-block mx-auto" style="font-size: 0.68rem;" title="Batalkan Verifikasi Seluruh Batch">
+                                                                Batalkan
+                                                            </button>
+                                                        </form>
+                                                    @else
+                                                        <form action="{{ route('admin.proof-audit.verify-payment', $firstTx->id) }}" method="POST" class="d-inline">
+                                                            @csrf
+                                                            <button type="submit" class="btn btn-sm btn-outline-success py-1 px-2 fw-semibold" style="font-size: 0.75rem;" title="Verifikasi Sesuai Mutasi Bank (Meliputi {{ $batchCount }} Nota)">
+                                                                <i class="fas fa-check me-1"></i> Cocok Mutasi
+                                                            </button>
+                                                        </form>
+                                                    @endif
+                                                @else
+                                                    -
+                                                @endif
+                                            </td>
+                                        </tr>
+
+                                        {{-- INLINE COLLAPSIBLE ACCORDION UNTUK RINCIAN NOTA DALAM BATCH INI --}}
                                         @if($isBulk)
-                                            <div class="mt-1">
-                                                <button type="button" 
-                                                        class="btn btn-warning text-dark py-0 px-2 fw-bold shadow-sm d-inline-flex align-items-center gap-1" 
-                                                        style="font-size: 0.70rem; border-radius: 6px;"
-                                                        data-bs-toggle="modal" 
-                                                        data-bs-target="#bulkDetailModal_{{ $bulkHash }}"
-                                                        title="Klik untuk melihat seluruh transaksi yang dilunasi dengan transfer ini">
-                                                    <i class="fas fa-layer-group"></i>
-                                                    <span>Bulk ({{ $bulkCount }} Nota)</span>
-                                                </button>
-                                            </div>
+                                        <tr class="collapse" id="batch_collapse_{{ $hash }}">
+                                            <td colspan="9" class="p-3 bg-light border-start border-4 border-primary">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <span class="fw-bold small text-dark">
+                                                        <i class="fas fa-layer-group text-primary me-1"></i>
+                                                        Rincian {{ $batchCount }} Nota untuk Transfer Mutasi Ini (Total: <span class="text-success">Rp {{ number_format($totalAmount, 0, ',', '.') }}</span>)
+                                                    </span>
+                                                    <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" data-bs-toggle="collapse" data-bs-target="#batch_collapse_{{ $hash }}" style="font-size: 0.72rem;">
+                                                        <i class="fas fa-times me-1"></i>Tutup Rincian
+                                                    </button>
+                                                </div>
+                                                <div class="table-responsive rounded border bg-white shadow-sm">
+                                                    <table class="table table-sm table-striped table-hover align-middle mb-0" style="font-size: 0.80rem;">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th class="ps-3" style="width: 110px;">No. Struk</th>
+                                                                <th style="width: 140px;">Waktu Transaksi</th>
+                                                                <th style="width: 130px;">Kasir</th>
+                                                                <th>Catatan / Pengiriman</th>
+                                                                <th class="text-end pe-3" style="width: 140px;">Nominal Nota</th>
+                                                                <th class="text-center" style="width: 80px;">Aksi</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach($items as $item)
+                                                            <tr>
+                                                                <td class="ps-3 fw-bold">
+                                                                    <a href="{{ route('admin.transactions.show', $item->id) }}" target="_blank" class="text-primary text-decoration-none">
+                                                                        #{{ str_pad($item->id, 6, '0', STR_PAD_LEFT) }} <i class="fas fa-external-link-alt fa-xs text-muted"></i>
+                                                                    </a>
+                                                                </td>
+                                                                <td>{{ $item->transaction_date ? $item->transaction_date->format('d/m/Y H:i') : '-' }} WIB</td>
+                                                                <td>{{ $item->createdBy->name ?? '-' }}</td>
+                                                                <td class="text-muted">{{ $item->notes ?? '-' }}</td>
+                                                                <td class="text-end pe-3 fw-bold text-success">
+                                                                    Rp {{ number_format($item->total_amount, 0, ',', '.') }}
+                                                                </td>
+                                                                <td class="text-center">
+                                                                    <a href="{{ route('admin.transactions.show', $item->id) }}" target="_blank" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size: 0.70rem;">
+                                                                        Buka
+                                                                    </a>
+                                                                </td>
+                                                            </tr>
+                                                            @endforeach
+                                                        </tbody>
+                                                        <tfoot class="table-light fw-bold">
+                                                            <tr>
+                                                                <td colspan="4" class="ps-3 text-end text-dark">Total Seluruh {{ $batchCount }} Nota:</td>
+                                                                <td class="text-end pe-3 text-success fs-6">Rp {{ number_format($totalAmount, 0, ',', '.') }}</td>
+                                                                <td></td>
+                                                            </tr>
+                                                        </tfoot>
+                                                    </table>
+                                                </div>
+                                            </td>
+                                        </tr>
                                         @endif
-                                    </td>
-                                    <td>
-                                        <span class="fw-semibold">{{ $tx->transaction_date ? $tx->transaction_date->format('d/m/Y') : '-' }}</span><br>
-                                        <small class="text-muted">{{ $tx->transaction_date ? $tx->transaction_date->format('H:i') : '' }} WIB</small>
-                                    </td>
-                                    <td>
-                                        <div class="fw-bold text-dark">{{ $tx->customer->name ?? 'Pelanggan Umum' }}</div>
-                                        @if($tx->customer && $tx->customer->phone)
-                                            <small class="text-muted"><i class="fab fa-whatsapp text-success me-1"></i>{{ $tx->customer->phone }}</small>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        <span class="small fw-semibold text-dark">
-                                            <i class="fas fa-user text-muted me-1"></i>{{ $tx->createdBy->name ?? 'Kasir' }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-primary text-white">
-                                            {{ strtoupper($tx->payment_method) }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="small text-muted">{{ $tx->notes ?? '-' }}</span>
-                                    </td>
-                                    <td class="text-end">
-                                        <div class="fw-bold text-success">
-                                            Rp {{ number_format($tx->total_amount, 0, ',', '.') }}
-                                        </div>
-                                        @if($isBulk)
-                                            <div class="small fw-semibold text-primary mt-1" style="font-size: 0.72rem;" title="Total uang transfer gabungan yang harus dicari di mutasi rekening bank / DANA">
-                                                <i class="fas fa-receipt me-1"></i>Total Bulk: <strong>Rp {{ number_format($bulkTotalAmount, 0, ',', '.') }}</strong>
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td class="text-center">
-                                        @if($tx->proof_verified_at)
-                                            <span class="badge bg-success text-white mb-1" style="font-size: 0.75rem;" title="Cocok Mutasi: {{ $tx->proof_verified_at->format('d/m/Y H:i') }}">
-                                                <i class="fas fa-check-double me-1"></i> Cocok Mutasi
+
+                                    @empty
+                                    <tr>
+                                        <td colspan="9" class="text-center py-4 text-muted">
+                                            <i class="fas fa-inbox fa-2x mb-2 d-block text-secondary"></i>
+                                            Tidak ada transaksi pelunasan non-tunai pada rentang tanggal ini.
+                                        </td>
+                                    </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        {{-- ========================================================================= --}}
+                        {{-- MODE RINCI PER NOTA SATUAN:                                               --}}
+                        {{-- Menampilkan seluruh nota transaksi satu per satu secara terpisah          --}}
+                        {{-- ========================================================================= --}}
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 80px;">Bukti WA</th>
+                                        <th>No. Struk</th>
+                                        <th>Waktu Transaksi</th>
+                                        <th>Pelanggan</th>
+                                        <th>Kasir</th>
+                                        <th>Metode Bayar</th>
+                                        <th>Catatan</th>
+                                        <th class="text-end">Total Pelunasan</th>
+                                        <th class="text-center" style="width: 140px;">Cocok Mutasi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($payments as $tx)
+                                    @php
+                                        $bulkGroup = ($tx->payment_proof && isset($bulkGroups[$tx->payment_proof])) ? $bulkGroups[$tx->payment_proof] : collect([$tx]);
+                                        $bulkCount = $bulkGroup->count();
+                                        $isBulk = $bulkCount > 1;
+                                        $bulkTotalAmount = $bulkGroup->sum('total_amount');
+                                        $bulkHash = md5($tx->payment_proof ?? $tx->id);
+                                        $bulkInvoiceList = $bulkGroup->map(fn($item) => '#' . str_pad($item->id, 6, '0', STR_PAD_LEFT))->implode(', ');
+                                    @endphp
+                                    <tr>
+                                        <td>
+                                            @if(!empty($tx->payment_proof))
+                                                <div class="position-relative d-inline-block">
+                                                    <img src="{{ asset($tx->payment_proof) }}" 
+                                                         alt="Bukti Transfer" 
+                                                         class="proof-thumbnail" 
+                                                         onclick="showLightbox('{{ asset($tx->payment_proof) }}', '{{ addslashes($isBulk ? "Bukti Transfer Bulk ({$bulkCount} Nota) - Total: Rp " . number_format($bulkTotalAmount, 0, ',', '.') : "Bukti Transfer Transaksi #{$tx->id} - Rp " . number_format($tx->total_amount, 0, ',', '.')) }}', '{{ addslashes($isBulk ? "Melunasi Nota: {$bulkInvoiceList} | Pelanggan: " . ($tx->customer->name ?? 'Umum') . " | " . strtoupper($tx->payment_method) : "Pelanggan: " . ($tx->customer->name ?? 'Umum') . " | Metode: " . strtoupper($tx->payment_method)) }}')">
+                                                    @if($isBulk)
+                                                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark border border-white shadow-sm" style="font-size: 0.65rem;" title="{{ $bulkCount }} Transaksi Dilunasi Sekaligus">
+                                                            {{ $bulkCount }}x
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                            @else
+                                                <span class="badge bg-light text-muted border" style="font-size: 0.72rem;">
+                                                    <i class="fas fa-exclamation-circle text-warning me-1"></i>Belum Ada
+                                                </span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <a href="{{ route('admin.transactions.show', $tx->id) }}" class="fw-bold text-primary text-decoration-none">
+                                                #{{ str_pad($tx->id, 6, '0', STR_PAD_LEFT) }}
+                                            </a>
+                                            @if($isBulk)
+                                                <div class="mt-1">
+                                                    <button type="button" 
+                                                            class="btn btn-warning text-dark py-0 px-2 fw-bold shadow-sm d-inline-flex align-items-center gap-1" 
+                                                            style="font-size: 0.70rem; border-radius: 6px;"
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#bulkDetailModal_{{ $bulkHash }}"
+                                                            title="Klik untuk melihat seluruh transaksi yang dilunasi dengan transfer ini">
+                                                        <i class="fas fa-layer-group"></i>
+                                                        <span>Bulk ({{ $bulkCount }} Nota)</span>
+                                                    </button>
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <span class="fw-semibold">{{ $tx->transaction_date ? $tx->transaction_date->format('d/m/Y') : '-' }}</span><br>
+                                            <small class="text-muted">{{ $tx->transaction_date ? $tx->transaction_date->format('H:i') : '' }} WIB</small>
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-dark">{{ $tx->customer->name ?? 'Pelanggan Umum' }}</div>
+                                            @if($tx->customer && $tx->customer->phone)
+                                                <small class="text-muted"><i class="fab fa-whatsapp text-success me-1"></i>{{ $tx->customer->phone }}</small>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <span class="small fw-semibold text-dark">
+                                                <i class="fas fa-user text-muted me-1"></i>{{ $tx->createdBy->name ?? 'Kasir' }}
                                             </span>
-                                            <form action="{{ route('admin.proof-audit.unverify-payment', $tx->id) }}" method="POST" class="d-inline">
-                                                @csrf
-                                                <button type="submit" class="btn btn-link text-danger p-0 d-block mx-auto" style="font-size: 0.68rem;" title="Batalkan Verifikasi">
-                                                    Batalkan
-                                                </button>
-                                            </form>
-                                        @else
-                                            <form action="{{ route('admin.proof-audit.verify-payment', $tx->id) }}" method="POST" class="d-inline">
-                                                @csrf
-                                                <button type="submit" class="btn btn-sm btn-outline-success py-1 px-2" style="font-size: 0.75rem;" title="Verifikasi dengan Mutasi Bank">
-                                                    <i class="fas fa-check me-1"></i> Cocok Mutasi
-                                                </button>
-                                            </form>
-                                        @endif
-                                    </td>
-                                </tr>
-                                @empty
-                                <tr>
-                                    <td colspan="9" class="text-center py-4 text-muted">
-                                        <i class="fas fa-inbox fa-2x mb-2 d-block text-secondary"></i>
-                                        Tidak ada transaksi pelunasan non-tunai pada rentang tanggal ini.
-                                    </td>
-                                </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-primary text-white">
+                                                {{ strtoupper($tx->payment_method) }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="small text-muted">{{ $tx->notes ?? '-' }}</span>
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="fw-bold text-success">
+                                                Rp {{ number_format($tx->total_amount, 0, ',', '.') }}
+                                            </div>
+                                            @if($isBulk)
+                                                <div class="small fw-semibold text-primary mt-1" style="font-size: 0.72rem;" title="Total uang transfer gabungan yang harus dicari di mutasi rekening bank / DANA">
+                                                    <i class="fas fa-receipt me-1"></i>Total Bulk: <strong>Rp {{ number_format($bulkTotalAmount, 0, ',', '.') }}</strong>
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td class="text-center">
+                                            @if($tx->proof_verified_at)
+                                                <span class="badge bg-success text-white mb-1" style="font-size: 0.75rem;" title="Cocok Mutasi: {{ $tx->proof_verified_at->format('d/m/Y H:i') }}">
+                                                    <i class="fas fa-check-double me-1"></i> Cocok Mutasi
+                                                </span>
+                                                <form action="{{ route('admin.proof-audit.unverify-payment', $tx->id) }}" method="POST" class="d-inline">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-link text-danger p-0 d-block mx-auto" style="font-size: 0.68rem;" title="Batalkan Verifikasi">
+                                                        Batalkan
+                                                    </button>
+                                                </form>
+                                            @else
+                                                <form action="{{ route('admin.proof-audit.verify-payment', $tx->id) }}" method="POST" class="d-inline">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-sm btn-outline-success py-1 px-2" style="font-size: 0.75rem;" title="Verifikasi dengan Mutasi Bank">
+                                                        <i class="fas fa-check me-1"></i> Cocok Mutasi
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                    @empty
+                                    <tr>
+                                        <td colspan="9" class="text-center py-4 text-muted">
+                                            <i class="fas fa-inbox fa-2x mb-2 d-block text-secondary"></i>
+                                            Tidak ada transaksi pelunasan non-tunai pada rentang tanggal ini.
+                                        </td>
+                                    </tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
 
                     @if($payments->hasPages())
                     <div class="mt-3">

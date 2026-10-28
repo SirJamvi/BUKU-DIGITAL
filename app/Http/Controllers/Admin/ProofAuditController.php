@@ -64,38 +64,110 @@ class ProofAuditController extends Controller
         $expenses = $expenseQuery->latest('date')->latest('id')->paginate(15, ['*'], 'expenses_page')->withQueryString();
 
         // 3. Query Bukti Pelunasan Non-Tunai (Transactions)
-        // Ambil transaksi non-cash yang statusnya 'paid' dan berkaitan dengan tanggal filter
-        $txQuery = Transaction::where('business_id', $businessId)
-            ->where('payment_status', 'paid')
-            ->where('payment_method', '!=', 'cash')
-            ->where(function ($q) use ($startDate, $endDate) {
-                $q->whereBetween('transaction_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                  ->orWhereBetween('updated_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
-            })
-            ->with(['customer', 'createdBy', 'proofVerifiedBy']);
+        $viewMode = $request->input('view_mode', 'grouped');
 
-        // Filter opsi bukti pelunasan jika dipilih
-        if ($request->input('payment_filter') === 'with_proof') {
-            $txQuery->whereNotNull('payment_proof');
-        } elseif ($request->input('payment_filter') === 'without_proof') {
-            $txQuery->whereNull('payment_proof');
-        } elseif ($request->input('payment_filter') === 'unverified') {
-            $txQuery->whereNull('proof_verified_at');
-        }
+        if ($viewMode === 'grouped') {
+            // =========================================================================
+            // MODE RANGKUMAN PER TRANSFER (RINGKAS - DEFAULT):
+            // Transaksi yang dilunasi dengan 1 bukti transfer WA (bulk) dikelompokkan
+            // menjadi 1 baris utama sesuai mutasi rekening, dengan accordion rincian nota.
+            // =========================================================================
+            $innerQuery = Transaction::where('business_id', $businessId)
+                ->where('payment_status', 'paid')
+                ->where('payment_method', '!=', 'cash')
+                ->where(function ($q) use ($startDate, $endDate) {
+                    $q->whereBetween('transaction_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                      ->orWhereBetween('updated_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                });
 
-        $payments = $txQuery->latest('updated_at')->paginate(15, ['*'], 'payments_page')->withQueryString();
+            if ($request->input('payment_filter') === 'with_proof') {
+                $innerQuery->whereNotNull('payment_proof');
+            } elseif ($request->input('payment_filter') === 'without_proof') {
+                $innerQuery->whereNull('payment_proof');
+            } elseif ($request->input('payment_filter') === 'unverified') {
+                $innerQuery->whereNull('proof_verified_at');
+            }
 
-        // 3.1 Deteksi Bulk Settlement: Temukan seluruh transaksi yang menggunakan payment_proof yang sama
-        $proofPaths = $payments->pluck('payment_proof')->filter()->unique()->values();
-        $bulkGroups = collect();
-        if ($proofPaths->isNotEmpty()) {
-            $bulkTransactions = Transaction::where('business_id', $businessId)
-                ->whereIn('payment_proof', $proofPaths)
-                ->with(['customer', 'createdBy'])
-                ->orderBy('id', 'asc')
-                ->get();
+            $innerQuery->select([
+                'id',
+                'total_amount',
+                'updated_at',
+                'proof_verified_at',
+                \Illuminate\Support\Facades\DB::raw("CASE WHEN payment_proof IS NOT NULL AND payment_proof != '' THEN payment_proof ELSE CONCAT('single_', id) END as batch_key")
+            ]);
 
-            $bulkGroups = $bulkTransactions->groupBy('payment_proof');
+            $payments = \Illuminate\Support\Facades\DB::table($innerQuery, 't')
+                ->select([
+                    't.batch_key',
+                    \Illuminate\Support\Facades\DB::raw("MAX(t.id) as latest_id"),
+                    \Illuminate\Support\Facades\DB::raw("COUNT(t.id) as batch_count"),
+                    \Illuminate\Support\Facades\DB::raw("SUM(t.total_amount) as total_batch_amount"),
+                    \Illuminate\Support\Facades\DB::raw("MAX(t.updated_at) as batch_updated_at"),
+                    \Illuminate\Support\Facades\DB::raw("MIN(t.proof_verified_at) as batch_verified_at")
+                ])
+                ->groupBy('t.batch_key')
+                ->orderByDesc('batch_updated_at')
+                ->paginate(15, ['*'], 'payments_page')
+                ->withQueryString();
+
+            // Eager-load seluruh detail transaksi untuk batch pada halaman ini
+            $batchItems = collect($payments->items());
+            $proofPaths = $batchItems->pluck('batch_key')->filter(fn($k) => !str_starts_with($k, 'single_'))->values();
+            $singleIds = $batchItems->pluck('batch_key')->filter(fn($k) => str_starts_with($k, 'single_'))->map(fn($k) => (int)substr($k, 7))->values();
+
+            $loadedTransactions = collect();
+            if ($proofPaths->isNotEmpty() || $singleIds->isNotEmpty()) {
+                $loadedTransactions = Transaction::where('business_id', $businessId)
+                    ->where(function($q) use ($proofPaths, $singleIds) {
+                        if ($proofPaths->isNotEmpty()) {
+                            $q->whereIn('payment_proof', $proofPaths);
+                        }
+                        if ($singleIds->isNotEmpty()) {
+                            $q->orWhereIn('id', $singleIds);
+                        }
+                    })
+                    ->with(['customer', 'createdBy', 'proofVerifiedBy'])
+                    ->orderBy('id', 'asc')
+                    ->get()
+                    ->groupBy(function($item) {
+                        return (!empty($item->payment_proof)) ? $item->payment_proof : ('single_' . $item->id);
+                    });
+            }
+
+            $bulkGroups = $loadedTransactions;
+        } else {
+            // Mode Rinci per Nota Satuan
+            $txQuery = Transaction::where('business_id', $businessId)
+                ->where('payment_status', 'paid')
+                ->where('payment_method', '!=', 'cash')
+                ->where(function ($q) use ($startDate, $endDate) {
+                    $q->whereBetween('transaction_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                      ->orWhereBetween('updated_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                })
+                ->with(['customer', 'createdBy', 'proofVerifiedBy']);
+
+            if ($request->input('payment_filter') === 'with_proof') {
+                $txQuery->whereNotNull('payment_proof');
+            } elseif ($request->input('payment_filter') === 'without_proof') {
+                $txQuery->whereNull('payment_proof');
+            } elseif ($request->input('payment_filter') === 'unverified') {
+                $txQuery->whereNull('proof_verified_at');
+            }
+
+            $payments = $txQuery->latest('updated_at')->paginate(15, ['*'], 'payments_page')->withQueryString();
+
+            $proofPaths = $payments->pluck('payment_proof')->filter()->unique()->values();
+            $bulkGroups = collect();
+            if ($proofPaths->isNotEmpty()) {
+                $bulkTransactions = Transaction::where('business_id', $businessId)
+                    ->whereIn('payment_proof', $proofPaths)
+                    ->with(['customer', 'createdBy'])
+                    ->orderBy('id', 'asc')
+                    ->get();
+
+                $bulkGroups = $bulkTransactions->groupBy('payment_proof');
+            }
+            $loadedTransactions = $bulkGroups;
         }
 
         // 4. Ringkasan Statistik untuk Banner/Dashboard Audit
@@ -136,6 +208,16 @@ class ProofAuditController extends Controller
             })
             ->count();
 
+        $totalPaymentBatchesCount = Transaction::where('business_id', $businessId)
+            ->where('payment_status', 'paid')
+            ->where('payment_method', '!=', 'cash')
+            ->where(function ($q) use ($startDate, $endDate) {
+                $q->whereBetween('transaction_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                  ->orWhereBetween('updated_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+            })
+            ->distinct()
+            ->count(\Illuminate\Support\Facades\DB::raw("CASE WHEN payment_proof IS NOT NULL AND payment_proof != '' THEN payment_proof ELSE CONCAT('single_', id) END"));
+
         $paymentsWithProofCount = $hasProofCol ? Transaction::where('business_id', $businessId)
             ->where('payment_status', 'paid')
             ->where('payment_method', '!=', 'cash')
@@ -165,13 +247,16 @@ class ProofAuditController extends Controller
                 })
                 ->whereNotNull('payment_proof')
                 ->whereNull('proof_verified_at')
-                ->count();
+                ->distinct()
+                ->count(\Illuminate\Support\Facades\DB::raw("CASE WHEN payment_proof IS NOT NULL AND payment_proof != '' THEN payment_proof ELSE CONCAT('single_', id) END"));
         }
 
         return view('admin.proof_audit.index', compact(
             'expenses',
             'payments',
             'bulkGroups',
+            'loadedTransactions',
+            'viewMode',
             'startDate',
             'endDate',
             'quickDate',
@@ -181,6 +266,7 @@ class ProofAuditController extends Controller
             'expensesWithProofCount',
             'totalPaymentsAmount',
             'totalPaymentsCount',
+            'totalPaymentBatchesCount',
             'paymentsWithProofCount',
             'unverifiedTotal'
         ));
