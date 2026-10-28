@@ -576,7 +576,9 @@ class FinancialService
         ];
 
         if (!empty($data['receipt_image'])) {
-            $expensePayload['receipt_image'] = $data['receipt_image'];
+            if (\Illuminate\Support\Facades\Schema::hasColumn('cash_flow', 'receipt_image')) {
+                $expensePayload['receipt_image'] = $data['receipt_image'];
+            }
         }
 
         CashFlow::create($expensePayload);
@@ -617,10 +619,12 @@ class FinancialService
         }
 
         if (!empty($data['receipt_image'])) {
-            if ($expense->receipt_image && $expense->receipt_image !== $data['receipt_image']) {
-                \App\Services\ProofUploadService::deleteProof($expense->receipt_image);
+            if (\Illuminate\Support\Facades\Schema::hasColumn('cash_flow', 'receipt_image')) {
+                if ($expense->receipt_image && $expense->receipt_image !== $data['receipt_image']) {
+                    \App\Services\ProofUploadService::deleteProof($expense->receipt_image);
+                }
+                $updateData['receipt_image'] = $data['receipt_image'];
             }
-            $updateData['receipt_image'] = $data['receipt_image'];
         }
 
         $expense->update($updateData);
