@@ -304,8 +304,12 @@
                             <span><i class="fab fa-whatsapp text-success me-1"></i> Bukti Pembayaran / Transfer Non-Tunai (WhatsApp):</span>
                             <span id="proof_badge_admin_{{ $transaction->id }}"><span class="badge bg-light text-muted border">Opsional (Cash)</span></span>
                         </label>
-                        <input type="file" name="payment_proof" id="proof_admin_{{ $transaction->id }}" class="form-control form-control-sm" accept="image/*">
+                        <input type="file" name="payment_proof" id="proof_admin_{{ $transaction->id }}" class="form-control form-control-sm" accept="image/*" onchange="checkAdminSettlementMode_{{ $transaction->id }}()">
                         <div id="proof_help_admin_{{ $transaction->id }}" class="text-muted" style="font-size: 0.72rem;">*Opsional untuk Cash. Ambil dari file/galeri jika bayar transfer/DANA.</div>
+                        {{-- Alert Box Penguncian Tombol Pelunasan --}}
+                        <div id="proof_alert_admin_{{ $transaction->id }}" class="alert alert-danger py-2 px-3 mt-2 mb-0 d-none" style="font-size: 0.78rem;">
+                            <i class="fas fa-lock me-1"></i> <strong>Tombol Pelunasan Terkunci:</strong> Pembayaran melalui <span class="fw-bold text-uppercase" id="proof_method_name_admin_{{ $transaction->id }}">Non-Tunai</span> WAJIB melampirkan foto / screenshot bukti transfer WhatsApp. Silakan pilih file bukti dari galeri di atas untuk membuka tombol pelunasan.
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -315,7 +319,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-success fw-bold"><i class="fas fa-check me-1"></i> Validasi Pelunasan</button>
+                    <button type="submit" class="btn btn-success fw-bold" id="btn_submit_admin_{{ $transaction->id }}"><i class="fas fa-check me-1"></i> Validasi Pelunasan</button>
                 </div>
             </form>
         </div>
@@ -323,7 +327,8 @@
 </div>
 <script>
 function checkAdminSettlementMode_{{ $transaction->id }}() {
-    const method = document.getElementById('admin_pm_{{ $transaction->id }}')?.value;
+    const methodSelect = document.getElementById('admin_pm_{{ $transaction->id }}');
+    const method = methodSelect?.value || 'cash';
     const isCash = (method === 'cash');
     const optToday = document.getElementById('admin_settle_today_{{ $transaction->id }}');
     const optNota = document.getElementById('admin_settle_nota_{{ $transaction->id }}');
@@ -332,6 +337,10 @@ function checkAdminSettlementMode_{{ $transaction->id }}() {
     const proofInput = document.getElementById('proof_admin_{{ $transaction->id }}');
     const proofBadge = document.getElementById('proof_badge_admin_{{ $transaction->id }}');
     const proofHelp = document.getElementById('proof_help_admin_{{ $transaction->id }}');
+    const proofAlert = document.getElementById('proof_alert_admin_{{ $transaction->id }}');
+    const methodNameSpan = document.getElementById('proof_method_name_admin_{{ $transaction->id }}');
+    const btnSubmit = document.getElementById('btn_submit_admin_{{ $transaction->id }}');
+    const hasFile = proofInput && proofInput.files && proofInput.files.length > 0;
 
     if (isCash) {
         if (optNota) {
@@ -348,8 +357,15 @@ function checkAdminSettlementMode_{{ $transaction->id }}() {
 
         if (proofInput) {
             proofInput.removeAttribute('required');
+            proofInput.classList.remove('border-danger', 'border-2', 'border-success');
             if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-light text-muted border">Opsional (Cash)</span>';
             if (proofHelp) proofHelp.innerText = '*Opsional jika pelunasan secara Cash / Tunai.';
+        }
+        if (proofAlert) proofAlert.classList.add('d-none');
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.className = 'btn btn-success fw-bold';
+            btnSubmit.innerHTML = '<i class="fas fa-check me-1"></i> Validasi Pelunasan';
         }
     } else {
         if (optNota) {
@@ -366,14 +382,49 @@ function checkAdminSettlementMode_{{ $transaction->id }}() {
             }
         }
 
+        const methodName = methodSelect ? methodSelect.options[methodSelect.selectedIndex].text : 'Non-Tunai';
+        if (methodNameSpan) methodNameSpan.textContent = methodName;
+
         if (proofInput) {
             proofInput.setAttribute('required', 'required');
+        }
+
+        if (hasFile) {
+            if (proofInput) {
+                proofInput.classList.remove('border-danger');
+                proofInput.classList.add('border-success', 'border-2');
+            }
+            if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-success text-white"><i class="fas fa-check me-1"></i>File Bukti Terlampir</span>';
+            if (proofHelp) proofHelp.innerHTML = '<strong class="text-success"><i class="fas fa-check-circle me-1"></i>Bukti siap diunggah:</strong> ' + proofInput.files[0].name;
+            if (proofAlert) proofAlert.classList.add('d-none');
+            if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.className = 'btn btn-success fw-bold';
+                btnSubmit.innerHTML = '<i class="fas fa-check me-1"></i> Validasi Pelunasan';
+            }
+        } else {
+            if (proofInput) {
+                proofInput.classList.remove('border-success');
+                proofInput.classList.add('border-danger', 'border-2');
+            }
             if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-danger text-white"><i class="fas fa-asterisk me-1"></i>Wajib Upload Bukti WA</span>';
             if (proofHelp) proofHelp.innerHTML = '<strong class="text-danger">*Wajib diunggah!</strong> Lampirkan file bukti transfer bank/e-wallet.';
+            if (proofAlert) proofAlert.classList.remove('d-none');
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.className = 'btn btn-secondary text-white fw-bold opacity-75';
+                btnSubmit.innerHTML = '<i class="fas fa-lock me-1"></i> Tombol Terkunci (Wajib Upload Bukti)';
+            }
         }
     }
 }
 document.addEventListener('DOMContentLoaded', function() {
+    const modalEl = document.getElementById('modalAdminPay_{{ $transaction->id }}');
+    if (modalEl) {
+        modalEl.addEventListener('shown.bs.modal', function() {
+            checkAdminSettlementMode_{{ $transaction->id }}();
+        });
+    }
     checkAdminSettlementMode_{{ $transaction->id }}();
 });
 </script>

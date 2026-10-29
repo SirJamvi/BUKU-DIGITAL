@@ -498,7 +498,7 @@ $modalId = 'modalGroup_' . $groupKey;
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
             {{-- FORM DIMULAI DARI SINI, MEMBUNGKUS SELURUH MODAL --}}
-            <form action="{{ route('kasir.transactions.bulkMarkAsPaid') }}" method="POST" enctype="multipart/form-data">
+            <form action="{{ route('kasir.transactions.bulkMarkAsPaid') }}" method="POST" enctype="multipart/form-data" id="bulk_form_{{ $groupKey }}">
                 @csrf
                 <div class="modal-header bg-dark text-white">
                     <h5 class="modal-title">
@@ -524,7 +524,7 @@ $modalId = 'modalGroup_' . $groupKey;
                     </div>
 
                     <div class="table-responsive" style="max-height: 60vh; overflow-y: auto;">
-                        <table class="table table-hover align-middle mb-0">
+                        <table class="table table-hover table-striped align-middle mb-0">
                             <thead class="table-light sticky-top">
                                 <tr>
                                     {{-- Checkbox Pilih Semua --}}
@@ -578,7 +578,7 @@ $modalId = 'modalGroup_' . $groupKey;
                     <div class="row g-2 align-items-center">
                         <div class="col-md-3">
                             <label class="small fw-bold text-muted mb-1">Metode Bayar:</label>
-                            <select name="payment_method" id="bulk_payment_method" class="form-select form-select-sm fw-bold border-primary" onchange="checkBulkSettlementMode()" required>
+                            <select name="payment_method" id="bulk_payment_method_{{ $groupKey }}" class="form-select form-select-sm fw-bold border-primary" onchange="checkBulkSettlementMode('{{ $groupKey }}')" required>
                                 <option value="cash">💵 Cash / Tunai</option>
                                 <option value="transfer-bank">🏦 Transfer Bank</option>
                                 <option value="dana">📱 DANA</option>
@@ -586,11 +586,11 @@ $modalId = 'modalGroup_' . $groupKey;
                         </div>
                         <div class="col-md-5">
                             <label class="small fw-bold text-muted mb-1">Alokasi Tanggal Pembukuan:</label>
-                            <select name="settlement_date_mode" id="bulk_settlement_date_mode" class="form-select form-select-sm" onchange="checkBulkSettlementMode()">
-                                <option value="today" id="bulk_opt_today" selected>💵 Uang Baru Diterima Hari Ini (Masuk Laci / Kas Hari Ini)</option>
-                                <option value="nota_date" id="bulk_opt_nota_date">⚠️ Koreksi Lupa Update (Uang Sudah Diterima Saat Tanggal Nota)</option>
+                            <select name="settlement_date_mode" id="bulk_settlement_date_mode_{{ $groupKey }}" class="form-select form-select-sm" onchange="checkBulkSettlementMode('{{ $groupKey }}')">
+                                <option value="today" id="bulk_opt_today_{{ $groupKey }}" selected>💵 Uang Baru Diterima Hari Ini (Masuk Laci / Kas Hari Ini)</option>
+                                <option value="nota_date" id="bulk_opt_nota_date_{{ $groupKey }}">⚠️ Koreksi Lupa Update (Uang Sudah Diterima Saat Tanggal Nota)</option>
                             </select>
-                            <div id="bulk_warning_nota" class="text-danger small mt-1 fw-bold d-none" style="font-size: 0.72rem;">
+                            <div id="bulk_warning_nota_{{ $groupKey }}" class="text-danger small mt-1 fw-bold d-none" style="font-size: 0.72rem;">
                                 ⚠️ Perhatian: Memilih opsi ini tidak akan menambah catatan Saldo Laci hari ini karena uang dianggap sudah masuk pada tanggal nota dibuat.
                             </div>
                         </div>
@@ -601,11 +601,15 @@ $modalId = 'modalGroup_' . $groupKey;
                         <div class="col-12 mt-2 pt-2 border-top">
                             <label class="small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
                                 <span><i class="fab fa-whatsapp text-success me-1"></i> Bukti Pembayaran / Transfer Non-Tunai (WhatsApp):</span>
-                                <span id="bulk_proof_required_badge"><span class="badge bg-light text-muted border">Opsional (Cash)</span></span>
+                                <span id="bulk_proof_required_badge_{{ $groupKey }}"><span class="badge bg-light text-muted border">Opsional (Cash)</span></span>
                             </label>
-                            <input type="file" name="payment_proof" id="bulk_payment_proof" class="form-control form-control-sm" accept="image/*">
-                            <div id="bulk_proof_help" class="text-muted" style="font-size: 0.72rem;">
+                            <input type="file" name="payment_proof" id="bulk_payment_proof_{{ $groupKey }}" class="form-control form-control-sm" accept="image/*" onchange="checkBulkSettlementMode('{{ $groupKey }}')">
+                            <div id="bulk_proof_help_{{ $groupKey }}" class="text-muted" style="font-size: 0.72rem;">
                                 *Opsional untuk Cash. Cukup upload <strong>1 file bukti</strong> dari galeri tablet untuk melunasi seluruh nota yang dicentang di atas.
+                            </div>
+                            {{-- Alert Box Penguncian Tombol Pelunasan --}}
+                            <div id="bulk_proof_alert_{{ $groupKey }}" class="alert alert-danger py-2 px-3 mt-2 mb-0 d-none" style="font-size: 0.78rem;">
+                                <i class="fas fa-lock me-1"></i> <strong>Tombol Pelunasan Terkunci:</strong> Pembayaran melalui <span class="fw-bold text-uppercase" id="bulk_proof_method_name_{{ $groupKey }}">Non-Tunai</span> WAJIB melampirkan foto / screenshot bukti transfer WhatsApp. Silakan pilih file bukti dari galeri tablet di atas untuk membuka tombol pelunasan.
                             </div>
                         </div>
                     </div>
@@ -617,7 +621,7 @@ $modalId = 'modalGroup_' . $groupKey;
                     </small>
                     <div>
                         <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Tutup</button>
-                        <button type="submit" class="btn btn-success fw-bold">
+                        <button type="submit" class="btn btn-success fw-bold" id="bulk_btn_submit_{{ $groupKey }}">
                             <i class="fas fa-check-double me-1"></i> Lunasi Transaksi Terpilih
                         </button>
                     </div>
@@ -627,52 +631,151 @@ $modalId = 'modalGroup_' . $groupKey;
     </div>
 </div>
 <script>
-function checkBulkSettlementMode() {
-    const method = document.getElementById('bulk_payment_method')?.value;
-    const selectDate = document.getElementById('bulk_settlement_date_mode');
-    const optNota = document.getElementById('bulk_opt_nota_date');
-    const warn = document.getElementById('bulk_warning_nota');
-    const proofInput = document.getElementById('bulk_payment_proof');
-    const proofBadge = document.getElementById('bulk_proof_required_badge');
-    const proofHelp = document.getElementById('bulk_proof_help');
+if (typeof checkBulkSettlementMode !== 'function') {
+    function checkBulkSettlementMode(groupKey) {
+        const methodSelect = document.getElementById('bulk_payment_method_' + groupKey);
+        const method = methodSelect ? methodSelect.value : 'cash';
+        const selectDate = document.getElementById('bulk_settlement_date_mode_' + groupKey);
+        const optNota = document.getElementById('bulk_opt_nota_date_' + groupKey);
+        const warn = document.getElementById('bulk_warning_nota_' + groupKey);
+        const proofInput = document.getElementById('bulk_payment_proof_' + groupKey);
+        const proofBadge = document.getElementById('bulk_proof_required_badge_' + groupKey);
+        const proofHelp = document.getElementById('bulk_proof_help_' + groupKey);
+        const proofAlert = document.getElementById('bulk_proof_alert_' + groupKey);
+        const methodNameSpan = document.getElementById('bulk_proof_method_name_' + groupKey);
+        const btnSubmit = document.getElementById('bulk_btn_submit_' + groupKey);
 
-    const isCash = (method === 'cash');
+        const isCash = (method === 'cash');
+        const hasFile = proofInput && proofInput.files && proofInput.files.length > 0;
 
-    // 1. Jika Cash, alokasi pembukuan 'koreksi lupa update' tidak boleh muncul atau dikunci
-    if (optNota && selectDate) {
+        // 1. Jika Cash, alokasi pembukuan 'koreksi lupa update' tidak boleh muncul atau dikunci
+        if (optNota && selectDate) {
+            if (isCash) {
+                optNota.disabled = true;
+                optNota.style.display = 'none';
+                selectDate.value = 'today';
+                if (warn) warn.classList.add('d-none');
+            } else {
+                optNota.disabled = false;
+                optNota.style.display = '';
+                if (warn) {
+                    if (selectDate.value === 'nota_date') {
+                        warn.classList.remove('d-none');
+                    } else {
+                        warn.classList.add('d-none');
+                    }
+                }
+            }
+        }
+
+        // 2. Logika Penguncian Tombol Submit & Indikator Wajib Bukti Nota:
         if (isCash) {
-            optNota.disabled = true;
-            optNota.style.display = 'none';
-            selectDate.value = 'today';
-            if (warn) warn.classList.add('d-none');
+            // Mode CASH: Bukti opsional, tombol selalu AKTIF
+            if (proofInput) {
+                proofInput.removeAttribute('required');
+                proofInput.classList.remove('border-danger', 'border-2', 'border-success');
+            }
+            if (proofBadge) {
+                proofBadge.innerHTML = '<span class="badge bg-light text-muted border">Opsional (Cash)</span>';
+            }
+            if (proofHelp) {
+                proofHelp.innerHTML = '*Opsional jika bayar Cash. Cukup upload <strong>1 file bukti</strong> jika ada.';
+            }
+            if (proofAlert) {
+                proofAlert.classList.add('d-none');
+            }
+            if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.className = 'btn btn-success fw-bold';
+                btnSubmit.innerHTML = '<i class="fas fa-check-double me-1"></i> Lunasi Transaksi Terpilih';
+            }
         } else {
-            optNota.disabled = false;
-            optNota.style.display = '';
-            if (warn) {
-                if (selectDate.value === 'nota_date') {
-                    warn.classList.remove('d-none');
-                } else {
-                    warn.classList.add('d-none');
+            // Mode SELAIN CASH (DANA, Transfer Bank, dll): Wajib Bukti Nota
+            const methodName = methodSelect ? methodSelect.options[methodSelect.selectedIndex].text : 'Non-Tunai';
+            if (methodNameSpan) methodNameSpan.textContent = methodName;
+
+            if (proofInput) {
+                proofInput.setAttribute('required', 'required');
+            }
+
+            if (hasFile) {
+                // File SUDAH dipilih: Tombol Terbuka (Bisa Submit)
+                if (proofInput) {
+                    proofInput.classList.remove('border-danger');
+                    proofInput.classList.add('border-success', 'border-2');
+                }
+                if (proofBadge) {
+                    proofBadge.innerHTML = '<span class="badge bg-success text-white"><i class="fas fa-check me-1"></i>File Bukti Terlampir</span>';
+                }
+                if (proofHelp) {
+                    proofHelp.innerHTML = '<strong class="text-success"><i class="fas fa-check-circle me-1"></i>Bukti siap diunggah:</strong> ' + proofInput.files[0].name;
+                }
+                if (proofAlert) {
+                    proofAlert.classList.add('d-none');
+                }
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.className = 'btn btn-success fw-bold';
+                    btnSubmit.innerHTML = '<i class="fas fa-check-double me-1"></i> Lunasi Transaksi Terpilih';
+                }
+            } else {
+                // File BELUM dipilih: Tombol TERKUNCI (Disabled) & Muncul Peringatan Wajib Bukti
+                if (proofInput) {
+                    proofInput.classList.remove('border-success');
+                    proofInput.classList.add('border-danger', 'border-2');
+                }
+                if (proofBadge) {
+                    proofBadge.innerHTML = '<span class="badge bg-danger text-white"><i class="fas fa-exclamation-circle me-1"></i>WAJIB UPLOAD BUKTI NOTA</span>';
+                }
+                if (proofHelp) {
+                    proofHelp.innerHTML = '<strong class="text-danger">*Wajib diunggah!</strong> Lampirkan screenshot bukti transfer pelanggan untuk membuka tombol pelunasan.';
+                }
+                if (proofAlert) {
+                    proofAlert.classList.remove('d-none');
+                }
+                if (btnSubmit) {
+                    btnSubmit.disabled = true;
+                    btnSubmit.className = 'btn btn-secondary text-white fw-bold opacity-75';
+                    btnSubmit.innerHTML = '<i class="fas fa-lock me-1"></i> Tombol Terkunci (Wajib Upload Bukti)';
                 }
             }
         }
     }
-
-    // 2. Jika selain cash, wajib upload bukti nota transfer
-    if (proofInput) {
-        if (isCash) {
-            proofInput.removeAttribute('required');
-            if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-light text-muted border">Opsional (Cash)</span>';
-            if (proofHelp) proofHelp.innerHTML = '*Opsional jika bayar Cash. Cukup upload <strong>1 file bukti</strong> jika ada.';
-        } else {
-            proofInput.setAttribute('required', 'required');
-            if (proofBadge) proofBadge.innerHTML = '<span class="badge bg-danger text-white"><i class="fas fa-asterisk me-1"></i>Wajib Upload Bukti WA</span>';
-            if (proofHelp) proofHelp.innerHTML = '<strong class="text-danger">*Wajib diunggah!</strong> Lampirkan 1 screenshot bukti transfer WA pelanggan untuk melunasi nota terpilih.';
-        }
-    }
 }
+
 document.addEventListener('DOMContentLoaded', function() {
-    checkBulkSettlementMode();
+    const modalEl_{{ $groupKey }} = document.getElementById('modalGroup_{{ $groupKey }}');
+    if (modalEl_{{ $groupKey }}) {
+        modalEl_{{ $groupKey }}.addEventListener('shown.bs.modal', function() {
+            checkBulkSettlementMode('{{ $groupKey }}');
+        });
+    }
+
+    const formEl_{{ $groupKey }} = document.getElementById('bulk_form_{{ $groupKey }}');
+    if (formEl_{{ $groupKey }}) {
+        formEl_{{ $groupKey }}.addEventListener('submit', function(e) {
+            const methodSelect = document.getElementById('bulk_payment_method_{{ $groupKey }}');
+            const method = methodSelect ? methodSelect.value : 'cash';
+            const proofInput = document.getElementById('bulk_payment_proof_{{ $groupKey }}');
+            
+            const checkedBoxes = formEl_{{ $groupKey }}.querySelectorAll('input[name="transaction_ids[]"]:checked');
+            if (checkedBoxes.length === 0) {
+                e.preventDefault();
+                alert('PERHATIAN: Anda belum mencentang transaksi satupun untuk dilunasi. Silakan centang minimal 1 nota.');
+                return false;
+            }
+
+            if (method !== 'cash' && (!proofInput || !proofInput.files || proofInput.files.length === 0)) {
+                e.preventDefault();
+                alert('PERHATIAN: Anda memilih pembayaran Non-Tunai (' + method.toUpperCase() + ').\n\nWAJIB melampirkan foto / screenshot bukti transfer WhatsApp terlebih dahulu sebelum transaksi dapat dilunasi!');
+                if (proofInput) {
+                    proofInput.focus();
+                    proofInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return false;
+            }
+        });
+    }
 });
 </script>
 
