@@ -1,4 +1,4 @@
-@extends('admin.layouts.app')
+﻿@extends('admin.layouts.app')
 
 @section('title', 'Dashboard Admin')
 
@@ -446,21 +446,36 @@
             <div class="card-body p-0">
                 @if(isset($driverRecap) && count($driverRecap) > 0)
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0" id="tableDriverRecapDashboard">
                         <thead class="table-light">
                             <tr>
-                                <th class="ps-3 py-3">Nama Driver</th>
-                                <th class="text-center">Ritase (Trip)</th>
-                                <th class="text-center">Total Pesanan</th>
-                                <th>Total Muatan (Semua Produk)</th>
-                                <th class="text-end">Total Tagihan</th>
+                                <th class="ps-3 py-3 sortable-col" onclick="sortDriverRecapTable('tableDriverRecapDashboard', 'driver-name')" style="cursor: pointer; user-select: none;" title="Klik untuk mengurutkan Nama Driver">
+                                    Nama Driver <i class="fas fa-sort ms-1 text-muted sort-icon" data-col="driver-name"></i>
+                                </th>
+                                <th class="text-center sortable-col" onclick="sortDriverRecapTable('tableDriverRecapDashboard', 'total-trips')" style="cursor: pointer; user-select: none;" title="Klik untuk mengurutkan Ritase">
+                                    Ritase (Trip) <i class="fas fa-sort ms-1 text-muted sort-icon" data-col="total-trips"></i>
+                                </th>
+                                <th class="text-center sortable-col" onclick="sortDriverRecapTable('tableDriverRecapDashboard', 'total-orders')" style="cursor: pointer; user-select: none;" title="Klik untuk mengurutkan Total Pesanan">
+                                    Total Pesanan <i class="fas fa-sort ms-1 text-muted sort-icon" data-col="total-orders"></i>
+                                </th>
+                                <th class="sortable-col" onclick="sortDriverRecapTable('tableDriverRecapDashboard', 'total-qty')" style="cursor: pointer; user-select: none;" title="Klik untuk mengurutkan Total Muatan">
+                                    Total Muatan (Semua Produk) <i class="fas fa-sort ms-1 text-muted sort-icon" data-col="total-qty"></i>
+                                </th>
+                                <th class="text-end sortable-col" onclick="sortDriverRecapTable('tableDriverRecapDashboard', 'total-amount')" style="cursor: pointer; user-select: none;" title="Klik untuk mengurutkan Total Tagihan">
+                                    Total Tagihan <i class="fas fa-sort ms-1 text-muted sort-icon" data-col="total-amount"></i>
+                                </th>
                                 <th>Status Pembayaran</th>
                                 <th class="text-center pe-3">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach($driverRecap as $d)
-                            <tr>
+                            <tr class="driver-recap-row"
+                                data-driver-name="{{ strtolower($d['driver_name']) }}"
+                                data-total-trips="{{ (int)($d['total_trips'] ?? 0) }}"
+                                data-total-orders="{{ (int)($d['total_orders'] ?? 0) }}"
+                                data-total-qty="{{ (int)($d['total_qty'] ?? 0) }}"
+                                data-total-amount="{{ (float)($d['total_amount'] ?? 0) }}">
                                 <td class="ps-3">
                                     <div class="d-flex align-items-center">
                                         <div class="p-2 rounded-circle me-3" style="background-color: #fef3c7 !important; color: #d97706 !important;">
@@ -1925,5 +1940,78 @@
             applySettlementFilter(currentSettlementFilter);
         }
     });
+    // --- Sort Driver Recap Table ---
+    const tableSortState = {};
+
+    function sortDriverRecapTable(tableId, columnKey) {
+        const table = document.getElementById(tableId);
+        if (!table) return;
+
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+
+        const rows = Array.from(tbody.querySelectorAll('tr.driver-recap-row'));
+        if (rows.length === 0) return;
+
+        if (!tableSortState[tableId]) {
+            tableSortState[tableId] = { column: null, direction: 'asc' };
+        }
+
+        const state = tableSortState[tableId];
+
+        if (state.column === columnKey) {
+            state.direction = state.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            state.column = columnKey;
+            state.direction = (columnKey === 'driver-name') ? 'asc' : 'desc';
+        }
+
+        const isAsc = state.direction === 'asc';
+
+        rows.sort((a, b) => {
+            let valA, valB;
+            if (columnKey === 'driver-name') {
+                valA = (a.dataset.driverName || '').trim().toLowerCase();
+                valB = (b.dataset.driverName || '').trim().toLowerCase();
+                return isAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+            } else if (columnKey === 'total-trips') {
+                valA = parseInt(a.dataset.totalTrips) || 0;
+                valB = parseInt(b.dataset.totalTrips) || 0;
+            } else if (columnKey === 'total-orders') {
+                valA = parseInt(a.dataset.totalOrders) || 0;
+                valB = parseInt(b.dataset.totalOrders) || 0;
+            } else if (columnKey === 'total-qty') {
+                valA = parseInt(a.dataset.totalQty) || 0;
+                valB = parseInt(b.dataset.totalQty) || 0;
+            } else if (columnKey === 'total-amount') {
+                valA = parseFloat(a.dataset.totalAmount) || 0;
+                valB = parseFloat(b.dataset.totalAmount) || 0;
+            } else {
+                return 0;
+            }
+
+            return isAsc ? (valA - valB) : (valB - valA);
+        });
+
+        rows.forEach((row, idx) => {
+            const noCell = row.querySelector('.row-number');
+            if (noCell) {
+                noCell.textContent = idx + 1;
+            }
+            tbody.appendChild(row);
+        });
+
+        const icons = table.querySelectorAll('.sort-icon');
+        icons.forEach(icon => {
+            if (icon.dataset.col === columnKey) {
+                icon.className = isAsc 
+                    ? 'fas fa-sort-up ms-1 text-primary sort-icon' 
+                    : 'fas fa-sort-down ms-1 text-primary sort-icon';
+            } else {
+                icon.className = 'fas fa-sort ms-1 text-muted sort-icon';
+            }
+        });
+    }
+
 </script>
 @endpush
