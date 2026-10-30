@@ -7,9 +7,11 @@ use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
 use App\Services\Admin\UserService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
 class UserController extends Controller
@@ -22,10 +24,30 @@ class UserController extends Controller
         // Middleware sudah didaftarkan di route file
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
         $users = $this->userService->getAllUsersWithPagination();
-        return view('admin.users.index', compact('users'));
+
+        $businessId = Auth::user()->business_id;
+
+        // Default rentang tanggal: Awal bulan ini s/d hari ini
+        $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
+        $endDate = $request->input('end_date', Carbon::now()->toDateString());
+        $selectedDriverId = $request->input('driver_id', 'all');
+        $activeTab = $request->input('tab', $request->has('start_date') ? 'driver_recap' : 'users');
+
+        $driversList = $this->userService->getDriversList($businessId);
+        $driverRecap = $this->userService->getDriverDeliveryRecap($businessId, $startDate, $endDate, $selectedDriverId);
+
+        return view('admin.users.index', compact(
+            'users',
+            'driverRecap',
+            'driversList',
+            'startDate',
+            'endDate',
+            'selectedDriverId',
+            'activeTab'
+        ));
     }
 
     public function create(): View
