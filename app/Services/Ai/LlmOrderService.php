@@ -13,9 +13,9 @@ class LlmOrderService
     public function __construct()
     {
         $this->apiKey = config('services.gemini.key') ?? env('GEMINI_API_KEY');
-        $rawModel = env('GEMINI_MODEL') ?: (config('services.gemini.model') ?? 'gemini-1.5-flash');
-        if ($rawModel === 'gemini-1.5-flash-latest' || empty($rawModel)) {
-            $rawModel = 'gemini-1.5-flash';
+        $rawModel = env('GEMINI_MODEL') ?: (config('services.gemini.model') ?? 'gemini-pro');
+        if (empty($rawModel) || $rawModel === 'gemini-1.5-flash-latest') {
+            $rawModel = 'gemini-pro';
         }
         $cleanModel = str_replace('GEMINI_MODEL=', '', $rawModel);
         $this->model = trim($cleanModel);
@@ -96,6 +96,15 @@ PROMPT;
     {
         $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent?key={$this->apiKey}";
 
+        $generationConfig = [
+            'temperature' => 0.1,
+        ];
+
+        // responseMimeType hanya didukung pada model Gemini 1.5+
+        if (str_contains($this->model, '1.5') || str_contains($this->model, '2.0')) {
+            $generationConfig['responseMimeType'] = 'application/json';
+        }
+
         $payload = [
             'contents' => [
                 [
@@ -105,10 +114,7 @@ PROMPT;
                     ],
                 ],
             ],
-            'generationConfig' => [
-                'responseMimeType' => 'application/json',
-                'temperature'      => 0.1,
-            ],
+            'generationConfig' => $generationConfig,
         ];
 
         $response = Http::timeout(12)->post($url, $payload);

@@ -34,6 +34,16 @@ class AiOrderWebhookController extends Controller
         $sender = $request->input('sender') ?? $request->input('from') ?? $request->input('phone');
         $message = trim((string) ($request->input('message') ?? $request->input('text') ?? ''));
 
+        // 1. Abaikan pesan dari Grup WhatsApp
+        if ($request->input('isgroup') == true || $request->input('isgroup') === 'true') {
+            return response()->json(['status' => 'ignored', 'message' => 'Pesan dari grup diabaikan'], 200);
+        }
+
+        // 2. Abaikan pesan media/VN jika URL media kosong
+        if ($message === 'non-text message' || $message === 'non-button message') {
+            return response()->json(['status' => 'ignored', 'message' => 'Pesan media tidak didukung oleh konfigurasi saat ini'], 200);
+        }
+
         if (empty($sender) || empty($message)) {
             return response()->json([
                 'status'  => 'ignored',
