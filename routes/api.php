@@ -5,8 +5,16 @@ use App\Http\Controllers\Api\ExpenseSyncController;
 use App\Http\Controllers\Api\V1\WhatsappReportController;
 use App\Http\Controllers\Api\V1\Kasir\PosApiController;
 use App\Http\Controllers\Api\V1\Auth\LoginApiController; // [TAMBAHAN BARU]
+use App\Http\Controllers\Api\V1\AiOrderWebhookController;
 
 Route::prefix('v1')->group(function () {
+
+    // ==============================================================
+    // RUTE WEBHOOK FONNTE (AI ORDER RECEIVER) & ANTREAN KASIR
+    // ==============================================================
+    Route::post('/webhook/fonnte', [AiOrderWebhookController::class, 'handle'])->name('webhook.fonnte');
+    Route::get('/kasir/ai-orders', [AiOrderWebhookController::class, 'getValidatedOrders'])->name('api.kasir.ai_orders');
+    Route::post('/kasir/ai-orders/{id}/processed', [AiOrderWebhookController::class, 'markAsProcessed'])->name('api.kasir.ai_orders.processed');
 
     // Rute Publik (Tidak butuh token)
     Route::post('/sync/salary', [ExpenseSyncController::class, 'storeFromAttendance']);

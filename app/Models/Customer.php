@@ -36,4 +36,15 @@ class Customer extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    /**
+     * Menghitung total utang/kasbon pelanggan yang masih pending.
+     */
+    public function getTotalKasbon()
+    {
+        return $this->transactions()
+                    ->where('type', 'sale')
+                    ->where('payment_status', 'pending')
+                    ->sum('total_amount');
+    }
 }

@@ -37,6 +37,9 @@ class PosController extends Controller
         try {
             $result = $this->posService->processTransaction($request->validated());
 
+            // Otomatis tandai pesanan AI (WhatsApp) sebagai selesai/cancelled setelah transaksi berhasil dibuat
+            $this->markAiOrdersAsProcessed($request);
+
             // ==========================================================
             // Jika transaksi adalah Pengiriman Rombongan (Batch Delivery)
             // ==========================================================
@@ -111,5 +114,69 @@ class PosController extends Controller
         $transaction = $this->posService->getTransactionWithDetails($transaction->id);
 
         return view('kasir.pos.receipt_unpaid', compact('transaction'));
+    }
+
+    /**
+     * Otomatis tandai pesanan AI (WhatsApp) sebagai selesai/cancelled setelah transaksi checkout berhasil.
+     */
+    protected function markAiOrdersAsProcessed(Request $request): void
+    {
+        try {
+            $aiOrderIds = [];
+
+            // 1. Tangkap ID pesanan AI tunggal
+            if ($request->filled('ai_order_id')) {
+                $aiOrderIds[] = (int) $request->input('ai_order_id');
+            }
+
+            // 2. Tangkap array ID pesanan AI (jika multi-order)
+            if ($request->has('ai_order_ids') && is_array($request->input('ai_order_ids'))) {
+                foreach ($request->input('ai_order_ids') as $id) {
+                    if (!empty($id)) {
+                        $aiOrderIds[] = (int) $id;
+                    }
+                }
+            }
+
+            if ($request->has('orders') && is_array($request->input('orders'))) {
+                foreach ($request->input('orders') as $order) {
+                    if (!empty($order['ai_order_id'])) {
+                        $aiOrderIds[] = (int) $order['ai_order_id'];
+                    }
+                }
+            }
+
+            // 3. Fallback: Cari jika customer yang ditransaksikan memiliki pesanan berstatus 'validated'
+            if (!empty($request->input('customer_id'))) {
+                $custOrders = \App\Models\TemporaryOrder::where('customer_id', $request->input('customer_id'))
+                    ->where('status', 'validated')
+                    ->pluck('id')
+                    ->toArray();
+                $aiOrderIds = array_merge($aiOrderIds, $custOrders);
+            }
+
+            if ($request->has('orders') && is_array($request->input('orders'))) {
+                foreach ($request->input('orders') as $ord) {
+                    if (!empty($ord['customer_id'])) {
+                        $custOrders = \App\Models\TemporaryOrder::where('customer_id', $ord['customer_id'])
+                            ->where('status', 'validated')
+                            ->pluck('id')
+                            ->toArray();
+                        $aiOrderIds = array_merge($aiOrderIds, $custOrders);
+                    }
+                }
+            }
+
+            $aiOrderIds = array_unique(array_filter($aiOrderIds));
+
+            if (!empty($aiOrderIds)) {
+                \App\Models\TemporaryOrder::whereIn('id', $aiOrderIds)
+                    ->update(['status' => 'cancelled']);
+
+                \Log::info("[POS Store] Pesanan AI #" . implode(', #', $aiOrderIds) . " berhasil ditandai selesai/cancelled otomatis setelah transaksi dibuat.");
+            }
+        } catch (\Exception $e) {
+            \Log::warning("[POS Store] Gagal update status temporary orders: " . $e->getMessage());
+        }
     }
 }

@@ -29,6 +29,7 @@ class StoreTransactionRequest extends FormRequest
                 'driver_id' => ['required', 'integer', 'exists:users,id'],
                 'orders' => ['required', 'array', 'min:1'],
                 'orders.*.customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+                'orders.*.ai_order_id' => ['nullable'],
                 'orders.*.total_amount' => ['required', 'numeric', 'min:0'],
                 'orders.*.notes' => ['nullable', 'string'],
                 'orders.*.items' => ['required', 'array', 'min:1'],
@@ -37,11 +38,17 @@ class StoreTransactionRequest extends FormRequest
                 'orders.*.items.*.quantity' => ['required', 'integer', 'min:1'],
                 'orders.*.items.*.unit_price' => ['required', 'numeric', 'min:0'],
                 'orders.*.items.*.total_price' => ['required', 'numeric', 'min:0'],
+                'ai_order_id' => ['nullable'],
+                'ai_order_ids' => ['nullable', 'array'],
+                'ai_order_ids.*' => ['nullable'],
             ];
         }
 
         return [
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'ai_order_id' => ['nullable'],
+            'ai_order_ids' => ['nullable', 'array'],
+            'ai_order_ids.*' => ['nullable'],
             'driver_id' => ['nullable', 'integer', 'exists:users,id'],
             'payment_method' => ['required', 'string', 'max:50'],
             'total_amount' => ['required', 'numeric', 'min:0'],

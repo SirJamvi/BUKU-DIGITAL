@@ -8,6 +8,15 @@
 @endsection
 
 @push('styles')
+{{-- Tailwind CSS CDN dengan preflight false agar tidak merusak Bootstrap --}}
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+    tailwind.config = {
+        corePlugins: {
+            preflight: false,
+        }
+    }
+</script>
 <style>
     .pos-product-grid {
         display: grid;
@@ -16,6 +25,16 @@
         max-height: 75vh;
         overflow-y: auto;
         padding: 5px;
+    }
+
+    #cart-drop-zone {
+        transition: all 0.2s ease-in-out;
+    }
+
+    .drop-active {
+        background-color: #ecfdf5 !important;
+        border: 2px dashed #10b981 !important;
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.25) !important;
     }
 
     .product-card {
@@ -159,15 +178,35 @@
 
         {{-- Kolom Kanan: Keranjang & Pembayaran --}}
         <div class="col-lg-5">
-            <x-card class="pos-cart shadow-sm">
-                <div class="d-flex justify-content-between align-items-center mb-2">
+            <x-card class="pos-cart shadow-sm" id="cart-drop-zone">
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                     <div>
                         <h5 class="card-title mb-0 fw-bold d-inline-block">Keranjang</h5>
                         <span id="order-mode-badge" class="badge bg-secondary ms-2 small">Pesanan Langsung</span>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-primary fw-bold" id="btn-add-delivery-order" title="Klik untuk menambah pesanan pelanggan lain dalam 1 pengiriman driver">
-                        <i class="fas fa-plus-circle me-1"></i> + Tambah Transaksi ke Pengiriman
-                    </button>
+                    <div class="d-flex align-items-center gap-1">
+                        {{-- Tombol Buka Antrean WhatsApp (Kiri Bawah) --}}
+                        <button type="button" class="btn btn-sm btn-outline-success fw-bold d-flex align-items-center gap-1 shadow-sm" 
+                                onclick="window.dispatchEvent(new CustomEvent('toggle-ai-orders'))" id="btn-toggle-ai-sidebar" title="Buka/Tutup Antrean Pesanan WhatsApp">
+                            <i class="fab fa-whatsapp text-success"></i>
+                            <span>Antrean WA</span>
+                            <span class="badge bg-success text-white" id="ai-orders-badge-count">0</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold" id="btn-add-delivery-order" title="Klik untuk menambah pesanan pelanggan lain dalam 1 pengiriman driver">
+                            <i class="fas fa-plus-circle me-1"></i> + Tambah
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Alert Petunjuk Drag & Drop Pesanan AI --}}
+                <div id="ai-drop-hint" class="d-none alert alert-success py-2 px-3 small mb-2 border border-success">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-hand-holding-box fs-5 me-2 text-success"></i>
+                        <div>
+                            <strong>Lepaskan (Drop) Pesanan di Sini:</strong>
+                            <div class="small">Data pelanggan, ukuran es, dan jumlah ball otomatis dimasukkan ke keranjang aktif.</div>
+                        </div>
+                    </div>
                 </div>
 
                 {{-- Alert Mode Pengiriman Rombongan --}}
@@ -309,11 +348,15 @@
                 </div>
             </x-card>
         </div>
-    </div>
 </form>
+
+{{-- Komponen Antrean Pesanan AI WhatsApp (Pop-up di Kiri Bawah) --}}
+<x-pos.ai-order-sidebar />
 @endsection
 
 @push('scripts')
+{{-- Alpine.js CDN untuk komponen AI Order Sidebar --}}
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // ==============================================
@@ -424,6 +467,19 @@
                         name: itemName,
                         order: `Pesanan ${activeOrderIndex + 1}`
                     });
+
+                    // Jika item keranjang habis dan sebelumnya dari AI order, buka kembali status lock-nya
+                    if (Object.keys(currentOrder.items || {}).length === 0 && currentOrder.aiOrderId) {
+                        const unlockedId = currentOrder.aiOrderId;
+                        delete currentOrder.aiOrderId;
+                        if (window.aiOrdersInCart) {
+                            window.aiOrdersInCart.delete(unlockedId);
+                        }
+                        window.dispatchEvent(new CustomEvent('ai-order-unlocked', {
+                            detail: { orderId: unlockedId }
+                        }));
+                        posLog("🔓 PESANAN AI DI-UNLOCK KARENA ITEM KERANJANG KOSONG", { orderId: unlockedId });
+                    }
                 } else {
                     posLog("🔢 UPDATE JUMLAH ITEM", {
                         key: key,
@@ -456,6 +512,19 @@
         window.removeOrder = function(index) {
             if (orders.length <= 1) return;
             const removed = orders[index];
+
+            // Buka kunci jika pesanan AI yang dihapus ada di tab ini
+            if (removed && removed.aiOrderId) {
+                const unlockedId = removed.aiOrderId;
+                if (window.aiOrdersInCart) {
+                    window.aiOrdersInCart.delete(unlockedId);
+                }
+                window.dispatchEvent(new CustomEvent('ai-order-unlocked', {
+                    detail: { orderId: unlockedId }
+                }));
+                posLog("🔓 PESANAN AI DI-UNLOCK KARENA TAB DIHAPUS", { orderId: unlockedId });
+            }
+
             orders.splice(index, 1);
             if (activeOrderIndex >= orders.length) {
                 activeOrderIndex = orders.length - 1;
@@ -761,6 +830,7 @@
                         orders.forEach((ord, ordIdx) => {
                             hiddenItemsDiv.innerHTML += `
                                 <input type="hidden" name="orders[${ordIdx}][customer_id]" value="${ord.customerId || ''}">
+                                <input type="hidden" name="orders[${ordIdx}][ai_order_id]" value="${ord.aiOrderId || ''}">
                             `;
                             let itemIdx = 0;
                             let ordSubtotal = 0;
@@ -784,6 +854,7 @@
                     } else {
                         hiddenItemsDiv.innerHTML += `
                             <input type="hidden" name="customer_id" value="${orders[0].customerId || ''}">
+                            <input type="hidden" name="ai_order_id" value="${orders[0].aiOrderId || ''}">
                         `;
                         let itemIdx = 0;
                         Object.values(orders[0].items || {}).forEach(it => {
@@ -798,6 +869,13 @@
                             itemIdx++;
                         });
                     }
+
+                    // Tambahkan array hidden input untuk semua pesanan AI di keranjang
+                    orders.forEach(ord => {
+                        if (ord.aiOrderId) {
+                            hiddenItemsDiv.innerHTML += `<input type="hidden" name="ai_order_ids[]" value="${ord.aiOrderId}">`;
+                        }
+                    });
                 }
             } catch (err) {
                 console.error("[POS ERROR in renderCart]", err);
@@ -890,6 +968,19 @@
 
         if (clearCustomerBtn) {
             clearCustomerBtn.addEventListener('click', function() {
+                // Buka kunci jika pelanggan yang di-reset terhubung ke pesanan AI
+                if (orders[activeOrderIndex] && orders[activeOrderIndex].aiOrderId) {
+                    const unlockedId = orders[activeOrderIndex].aiOrderId;
+                    delete orders[activeOrderIndex].aiOrderId;
+                    if (window.aiOrdersInCart) {
+                        window.aiOrdersInCart.delete(unlockedId);
+                    }
+                    window.dispatchEvent(new CustomEvent('ai-order-unlocked', {
+                        detail: { orderId: unlockedId }
+                    }));
+                    posLog("🔓 PESANAN AI DI-UNLOCK KARENA PELANGGAN DI-RESET", { orderId: unlockedId });
+                }
+
                 orders[activeOrderIndex].customerId = '';
                 orders[activeOrderIndex].customerName = '';
                 if (customerSearch) customerSearch.value = '';
@@ -993,6 +1084,242 @@
                     grandTotal: safeEl('total_amount_hidden')?.value,
                     driverId: safeEl('driver_id')?.value || '-'
                 });
+            });
+        }
+
+        // ==============================================
+        // 6. AI WHATSAPP ORDER DRAG & DROP HANDLER
+        // ==============================================
+        const cartDropZone = safeEl('cart-drop-zone');
+        const dropHint = safeEl('ai-drop-hint');
+
+        // Dengarkan event visual saat order mulai ditarik
+        window.addEventListener('ai-order-dragstart', function(e) {
+            if (dropHint) dropHint.classList.remove('d-none');
+            if (cartDropZone) cartDropZone.classList.add('drop-active');
+        });
+
+        window.addEventListener('ai-order-dragend', function(e) {
+            if (dropHint) dropHint.classList.add('d-none');
+            if (cartDropZone) cartDropZone.classList.remove('drop-active');
+        });
+
+        // Sinkronisasi badge counter pesanan WA di header & floating button
+        window.addEventListener('ai-orders-count-changed', function(e) {
+            const count = e.detail?.count || 0;
+            const b1 = safeEl('ai-orders-badge-count');
+            const b2 = safeEl('ai-orders-floating-count');
+            const ping = safeEl('ai-orders-ping');
+            if (b1) b1.innerText = count;
+            if (b2) b2.innerText = count;
+            if (ping) {
+                if (count > 0) {
+                    ping.classList.remove('d-none');
+                } else {
+                    ping.classList.add('d-none');
+                }
+            }
+        });
+
+        // Sinkronisasi unlock order jika pesanan di keranjang dihapus atau dibatalkan
+        window.addEventListener('ai-order-unlocked', function(e) {
+            const id = e.detail?.orderId;
+            if (id) {
+                if (window.aiOrdersInCart) {
+                    window.aiOrdersInCart.delete(id);
+                }
+                orders.forEach(ord => {
+                    if (ord.aiOrderId === id) {
+                        delete ord.aiOrderId;
+                    }
+                });
+            }
+        });
+
+        if (cartDropZone) {
+            cartDropZone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                if (dropHint) dropHint.classList.remove('d-none');
+                cartDropZone.classList.add('drop-active');
+            });
+
+            cartDropZone.addEventListener('dragleave', function(e) {
+                if (!cartDropZone.contains(e.relatedTarget)) {
+                    cartDropZone.classList.remove('drop-active');
+                }
+            });
+
+            cartDropZone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                cartDropZone.classList.remove('drop-active');
+                if (dropHint) dropHint.classList.add('d-none');
+
+                let orderData = window.currentDraggedAiOrder || null;
+                if (!orderData) {
+                    try {
+                        const jsonStr = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+                        if (jsonStr) {
+                            orderData = JSON.parse(jsonStr);
+                        }
+                    } catch (err) {
+                        console.warn('[POS Drop] Gagal parse JSON dataTransfer:', err);
+                    }
+                }
+
+                const orderId = orderData?.id || e.dataTransfer.getData('ai-order-id');
+                const customerId = orderData?.customer_id || e.dataTransfer.getData('customer-id') || '';
+                const customerName = orderData?.customer_name || '';
+                const rawUkuran = (orderData?.ukuran_produk || e.dataTransfer.getData('ukuran-produk') || '20kg').toString().toLowerCase().trim();
+                const jumlahBall = parseInt(orderData?.jumlah_ball || e.dataTransfer.getData('jumlah-ball') || 1, 10);
+
+                // Cegah drag ganda jika pesanan AI sudah pernah dimasukkan ke keranjang
+                if (orderId && window.aiOrdersInCart && window.aiOrdersInCart.has(parseInt(orderId, 10))) {
+                    posLog("⚠️ PESANAN SUDAH ADA DI KERANJANG", { orderId: orderId });
+                    alert("Pesanan ini sudah pernah dimasukkan ke dalam keranjang. Silakan periksa daftar keranjang Anda.");
+                    return;
+                }
+
+                posLog("📥 PESANAN WHATSAPP DI-DROP KE KERANJANG", {
+                    orderId: orderId,
+                    customerId: customerId,
+                    customerName: customerName,
+                    ukuran: rawUkuran,
+                    jumlahBall: jumlahBall
+                });
+
+                // 1. Cek apakah tab pesanan saat ini sudah terisi pelanggan lain
+                const currentOrder = orders[activeOrderIndex];
+                if (currentOrder && Object.keys(currentOrder.items || {}).length > 0 && currentOrder.customerId && currentOrder.customerId != customerId) {
+                    // Otomatis buat tab toko baru dalam mode pengiriman rombongan
+                    window.addNewOrder();
+                }
+
+                // Asosiasikan ID Pesanan AI ke tab order aktif
+                if (orderId) {
+                    orders[activeOrderIndex].aiOrderId = parseInt(orderId, 10);
+                }
+
+                // 2. Isi Nama & ID Pelanggan
+                if (customerId || customerName) {
+                    orders[activeOrderIndex].customerId = customerId;
+                    orders[activeOrderIndex].customerName = customerName;
+
+                    const cSearch = safeEl('customer_search');
+                    const cIdInput = safeEl('customer_id');
+                    if (cSearch) cSearch.value = customerName;
+                    if (cIdInput) cIdInput.value = customerId;
+
+                    const cResults = safeEl('customer-results');
+                    if (cResults) {
+                        cResults.querySelectorAll('.customer-item').forEach(item => {
+                            if (item.dataset.id == customerId) {
+                                item.classList.add('selected');
+                            } else {
+                                item.classList.remove('selected');
+                            }
+                        });
+                    }
+                }
+
+                // 3. Pemetaan & Penambahan Produk Sesuai Ukuran (20kg / 15kg / 10kg)
+                // Parsing angka dari ukuran_produk (misal: '15kg', '15 kg', '15', '10kg', '20kg')
+                let targetNum = '';
+                const numMatch = rawUkuran.match(/\d+/);
+                if (numMatch) {
+                    targetNum = numMatch[0];
+                }
+                // Jika mengandung 19 / 19rb -> standarkan ke 20
+                if (targetNum === '19') {
+                    targetNum = '20';
+                }
+
+                const productCards = Array.from(document.querySelectorAll('.product-card'));
+                let matchedCard = null;
+
+                if (targetNum) {
+                    // Prioritas A: Nama produk mengandung targetNum + 'kg' (misal: "15kg", "15 kg", "15-kg")
+                    matchedCard = productCards.find(card => {
+                        const cName = (card.dataset.name || '').toLowerCase().replace(/\s+/g, '');
+                        return cName.includes(targetNum + 'kg') || cName.includes(targetNum + 'kilo');
+                    });
+
+                    // Prioritas B: Nama produk mengandung targetNum dengan batas non-digit (misal: "Es 15", "Es Kristal (15)")
+                    if (!matchedCard) {
+                        const regexBoundary = new RegExp('(?:^|\\D)' + targetNum + '(?:\\D|$)', 'i');
+                        matchedCard = productCards.find(card => {
+                            const cName = (card.dataset.name || '').toLowerCase();
+                            return regexBoundary.test(cName);
+                        });
+                    }
+
+                    // Prioritas C: Nama produk mengandung substring targetNum
+                    if (!matchedCard) {
+                        matchedCard = productCards.find(card => {
+                            const cName = (card.dataset.name || '').toLowerCase();
+                            return cName.includes(targetNum);
+                        });
+                    }
+                }
+
+                // Prioritas D: Jika belum ketemu juga, cari dengan rawUkuran langsung
+                if (!matchedCard && rawUkuran) {
+                    const cleanUkuran = rawUkuran.replace(/\s+/g, '');
+                    matchedCard = productCards.find(card => {
+                        const cName = (card.dataset.name || '').toLowerCase().replace(/\s+/g, '');
+                        return cName.includes(cleanUkuran);
+                    });
+                }
+
+                // PENTING: JANGAN fallback ke productCards[0] (20kg) jika produk tidak cocok!
+                if (!matchedCard) {
+                    posLog("⚠️ PRODUK TIDAK DITEMUKAN", {
+                        ukuranDicari: targetNum || rawUkuran,
+                        daftarProduk: productCards.map(c => c.dataset.name)
+                    });
+                    alert(`Produk Es Kristal dengan ukuran '${rawUkuran || targetNum + 'kg'}' tidak ditemukan di daftar produk POS. Silakan pilih produk secara manual.`);
+                    return;
+                }
+
+                const pId = matchedCard.dataset.id;
+                const vId = matchedCard.dataset.variantId || '';
+                const pName = matchedCard.dataset.name;
+                const pPrice = parseFloat(matchedCard.dataset.price);
+
+                const key = vId ? `${pId}-${vId}` : `${pId}`;
+                const targetOrder = orders[activeOrderIndex];
+
+                if (targetOrder.items[key]) {
+                    targetOrder.items[key].quantity += jumlahBall;
+                } else {
+                    targetOrder.items[key] = {
+                        productId: pId,
+                        variantId: vId,
+                        name: pName,
+                        price: pPrice,
+                        quantity: jumlahBall
+                    };
+                }
+
+                posLog("✅ PRODUK ES KRISTAL DITAMBAHKAN", {
+                    produk: pName,
+                    qty: jumlahBall,
+                    targetOrder: `Pesanan ${activeOrderIndex + 1}`
+                });
+
+                // 4. Render ulang keranjang
+                renderCart();
+
+                // 5. Tandai pesanan sudah di keranjang agar tidak bisa di-drag ulang
+                if (orderId) {
+                    const numId = parseInt(orderId, 10);
+                    if (!window.aiOrdersInCart) window.aiOrdersInCart = new Set();
+                    window.aiOrdersInCart.add(numId);
+
+                    window.dispatchEvent(new CustomEvent('ai-order-in-cart', {
+                        detail: { orderId: numId }
+                    }));
+                }
             });
         }
 
