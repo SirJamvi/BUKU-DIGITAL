@@ -13,10 +13,10 @@ class LlmOrderService
     public function __construct()
     {
         $this->apiKey = config('services.gemini.key') ?? env('GEMINI_API_KEY');
-        $rawModel = env('GEMINI_MODEL') ?: (config('services.gemini.model') ?? 'gemini-pro');
-        if (empty($rawModel) || $rawModel === 'gemini-1.5-flash-latest') {
-            $rawModel = 'gemini-pro';
-        }
+
+        // Ambil murni dari env, tanpa logika overriding (if fallback) ke gemini-pro
+        $rawModel = env('GEMINI_MODEL') ?: (config('services.gemini.model') ?? 'gemini-1.5-flash');
+
         $cleanModel = str_replace('GEMINI_MODEL=', '', $rawModel);
         $this->model = trim($cleanModel);
     }
