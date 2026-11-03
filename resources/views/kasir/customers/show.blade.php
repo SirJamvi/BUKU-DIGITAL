@@ -28,6 +28,11 @@
 <div class="row">
     <div class="col-md-4">
         <x-card title="Informasi Pelanggan">
+            @slot('headerActions')
+            <x-button href="{{ route('kasir.customers.edit', $customer->id) }}" variant="warning" class="btn-sm text-white">
+                <i class="fas fa-edit me-1"></i>Edit
+            </x-button>
+            @endslot
             <div class="text-center mb-3">
                 <i class="fas fa-user-circle fa-5x" style="color: var(--kasir-accent);"></i>
                 <h4 class="mt-3">{{ $customer->name }}</h4>

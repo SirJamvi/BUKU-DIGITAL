@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Kasir;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Kasir\StoreCustomerRequest;
+use App\Http\Requests\Kasir\UpdateCustomerRequest;
 use App\Models\Customer;
 use App\Services\Kasir\CustomerService;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +26,7 @@ class CustomerController extends Controller
     /**
      * Menampilkan daftar pelanggan.
      * Mendukung pencarian via query string ?search=
-     * [cite_start]Kasir memiliki akses lihat dan tambah pelanggan. [cite: 88]
+     * Kasir memiliki akses lihat dan tambah pelanggan.
      *
      * @param Request $request
      * @return View
@@ -67,7 +68,7 @@ class CustomerController extends Controller
     }
 
     /**
-     * [cite_start]Menampilkan detail dan riwayat pembelian pelanggan. [cite: 88]
+     * Menampilkan detail dan riwayat pembelian pelanggan.
      *
      * @param Customer $customer
      * @return View
@@ -76,5 +77,38 @@ class CustomerController extends Controller
     {
         $customerData = $this->customerService->getCustomerDetails($customer);
         return view('kasir.customers.show', $customerData);
+    }
+
+    /**
+     * Menampilkan form edit pelanggan.
+     *
+     * @param Customer $customer
+     * @return View
+     */
+    public function edit(Customer $customer): View
+    {
+        if ($customer->business_id !== auth()->user()->business_id) {
+            abort(404);
+        }
+
+        return view('kasir.customers.edit', compact('customer'));
+    }
+
+    /**
+     * Memperbarui data pelanggan.
+     *
+     * @param UpdateCustomerRequest $request
+     * @param Customer $customer
+     * @return RedirectResponse
+     */
+    public function update(UpdateCustomerRequest $request, Customer $customer): RedirectResponse
+    {
+        try {
+            $this->customerService->updateCustomer($customer, $request->validated());
+            return redirect()->route('kasir.customers.index')->with('success', 'Data pelanggan berhasil diperbarui.');
+        } catch (\Exception $e) {
+            logger()->error('Error updating customer from kasir: ' . $e->getMessage());
+            return back()->with('error', 'Gagal memperbarui data pelanggan.')->withInput();
+        }
     }
 }

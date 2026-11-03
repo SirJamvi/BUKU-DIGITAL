@@ -75,9 +75,14 @@
                 </td>
                 <td>{{ \Carbon\Carbon::parse($customer->join_date)->isoFormat('D MMMM YYYY') }}</td>
                 <td class="text-center">
-                    <x-button href="{{ route('kasir.customers.show', $customer->id) }}" variant="info" class="btn-sm">
-                        <i class="fas fa-eye"></i> Detail
-                    </x-button>
+                    <div class="d-inline-flex gap-1">
+                        <x-button href="{{ route('kasir.customers.show', $customer->id) }}" variant="info" class="btn-sm text-white">
+                            <i class="fas fa-eye"></i> Detail
+                        </x-button>
+                        <x-button href="{{ route('kasir.customers.edit', $customer->id) }}" variant="warning" class="btn-sm text-white">
+                            <i class="fas fa-edit"></i> Edit
+                        </x-button>
+                    </div>
                 </td>
             </tr>
             @empty

@@ -58,4 +58,18 @@ class CustomerService
             'transactions' => $transactions,
         ];
     }
+
+    /**
+     * Memperbarui data pelanggan.
+     */
+    public function updateCustomer(Customer $customer, array $data): Customer
+    {
+        if ($customer->business_id !== Auth::user()->business_id) {
+            abort(404);
+        }
+
+        $customer->update($data);
+
+        return $customer;
+    }
 }

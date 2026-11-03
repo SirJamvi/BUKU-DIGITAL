@@ -41,7 +41,7 @@ Route::prefix('transactions')->name('transactions.')->group(function () {
 });
 
 // Customer Management
-Route::resource('customers', CustomerController::class)->except(['edit', 'update', 'destroy']);
+Route::resource('customers', CustomerController::class)->except(['destroy']);
 
 // Rute Pengeluaran / Expenses Kasir
 Route::prefix('expenses')->name('expenses.')->group(function () {
