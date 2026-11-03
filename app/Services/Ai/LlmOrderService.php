@@ -122,7 +122,7 @@ PROMPT;
             'generationConfig' => $generationConfig,
         ];
 
-        $response = Http::timeout(12)->post($url, $payload);
+        $response = Http::timeout(60)->post($url, $payload);
 
         if (!$response->successful()) {
             throw new \Exception("Gemini HTTP Error {$response->status()}: " . $response->body());
