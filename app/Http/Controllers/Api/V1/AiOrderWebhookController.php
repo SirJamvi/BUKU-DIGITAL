@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Models\Customer;
 use App\Models\TemporaryOrder;
+use App\Models\WaOrder;
+use Carbon\Carbon;
 use App\Services\Ai\LlmOrderService;
 use App\Services\Whatsapp\FonnteService;
 use Illuminate\Support\Facades\Log;
@@ -60,16 +62,56 @@ class AiOrderWebhookController extends Controller
         $finalCustomerName = $customer ? $customer->name : 'Pelanggan Baru (' . $sender . ')';
 
         // ==============================================================
-        // 2. CEK APAKAH CUSTOMER MEMILIKI TEMPORARY ORDER 'pending'
+        // 2. CEK PEMBATALAN PESANAN (MENDUKUNG PENDING & VALIDATED / MASUK POS)
         // ==============================================================
-        $pendingOrder = TemporaryOrder::where('sender_phone', $sender)
-            ->where('status', 'pending')
+        // SEBELUM pengecekan pembatalan: Cari order aktif terakhir hari ini (status: pending atau validated)
+        $activeOrder = TemporaryOrder::where('sender_phone', $sender)
+            ->whereIn('status', ['pending', 'validated'])
+            ->whereDate('created_at', Carbon::today())
             ->latest('id')
             ->first();
+
+        // Pelanggan membalas pembatalan (misal: "batal", "cancel", "gak jadi")
+        if ($this->isCancellation($message)) {
+            if ($activeOrder) {
+                $activeOrder->update([
+                    'status'    => 'cancelled',
+                    'last_chat' => $message,
+                ]);
+
+                $reply = "❌ Pesanan Anda ({$activeOrder->jumlah_ball} Ball Es Kristal {$activeOrder->ukuran_produk}) telah dibatalkan. Silakan chat kembali jika ingin membuat pesanan baru.";
+                $this->fonnteService->sendMessage($sender, $reply);
+
+                Log::info("[AiOrderWebhook] Order #{$activeOrder->id} ({$activeOrder->status}) berhasil dibatalkan oleh pelanggan.");
+
+                return response()->json([
+                    'status'        => 'success',
+                    'action'        => 'cancelled',
+                    'order_id'      => $activeOrder->id,
+                    'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
+                ], 200);
+            }
+
+            $reply = "Tidak ada pesanan aktif (menunggu konfirmasi atau antrean kasir) yang dapat dibatalkan saat ini.";
+            $this->fonnteService->sendMessage($sender, $reply);
+
+            return response()->json([
+                'status'        => 'ignored',
+                'message'       => 'Tidak ada pesanan aktif untuk dibatalkan',
+                'reply_message' => $reply,
+            ], 200);
+        }
 
         // --------------------------------------------------------------
         // KASUS A: CUSTOMER SEDANG MEMILIKI PESANAN PENDING
         // --------------------------------------------------------------
+        $pendingOrder = ($activeOrder && $activeOrder->status === 'pending')
+            ? $activeOrder
+            : TemporaryOrder::where('sender_phone', $sender)
+                ->where('status', 'pending')
+                ->latest('id')
+                ->first();
+
         if ($pendingOrder) {
             // Pelanggan membalas konfirmasi "oke" / "ya"
             if ($this->isConfirmation($message)) {
@@ -89,24 +131,6 @@ class AiOrderWebhookController extends Controller
                 return response()->json([
                     'status'        => 'success',
                     'action'        => 'validated',
-                    'order_id'      => $pendingOrder->id,
-                    'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
-                ], 200);
-            }
-
-            // Pelanggan membalas pembatalan
-            if ($this->isCancellation($message)) {
-                $pendingOrder->update([
-                    'status'    => 'cancelled',
-                    'last_chat' => $message,
-                ]);
-
-                $reply = "❌ Pesanan Anda telah dibatalkan. Silakan chat kembali jika ingin membuat pesanan baru.";
-                $this->fonnteService->sendMessage($sender, $reply);
-
-                return response()->json([
-                    'status'        => 'success',
-                    'action'        => 'cancelled',
                     'order_id'      => $pendingOrder->id,
                     'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
                 ], 200);
@@ -316,7 +340,7 @@ class AiOrderWebhookController extends Controller
     {
         $clean = strtolower(trim($message));
         $keywords = [
-            'batal', 'cancel', 'ga jadi', 'gajadi', 'ngga dulu', 'ga dulu', 'tidak', 'engga', 'stop',
+            'batal', 'cancel', 'ga jadi', 'gajadi', 'gak jadi', 'gakjadi', 'ngga dulu', 'ga dulu', 'tidak', 'engga', 'stop',
             'nggak jadi', 'tidak jadi'
         ];
 
