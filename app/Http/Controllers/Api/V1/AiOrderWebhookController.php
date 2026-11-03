@@ -260,7 +260,13 @@ class AiOrderWebhookController extends Controller
                     'jumlah_ball'             => (int) $order->jumlah_ball,
                     'ukuran_produk'           => $order->ukuran_produk,
                     'delivery_time'           => $order->delivery_time ? $order->delivery_time->format('Y-m-d H:i:s') : null,
-                    'delivery_time_formatted' => $order->delivery_time ? $order->delivery_time->timezone('Asia/Jakarta')->format('H:i') : null,
+                    'delivery_time_formatted' => $order->delivery_time 
+                        ? (\Carbon\Carbon::parse($order->delivery_time)->isToday() 
+                            ? \Carbon\Carbon::parse($order->delivery_time)->timezone('Asia/Jakarta')->format('H:i') 
+                            : (\Carbon\Carbon::parse($order->delivery_time)->isTomorrow()
+                                ? 'Besok, ' . \Carbon\Carbon::parse($order->delivery_time)->timezone('Asia/Jakarta')->format('H:i')
+                                : \Carbon\Carbon::parse($order->delivery_time)->timezone('Asia/Jakarta')->translatedFormat('d M H:i')))
+                        : null,
                     'status'                  => $order->status,
                     'last_chat'               => $order->last_chat,
                     'created_at'              => $order->created_at ? $order->created_at->format('Y-m-d H:i:s') : null,

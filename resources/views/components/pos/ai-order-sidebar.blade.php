@@ -296,14 +296,33 @@
                 }
             },
 
-            // Helper format jam pengiriman
+            // Helper format jam pengiriman (hari ini: 'H:i', besok: 'Besok, H:i', lainnya: 'd M H:i')
             getDeliveryTimeBadge(order) {
                 if (!order || !order.delivery_time) return null;
                 if (order.delivery_time_formatted) return order.delivery_time_formatted;
                 try {
                     const dTime = new Date(order.delivery_time.replace(/-/g, '/'));
-                    return dTime.getHours().toString().padStart(2, '0') + ':' + 
-                           dTime.getMinutes().toString().padStart(2, '0');
+                    const now = new Date();
+                    const isToday = dTime.getFullYear() === now.getFullYear() &&
+                                    dTime.getMonth() === now.getMonth() &&
+                                    dTime.getDate() === now.getDate();
+
+                    const timeStr = dTime.getHours().toString().padStart(2, '0') + ':' + 
+                                    dTime.getMinutes().toString().padStart(2, '0');
+
+                    if (isToday) return timeStr;
+
+                    const tomorrow = new Date(now);
+                    tomorrow.setDate(now.getDate() + 1);
+                    const isTomorrow = dTime.getFullYear() === tomorrow.getFullYear() &&
+                                       dTime.getMonth() === tomorrow.getMonth() &&
+                                       dTime.getDate() === tomorrow.getDate();
+
+                    if (isTomorrow) return 'Besok, ' + timeStr;
+
+                    const day = dTime.getDate().toString().padStart(2, '0');
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                    return day + ' ' + months[dTime.getMonth()] + ' ' + timeStr;
                 } catch (e) {
                     return null;
                 }
