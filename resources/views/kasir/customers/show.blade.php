@@ -40,9 +40,30 @@
             </div>
             <hr>
             <ul class="list-unstyled">
-                <li class="mb-2"><i class="fas fa-phone-alt fa-fw me-2"></i> {{ $customer->phone ?? '-' }}</li>
-                <li class="mb-2"><i class="fas fa-envelope fa-fw me-2"></i> {{ $customer->email ?? '-' }}</li>
-                <li class="mb-2"><i class="fas fa-map-marker-alt fa-fw me-2"></i> {{ $customer->address ?? '-' }}</li>
+                <li class="mb-2">
+                    <div class="d-flex align-items-start">
+                        <i class="fas fa-phone-alt fa-fw me-2 mt-1 text-primary"></i>
+                        <div>
+                            <div><strong>{{ $customer->phone ?? '-' }}</strong> <span class="badge bg-primary text-white ms-1" style="font-size: 10px;">Utama</span></div>
+                            @if(isset($customer->phones) && $customer->phones->where('is_primary', false)->count() > 0)
+                                <div class="mt-1 small text-muted">Nomor Lainnya:</div>
+                                <div class="d-flex flex-column gap-1 mt-1">
+                                    @foreach($customer->phones->where('is_primary', false) as $extraPhone)
+                                        <div class="small">
+                                            <i class="fab fa-whatsapp text-success me-1"></i>
+                                            <span>{{ $extraPhone->phone }}</span>
+                                            @if($extraPhone->label)
+                                                <span class="badge bg-secondary text-white ms-1" style="font-size: 10px;">{{ $extraPhone->label }}</span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                </li>
+                <li class="mb-2"><i class="fas fa-envelope fa-fw me-2 text-muted"></i> {{ $customer->email ?? '-' }}</li>
+                <li class="mb-2"><i class="fas fa-map-marker-alt fa-fw me-2 text-danger"></i> {{ $customer->address ?? '-' }}</li>
             </ul>
         </x-card>
     </div>

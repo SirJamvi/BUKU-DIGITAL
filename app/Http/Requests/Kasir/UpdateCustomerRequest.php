@@ -33,6 +33,9 @@ class UpdateCustomerRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:255', Rule::unique('customers', 'email')->ignore($customerId)],
             'address' => ['nullable', 'string'],
             'status' => ['nullable', 'in:active,inactive'],
+            'phones' => ['nullable', 'array'],
+            'phones.*.phone' => ['nullable', 'string', 'max:30'],
+            'phones.*.label' => ['nullable', 'string', 'max:50'],
         ];
     }
 }

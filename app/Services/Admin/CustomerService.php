@@ -40,6 +40,19 @@ class CustomerService
 
         $customer->update($data);
 
+        if (!empty($customer->phone)) {
+            $primaryPhone = $customer->phones()->where('is_primary', true)->first();
+            if ($primaryPhone) {
+                $primaryPhone->update(['phone' => $customer->phone]);
+            } else {
+                $customer->phones()->create([
+                    'phone'      => $customer->phone,
+                    'label'      => 'Utama',
+                    'is_primary' => true,
+                ]);
+            }
+        }
+
         return $customer;
     }
 

@@ -30,6 +30,9 @@ class StoreCustomerRequest extends FormRequest
             'phone' => ['nullable', 'string', 'max:20', 'unique:customers,phone'],
             'email' => ['nullable', 'email', 'max:255', 'unique:customers,email'],
             'address' => ['nullable', 'string'],
+            'phones' => ['nullable', 'array'],
+            'phones.*.phone' => ['nullable', 'string', 'max:30'],
+            'phones.*.label' => ['nullable', 'string', 'max:50'],
         ];
     }
 }

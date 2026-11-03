@@ -91,6 +91,8 @@ class CustomerController extends Controller
             abort(404);
         }
 
+        $customer->load('phones');
+
         return view('kasir.customers.edit', compact('customer'));
     }
 

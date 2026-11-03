@@ -67,10 +67,17 @@
                 <td>{{ $customer->name }}</td>
                 <td>
                     @if($customer->phone)
-                    <i class="fas fa-phone-alt fa-fw text-muted"></i> {{ $customer->phone }}<br>
+                    <div><i class="fas fa-phone-alt fa-fw text-muted"></i> {{ $customer->phone }}</div>
+                    @endif
+                    @if(isset($customer->phones) && $customer->phones->where('is_primary', false)->count() > 0)
+                    <div class="mt-1">
+                        <span class="badge bg-light text-primary border" title="{{ $customer->phones->where('is_primary', false)->pluck('phone')->implode(', ') }}">
+                            <i class="fas fa-plus fa-xs"></i> {{ $customer->phones->where('is_primary', false)->count() }} nomor lain
+                        </span>
+                    </div>
                     @endif
                     @if($customer->email)
-                    <i class="fas fa-envelope fa-fw text-muted"></i> {{ $customer->email }}
+                    <div class="text-muted small mt-1"><i class="fas fa-envelope fa-fw"></i> {{ $customer->email }}</div>
                     @endif
                 </td>
                 <td>{{ \Carbon\Carbon::parse($customer->join_date)->isoFormat('D MMMM YYYY') }}</td>

@@ -32,6 +32,11 @@ class Customer extends Model
         return $this->hasMany(Transaction::class);
     }
 
+    public function phones()
+    {
+        return $this->hasMany(CustomerPhone::class);
+    }
+
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');

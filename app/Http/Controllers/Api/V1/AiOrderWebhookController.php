@@ -298,7 +298,7 @@ class AiOrderWebhookController extends Controller
     }
 
     /**
-     * Cari customer berdasarkan variasi nomor telepon WhatsApp.
+     * Cari customer berdasarkan variasi nomor telepon WhatsApp (mendukung multi-nomor di customer_phones).
      */
     protected function findCustomerByPhone(string $phone): ?Customer
     {
@@ -315,11 +315,27 @@ class AiOrderWebhookController extends Controller
             '+' . $clean,
         ]));
 
+        // 1. Cari langsung di tabel customers (nomor utama)
         $customer = Customer::whereIn('phone', $variations)->first();
 
+        // 2. Jika tidak ditemukan, cari di relasi customer_phones (multi-nomor)
+        if (!$customer) {
+            $customerPhone = \App\Models\CustomerPhone::whereIn('phone', $variations)->first();
+            if ($customerPhone) {
+                $customer = $customerPhone->customer;
+            }
+        }
+
+        // 3. Fallback suffix 9 digit jika masih belum cocok tepat
         if (!$customer && strlen($clean) >= 9) {
             $suffix = substr($clean, -9);
             $customer = Customer::where('phone', 'like', "%{$suffix}")->first();
+            if (!$customer) {
+                $customerPhone = \App\Models\CustomerPhone::where('phone', 'like', "%{$suffix}")->first();
+                if ($customerPhone) {
+                    $customer = $customerPhone->customer;
+                }
+            }
         }
 
         return $customer;
