@@ -31,15 +31,21 @@ class AiOrderWebhookController extends Controller
      */
     public function handle(Request $request): JsonResponse
     {
-        Log::info('[AiOrderWebhook] Webhook Fonnte Masuk. Payload: ' . json_encode($request->all()));
+        $payload = $request->all();
+        Log::info('[AiOrderWebhook] Webhook Fonnte Masuk. Payload: ' . json_encode($payload));
+
+        // Abaikan pesan dari Grup WhatsApp
+        if (
+            (isset($payload['isgroup']) && ($payload['isgroup'] === true || $payload['isgroup'] === 'true' || $payload['isgroup'] == 1)) ||
+            (isset($payload['isGroup']) && ($payload['isGroup'] === true || $payload['isGroup'] === 'true' || $payload['isGroup'] == 1)) ||
+            $request->input('isgroup') == true ||
+            $request->input('isgroup') === 'true'
+        ) {
+            return response()->json(['message' => 'Group message ignored'], 200);
+        }
 
         $sender = $request->input('sender') ?? $request->input('from') ?? $request->input('phone');
         $message = trim((string) ($request->input('message') ?? $request->input('text') ?? ''));
-
-        // 1. Abaikan pesan dari Grup WhatsApp
-        if ($request->input('isgroup') == true || $request->input('isgroup') === 'true') {
-            return response()->json(['status' => 'ignored', 'message' => 'Pesan dari grup diabaikan'], 200);
-        }
 
         // 2. Abaikan pesan media/VN jika URL media kosong
         if ($message === 'non-text message' || $message === 'non-button message') {
