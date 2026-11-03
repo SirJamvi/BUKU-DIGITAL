@@ -17,6 +17,7 @@ class TemporaryOrder extends Model
         'sender_phone',
         'jumlah_ball',
         'ukuran_produk',
+        'delivery_time',
         'harga_asumsi',
         'total_harga',
         'status',
@@ -25,11 +26,12 @@ class TemporaryOrder extends Model
     ];
 
     protected $casts = [
-        'jumlah_ball'  => 'integer',
-        'harga_asumsi' => 'decimal:2',
-        'total_harga'  => 'decimal:2',
-        'created_at'   => 'datetime',
-        'updated_at'   => 'datetime',
+        'jumlah_ball'   => 'integer',
+        'delivery_time' => 'datetime',
+        'harga_asumsi'  => 'decimal:2',
+        'total_harga'   => 'decimal:2',
+        'created_at'    => 'datetime',
+        'updated_at'    => 'datetime',
     ];
 
     /**
