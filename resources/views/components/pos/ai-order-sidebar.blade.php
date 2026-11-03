@@ -21,7 +21,7 @@
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100 translate-y-0"
          x-transition:leave-end="opacity-0 translate-y-4"
-         class="fixed bottom-20 left-4 z-50 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col font-sans"
+         class="fixed bottom-20 left-4 z-50 w-[420px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col font-sans"
          style="max-height: calc(100vh - 120px); display: none;">
         
         {{-- Header Panel --}}
@@ -116,15 +116,18 @@
                      :data-customer-id="order.customer_id"
                      :data-jumlah="order.jumlah_ball"
                      :data-ukuran="order.ukuran_produk"
-                     class="group relative rounded-xl p-3 shadow-sm transition-all duration-200 select-none"
+                     class="group relative rounded-xl p-3.5 shadow-sm transition-all duration-200 select-none"
                      :class="{
-                         'bg-emerald-50/70 border-2 border-emerald-400 ring-2 ring-emerald-200/60': inCartOrderIds.includes(order.id),
-                         'bg-white border border-slate-200 hover:shadow-md hover:border-emerald-400 cursor-grab active:cursor-grabbing': !inCartOrderIds.includes(order.id),
+                         'bg-emerald-50/80 border-2 border-emerald-400 ring-2 ring-emerald-200/60': inCartOrderIds.includes(order.id),
+                         'bg-amber-50/70 border-2 border-amber-400 ring-2 ring-amber-200/60 shadow-md hover:border-amber-500 cursor-grab active:cursor-grabbing': !inCartOrderIds.includes(order.id) && isFutureDelivery(order),
+                         'bg-white border border-slate-200 hover:shadow-md hover:border-emerald-400 cursor-grab active:cursor-grabbing': !inCartOrderIds.includes(order.id) && !isFutureDelivery(order),
                          'opacity-50 ring-2 ring-emerald-500 ring-offset-1': draggedOrderId === order.id
                      }">
                     
                     {{-- Grip Indicator (jika belum di-drag) --}}
-                    <div x-show="!inCartOrderIds.includes(order.id)" class="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col space-y-0.5 text-slate-300 group-hover:text-emerald-500 transition-colors">
+                    <div x-show="!inCartOrderIds.includes(order.id)" 
+                         class="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col space-y-0.5 text-slate-300 transition-colors"
+                         :class="isFutureDelivery(order) ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'">
                         <i class="fas fa-ellipsis-v text-xs"></i>
                     </div>
                     {{-- Checkmark Icon (jika sudah di keranjang) --}}
@@ -133,21 +136,33 @@
                     </div>
 
                     <div class="pl-3.5">
-                        {{-- Row 1: Nama Pelanggan, Waktu, & Tombol Selesai --}}
-                        <div class="flex items-start justify-between mb-1.5 gap-1.5">
-                            <div class="flex items-center space-x-1.5 min-w-0 flex-1">
-                                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                                      :class="inCartOrderIds.includes(order.id) ? 'bg-emerald-200 text-emerald-800' : 'bg-emerald-100 text-emerald-700'">
-                                    <i class="fas fa-user text-[9px]"></i>
-                                </span>
-                                <span class="font-bold text-xs truncate transition-colors"
-                                      :class="inCartOrderIds.includes(order.id) ? 'text-emerald-950 font-extrabold' : 'text-slate-800 group-hover:text-emerald-700'"
-                                      x-text="order.customer_name"></span>
+                        {{-- Row 1: Nama Pelanggan (Font Besar & Bold) & Nomor HP (Menonjol) --}}
+                        <div class="flex items-start justify-between mb-2 gap-2">
+                            <div class="min-w-0 flex-1">
+                                {{-- Nama Pelanggan (text-lg font-bold) --}}
+                                <div class="flex items-center space-x-1.5">
+                                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+                                          :class="inCartOrderIds.includes(order.id) ? 'bg-emerald-200 text-emerald-800' : (isFutureDelivery(order) ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-700')">
+                                        <i class="fas fa-user"></i>
+                                    </span>
+                                    <h4 class="font-bold text-base sm:text-lg tracking-tight leading-snug truncate"
+                                        :class="inCartOrderIds.includes(order.id) ? 'text-emerald-950 font-extrabold' : 'text-slate-900'"
+                                        x-text="order.customer_name"></h4>
+                                </div>
+
+                                {{-- Nomor HP Pelanggan (Font Jelas & Menonjol) --}}
+                                <div class="flex items-center space-x-1.5 text-xs sm:text-sm font-semibold text-slate-600 mt-0.5 pl-7">
+                                    <i class="fab fa-whatsapp text-emerald-600 text-xs"></i>
+                                    <span x-text="order.sender_phone"></span>
+                                </div>
                             </div>
-                            <div class="flex items-center space-x-1 flex-shrink-0">
-                                <span class="text-[10px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded"
-                                      x-text="order.time_formatted || order.time_ago"></span>
-                                {{-- Tombol Buka Kunci (Jika transaksi di keranjang dibatalkan/dihapus) --}}
+
+                            {{-- Waktu Masuk & Aksi --}}
+                            <div class="flex items-center space-x-1 flex-shrink-0 pt-0.5">
+                                <span class="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded"
+                                      x-text="order.time_formatted || order.time_ago"
+                                      title="Waktu pesanan masuk"></span>
+                                {{-- Tombol Buka Kunci --}}
                                 <button type="button" 
                                         x-show="inCartOrderIds.includes(order.id)"
                                         @click.stop="unlockOrder(order.id, $event)"
@@ -156,7 +171,7 @@
                                     <i class="fas fa-undo text-[9px]"></i>
                                     <span>Batal</span>
                                 </button>
-                                {{-- Tombol Selesai (Manual Dismiss oleh Kasir) --}}
+                                {{-- Tombol Selesai --}}
                                 <button type="button" 
                                         @click.stop="markDone(order.id, $event)"
                                         class="inline-flex items-center space-x-1 px-2 py-0.5 text-[10px] font-bold rounded border transition shadow-xs active:scale-95 cursor-pointer"
@@ -168,10 +183,23 @@
                             </div>
                         </div>
 
-                        {{-- Row 2: Varian Ukuran, Status Badge & Jumlah Ball --}}
+                        {{-- Peringatan Jadwal Kirim Belum Tiba (Jika delivery_time > waktu sekarang) --}}
+                        <template x-if="isFutureDelivery(order)">
+                            <div class="mb-2 px-2.5 py-1.5 bg-amber-100/90 border border-amber-300 rounded-lg flex items-center justify-between text-amber-900 text-xs font-bold shadow-2xs">
+                                <span class="flex items-center space-x-1.5">
+                                    <span class="text-sm">⚠️</span>
+                                    <span>Jadwal Kirim Belum Tiba</span>
+                                </span>
+                                <span class="text-[11px] font-extrabold text-amber-900 bg-amber-200/90 px-1.5 py-0.5 rounded border border-amber-300"
+                                      x-text="'Kirim: ' + getDeliveryTimeBadge(order)"></span>
+                            </div>
+                        </template>
+
+                        {{-- Row 2: Varian Ukuran, Badge Waktu Kirim & Jumlah Ball --}}
                         <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
-                            {{-- Badge Ukuran & Status Di Keranjang --}}
+                            {{-- Badge Ukuran & Delivery Time --}}
                             <div class="flex items-center space-x-1.5 flex-wrap gap-1">
+                                {{-- Badge Ukuran Es --}}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold tracking-tight shadow-xs"
                                       :class="{
                                           'bg-emerald-100 text-emerald-800 border border-emerald-200': order.ukuran_produk === '20kg',
@@ -183,6 +211,15 @@
                                     <span x-text="'Es ' + order.ukuran_produk"></span>
                                 </span>
 
+                                {{-- Badge Delivery Time (Jika ada) --}}
+                                <template x-if="order.delivery_time">
+                                    <span class="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-bold shadow-xs"
+                                          :class="isFutureDelivery(order) ? 'bg-amber-500 text-white border border-amber-600' : 'bg-blue-100 text-blue-800 border border-blue-200'">
+                                        <i class="fas fa-clock text-[9px]"></i>
+                                        <span x-text="'Kirim: ' + getDeliveryTimeBadge(order)"></span>
+                                    </span>
+                                </template>
+
                                 {{-- Badge Status Sudah di Keranjang --}}
                                 <span x-show="inCartOrderIds.includes(order.id)" 
                                       class="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-emerald-200 text-emerald-900 border border-emerald-400">
@@ -193,8 +230,8 @@
 
                             {{-- Jumlah Ball --}}
                             <div class="flex items-baseline space-x-1">
-                                <span class="text-sm font-extrabold text-emerald-700" x-text="order.jumlah_ball"></span>
-                                <span class="text-[11px] font-semibold text-slate-500">Ball</span>
+                                <span class="text-base font-extrabold text-emerald-700" x-text="order.jumlah_ball"></span>
+                                <span class="text-xs font-bold text-slate-600">Ball</span>
                             </div>
                         </div>
 
@@ -206,7 +243,8 @@
                             </span>
                         </div>
                         <div class="mt-2 text-center opacity-0 group-hover:opacity-100 transition-opacity duration-150" x-show="!inCartOrderIds.includes(order.id)">
-                            <span class="inline-flex items-center space-x-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                            <span class="inline-flex items-center space-x-1 text-[10px] font-semibold px-2.5 py-0.5 rounded-full"
+                                  :class="isFutureDelivery(order) ? 'text-amber-700 bg-amber-50' : 'text-emerald-600 bg-emerald-50'">
                                 <i class="fas fa-arrows-alt text-[9px]"></i>
                                 <span>Tarik ke Keranjang di Kanan</span>
                             </span>
@@ -244,6 +282,31 @@
                     (o.ukuran_produk && o.ukuran_produk.toLowerCase().includes(q)) ||
                     (o.sender_phone && o.sender_phone.includes(q))
                 );
+            },
+
+            // Helper pengecekan apakah waktu pengiriman di masa mendatang (belum waktunya dikirim)
+            isFutureDelivery(order) {
+                if (!order || !order.delivery_time) return false;
+                try {
+                    const dTime = new Date(order.delivery_time.replace(/-/g, '/'));
+                    const now = new Date();
+                    return dTime > now;
+                } catch (e) {
+                    return false;
+                }
+            },
+
+            // Helper format jam pengiriman
+            getDeliveryTimeBadge(order) {
+                if (!order || !order.delivery_time) return null;
+                if (order.delivery_time_formatted) return order.delivery_time_formatted;
+                try {
+                    const dTime = new Date(order.delivery_time.replace(/-/g, '/'));
+                    return dTime.getHours().toString().padStart(2, '0') + ':' + 
+                           dTime.getMinutes().toString().padStart(2, '0');
+                } catch (e) {
+                    return null;
+                }
             },
 
             init() {

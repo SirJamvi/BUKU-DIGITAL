@@ -64,16 +64,26 @@ class LlmOrderService
      */
     protected function buildSystemPrompt(): string
     {
+        $currentWib = now()->setTimezone('Asia/Jakarta')->format('Y-m-d H:i:s');
+
         return <<<PROMPT
 Anda adalah AI Order Extractor resmi untuk sistem POS "BukuDig" (distributor agen es kristal).
-Tugas Anda HANYA SATU: Ekstraksi jumlah ball (jumlah_ball) dan ukuran produk (ukuran_produk) dari chat WhatsApp pelanggan.
+Tugas Anda: Ekstraksi jumlah ball (jumlah_ball), ukuran produk (ukuran_produk), dan waktu pengiriman (waktu_pengiriman) dari chat WhatsApp pelanggan.
 DILARANG KERAS mengekstrak harga, nominal uang, atau asumsi rupiah apapun.
+
+WAKTU SISTEM SAAT INI (WIB / Asia/Jakarta): {$currentWib}
 
 FORMAT OUTPUT WAJIB (JSON murni tanpa markdown, tanpa teks pembuka/penutup):
 {
   "jumlah_ball": <integer minimal 1>,
-  "ukuran_produk": "<'20kg' | '15kg' | '10kg'>"
+  "ukuran_produk": "<'20kg' | '15kg' | '10kg'>",
+  "waktu_pengiriman": "<'YYYY-MM-DD HH:MM:SS' | null>"
 }
+
+ATURAN WAKTU PENGIRIMAN (waktu_pengiriman):
+- Jika pelanggan menyebutkan waktu spesifik pengiriman (misal: 'jam 4 sore', 'besok jam 10 pagi', 'nanti jam 2 siang'), konversikan waktu tersebut ke format datetime 'YYYY-MM-DD HH:MM:SS' berdasarkan waktu saat ini (WIB/Asia/Jakarta).
+- Jika tidak ada keterangan waktu pengiriman, set null.
+- Tambahkan key 'waktu_pengiriman' pada JSON output.
 
 ATURAN WAJIB PEMETAAN UKURAN PRODUK:
 1. Jika chat pelanggan mengandung angka/kata "19", "19rb", "19k", "yang 19", "yg 19" -> PAKSA ukuran_produk = "20kg".
@@ -168,9 +178,19 @@ PROMPT;
             $ukuran = in_array($parsedUkuran, ['20kg', '15kg', '10kg']) ? $parsedUkuran : '20kg';
         }
 
+        $waktuPengiriman = null;
+        if (!empty($data['waktu_pengiriman'])) {
+            try {
+                $waktuPengiriman = \Carbon\Carbon::parse($data['waktu_pengiriman'])->format('Y-m-d H:i:s');
+            } catch (\Throwable $e) {
+                $waktuPengiriman = null;
+            }
+        }
+
         return [
-            'jumlah_ball'   => $jumlahBall,
-            'ukuran_produk' => $ukuran,
+            'jumlah_ball'      => $jumlahBall,
+            'ukuran_produk'    => $ukuran,
+            'waktu_pengiriman' => $waktuPengiriman,
         ];
     }
 
@@ -240,9 +260,35 @@ PROMPT;
             }
         }
 
+        // 3. Deteksi Waktu Pengiriman Sederhana (Fallback)
+        $waktuPengiriman = null;
+        if (preg_match('/jam\s*(\d{1,2})(?::(\d{2}))?\s*(pagi|siang|sore|malam)?/i', $text, $timeMatch)) {
+            try {
+                $hour = (int) $timeMatch[1];
+                $minute = !empty($timeMatch[2]) ? (int) $timeMatch[2] : 0;
+                $period = strtolower($timeMatch[3] ?? '');
+
+                if ($period === 'sore' && $hour < 12) {
+                    $hour += 12;
+                } elseif ($period === 'malam' && $hour < 12) {
+                    $hour += 12;
+                } elseif ($period === 'siang' && $hour < 11) {
+                    $hour += 12;
+                }
+
+                $targetDate = now()->setTimezone('Asia/Jakarta');
+                if (str_contains($text, 'besok')) {
+                    $targetDate->addDay();
+                }
+                $targetDate->setTime($hour, $minute, 0);
+                $waktuPengiriman = $targetDate->format('Y-m-d H:i:s');
+            } catch (\Throwable $e) {}
+        }
+
         return [
-            'jumlah_ball'   => max(1, $jumlah),
-            'ukuran_produk' => $ukuran,
+            'jumlah_ball'      => max(1, $jumlah),
+            'ukuran_produk'    => $ukuran,
+            'waktu_pengiriman' => $waktuPengiriman,
         ];
     }
 }

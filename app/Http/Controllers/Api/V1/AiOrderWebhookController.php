@@ -155,6 +155,7 @@ class AiOrderWebhookController extends Controller
             $pendingOrder->update([
                 'jumlah_ball'   => $parsed['jumlah_ball'],
                 'ukuran_produk' => $parsed['ukuran_produk'],
+                'delivery_time' => $parsed['waktu_pengiriman'] ?? null,
                 'last_chat'     => $message,
             ]);
 
@@ -202,6 +203,7 @@ class AiOrderWebhookController extends Controller
             'sender_phone'  => $sender,
             'jumlah_ball'   => $parsed['jumlah_ball'],
             'ukuran_produk' => $parsed['ukuran_produk'],
+            'delivery_time' => $parsed['waktu_pengiriman'] ?? null,
             'status'        => 'pending',
             'last_chat'     => $message,
         ]);
@@ -244,18 +246,20 @@ class AiOrderWebhookController extends Controller
                     : $order->customer->name;
 
                 return [
-                    'id'               => $order->id,
-                    'customer_id'      => $order->customer_id,
-                    'customer_name'    => $customerName,
-                    'sender_phone'     => $order->sender_phone,
-                    'customer_address' => $order->customer ? $order->customer->address : '-',
-                    'jumlah_ball'      => (int) $order->jumlah_ball,
-                    'ukuran_produk'    => $order->ukuran_produk,
-                    'status'           => $order->status,
-                    'last_chat'        => $order->last_chat,
-                    'created_at'       => $order->created_at ? $order->created_at->format('Y-m-d H:i:s') : null,
-                    'time_formatted'   => $order->created_at ? $order->created_at->timezone('Asia/Jakarta')->format('H:i') : '',
-                    'time_ago'         => $order->created_at ? $order->created_at->locale('id')->diffForHumans() : '',
+                    'id'                      => $order->id,
+                    'customer_id'             => $order->customer_id,
+                    'customer_name'           => $customerName,
+                    'sender_phone'            => $order->sender_phone,
+                    'customer_address'        => $order->customer ? $order->customer->address : '-',
+                    'jumlah_ball'             => (int) $order->jumlah_ball,
+                    'ukuran_produk'           => $order->ukuran_produk,
+                    'delivery_time'           => $order->delivery_time ? $order->delivery_time->format('Y-m-d H:i:s') : null,
+                    'delivery_time_formatted' => $order->delivery_time ? $order->delivery_time->timezone('Asia/Jakarta')->format('H:i') : null,
+                    'status'                  => $order->status,
+                    'last_chat'               => $order->last_chat,
+                    'created_at'              => $order->created_at ? $order->created_at->format('Y-m-d H:i:s') : null,
+                    'time_formatted'          => $order->created_at ? $order->created_at->timezone('Asia/Jakarta')->format('H:i') : '',
+                    'time_ago'                => $order->created_at ? $order->created_at->locale('id')->diffForHumans() : '',
                 ];
             });
 
