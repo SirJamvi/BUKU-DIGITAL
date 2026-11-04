@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Models\Customer;
+use App\Models\CustomerPhone;
+use App\Models\Product;
 use App\Models\TemporaryOrder;
 use App\Models\WaOrder;
 use Carbon\Carbon;
 use App\Services\Ai\LlmOrderService;
 use App\Services\Whatsapp\FonnteService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class AiOrderWebhookController extends Controller
 {
@@ -34,6 +38,20 @@ class AiOrderWebhookController extends Controller
         $payload = $request->all();
         Log::info('[AiOrderWebhook] Webhook Fonnte Masuk. Payload: ' . json_encode($payload));
 
+        // ==============================================================
+        // ATOMIC CACHE LOCK (ANTI-DUPLIKASI WEBHOOK RETRY FONNTE)
+        // ==============================================================
+        $timestamp = $payload['timestamp'] ?? time();
+        $senderRaw = $payload['sender'] ?? $payload['from'] ?? '';
+        $messageId = $timestamp . '_' . $senderRaw;
+
+        // Cache::add bersifat atomik. Hanya request pertama yang berhasil (return true).
+        // Request retry dari Fonnte akan gagal (return false) dan langsung dikembalikan.
+        if (!Cache::add('lock_msg_' . $messageId, true, now()->addMinutes(5))) {
+            Log::info("[AiOrderWebhook] Duplicate webhook request ignored: {$messageId}");
+            return response()->json(['status' => 'ignored', 'message' => 'Duplicate webhook request']);
+        }
+
         // Abaikan pesan dari Grup WhatsApp
         if (
             (isset($payload['isgroup']) && ($payload['isgroup'] === true || $payload['isgroup'] === 'true' || $payload['isgroup'] == 1)) ||
@@ -47,7 +65,13 @@ class AiOrderWebhookController extends Controller
         $sender = $request->input('sender') ?? $request->input('from') ?? $request->input('phone');
         $message = trim((string) ($request->input('message') ?? $request->input('text') ?? ''));
 
-        // 2. Abaikan pesan media/VN jika URL media kosong
+        // Ekstrak nama sender dari payload
+        $customerName = $payload['name'] ?? $payload['pushname'] ?? 'Kak';
+        if (empty(trim($customerName))) {
+            $customerName = 'Kak';
+        }
+
+        // 2. Abaikan pesan media/VN jika non-text message
         if ($message === 'non-text message' || $message === 'non-button message') {
             return response()->json(['status' => 'ignored', 'message' => 'Pesan media tidak didukung oleh konfigurasi saat ini'], 200);
         }
@@ -60,17 +84,51 @@ class AiOrderWebhookController extends Controller
         }
 
         // ==============================================================
-        // 1. CARI NOMOR WA DI MODEL CUSTOMER (Tabel customers)
+        // 3. LOGIKA HUMAN HANDOFF (ADMIN MODE)
+        // ==============================================================
+        // Cek jika sedang dalam human mode aktif
+        if (Cache::has('human_mode_' . $sender)) {
+            Log::info("[AiOrderWebhook] Pengirim {$sender} sedang dalam human mode. Pesan diabaikan oleh bot.");
+            return response()->json(['message' => 'ignored, human mode']);
+        }
+
+        // Cek jika isi pesan (lowercase) adalah "admin"
+        if (strtolower($message) === 'admin') {
+            Cache::put('human_mode_' . $sender, true, now()->addMinutes(15));
+            $reply = "Baik {$customerName}, Anda telah terhubung dengan Admin. Silakan sampaikan pesan Anda, Admin kami akan segera membalas.";
+            $this->fonnteService->sendMessage($sender, $reply);
+
+            Log::info("[AiOrderWebhook] Human mode diaktifkan untuk {$sender} ({$customerName}) selama 15 menit.");
+
+            return response()->json([
+                'status'  => 'success',
+                'action'  => 'human_mode_activated',
+                'message' => $reply,
+            ], 200);
+        }
+
+        // ==============================================================
+        // 4. IDENTIFIKASI STATUS PELANGGAN (Model Customer & customer_phones)
         // ==============================================================
         $customer = $this->findCustomerByPhone($sender);
+        $isNewCustomer = !Customer::where('phone', $sender)->exists() && !$customer;
+
+        if ($customer && $customerName === 'Kak' && !empty($customer->name)) {
+            $customerName = $customer->name;
+        }
 
         $finalCustomerId = $customer ? $customer->id : 108;
-        $finalCustomerName = $customer ? $customer->name : 'Pelanggan Baru (' . $sender . ')';
 
         // ==============================================================
-        // 2. CEK PEMBATALAN PESANAN (MENDUKUNG PENDING & VALIDATED / MASUK POS)
+        // 5. AMBIL DATA STOK AKTUAL REAL-TIME
         // ==============================================================
-        // SEBELUM pengecekan pembatalan: Cari order aktif terakhir hari ini (status: pending atau validated)
+        $stok15 = $this->getStockByUkuran('15kg');
+        $stok20 = $this->getStockByUkuran('20kg');
+        $infoStok = "Stok 15kg: {$stok15} ball. Stok 20kg: {$stok20} ball.";
+
+        // ==============================================================
+        // 6. CEK PEMBATALAN PESANAN (MENDUKUNG PENDING & VALIDATED / MASUK POS)
+        // ==============================================================
         $activeOrder = TemporaryOrder::where('sender_phone', $sender)
             ->whereIn('status', ['pending', 'validated'])
             ->whereDate('created_at', Carbon::today())
@@ -86,7 +144,8 @@ class AiOrderWebhookController extends Controller
                 ]);
 
                 $reply = "❌ Pesanan Anda ({$activeOrder->jumlah_ball} Ball Es Kristal {$activeOrder->ukuran_produk}) telah dibatalkan. Silakan chat kembali jika ingin membuat pesanan baru.";
-                $this->fonnteService->sendMessage($sender, $reply);
+                $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+                $this->fonnteService->sendMessage($sender, $finalMessage);
 
                 Log::info("[AiOrderWebhook] Order #{$activeOrder->id} ({$activeOrder->status}) berhasil dibatalkan oleh pelanggan.");
 
@@ -94,17 +153,18 @@ class AiOrderWebhookController extends Controller
                     'status'        => 'success',
                     'action'        => 'cancelled',
                     'order_id'      => $activeOrder->id,
-                    'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
+                    'reply_message' => $finalMessage,
                 ], 200);
             }
 
             $reply = "Tidak ada pesanan aktif (menunggu konfirmasi atau antrean kasir) yang dapat dibatalkan saat ini.";
-            $this->fonnteService->sendMessage($sender, $reply);
+            $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+            $this->fonnteService->sendMessage($sender, $finalMessage);
 
             return response()->json([
                 'status'        => 'ignored',
                 'message'       => 'Tidak ada pesanan aktif untuk dibatalkan',
-                'reply_message' => $reply,
+                'reply_message' => $finalMessage,
             ], 200);
         }
 
@@ -121,8 +181,6 @@ class AiOrderWebhookController extends Controller
         if ($pendingOrder) {
             // Pelanggan membalas konfirmasi "oke" / "ya"
             if ($this->isConfirmation($message)) {
-                // ATURAN REVISI: CUKUP update status temporary_orders menjadi 'validated'.
-                // JANGAN PERNAH panggil DB::transaction untuk memasukkan data ke transactions/transaction_details.
                 $pendingOrder->update([
                     'status'    => 'validated',
                     'last_chat' => $message,
@@ -130,7 +188,8 @@ class AiOrderWebhookController extends Controller
 
                 // Kirim notifikasi konfirmasi ke pelanggan
                 $reply = "Pesanan terkonfirmasi! Pesanan {$pendingOrder->jumlah_ball} Ball Es Kristal {$pendingOrder->ukuran_produk} Anda telah masuk ke antrean kasir. Terima kasih!";
-                $this->fonnteService->sendMessage($sender, $reply);
+                $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+                $this->fonnteService->sendMessage($sender, $finalMessage);
 
                 Log::info("[AiOrderWebhook] Order #{$pendingOrder->id} diubah menjadi 'validated' dan siap di-drag kasir.");
 
@@ -138,23 +197,82 @@ class AiOrderWebhookController extends Controller
                     'status'        => 'success',
                     'action'        => 'validated',
                     'order_id'      => $pendingOrder->id,
-                    'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
+                    'reply_message' => $finalMessage,
                 ], 200);
             }
 
             // Pelanggan mengirim revisi (misal: "bukan, yang 15kg saja")
-            $parsed = $this->llmService->parseOrder($message);
+            $parsed = $this->llmService->parseOrder($message, $isNewCustomer, $customerName, $infoStok);
 
-            if (!$parsed) {
-                // Jika sedang pending, tapi pelanggan mengirim sapaan/teks lain yang bukan revisi
+            // Cek jika pesanan melebihi stok yang tersedia
+            if (!empty($parsed['is_out_of_stock'])) {
+                $reply = $parsed['reply'];
+                $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+                $this->fonnteService->sendMessage($sender, $finalMessage);
+
+                return response()->json([
+                    'status'        => 'out_of_stock',
+                    'message'       => 'Revisi pesanan melebihi sisa stok',
+                    'reply_message' => $finalMessage,
+                ], 200);
+            }
+
+            // Cek jika respons AI berupa pendaftaran data pelanggan baru
+            if (isset($parsed['is_registration']) && ($parsed['is_registration'] === true || $parsed['is_registration'] === 'true')) {
+                $namaToko = !empty($parsed['nama_toko']) ? trim((string)$parsed['nama_toko']) : 'Pelanggan Baru (' . $sender . ')';
+                $alamat = !empty($parsed['alamat']) ? trim((string)$parsed['alamat']) : '-';
+
+                $defaultBusinessId = Customer::first()?->business_id ?? 1;
+
+                $newCustomer = Customer::create([
+                    'business_id' => $defaultBusinessId,
+                    'name'        => $namaToko,
+                    'phone'       => $sender,
+                    'address'     => $alamat,
+                    'join_date'   => now(),
+                    'status'      => 'active',
+                ]);
+
+                if ($newCustomer) {
+                    try {
+                        $newCustomer->phones()->create([
+                            'phone'      => $sender,
+                            'label'      => 'Utama',
+                            'is_primary' => true,
+                        ]);
+                    } catch (\Throwable $e) {
+                        Log::warning("[AiOrderWebhook] Gagal insert customer_phones: " . $e->getMessage());
+                    }
+
+                    $pendingOrder->update([
+                        'customer_id' => $newCustomer->id,
+                    ]);
+                }
+
+                Log::info("[AiOrderWebhook] Auto-Registration berhasil untuk {$sender}: {$namaToko} - {$alamat} (ID: {$newCustomer->id})");
+
+                $reply = "Terima kasih, data toko Anda ({$namaToko}, {$alamat}) telah berhasil didaftarkan! Silakan ketik ulang pesanan Es Kristal Anda.";
+                $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+                $this->fonnteService->sendMessage($sender, $finalMessage);
+
+                return response()->json([
+                    'status'        => 'success',
+                    'action'        => 'customer_registered',
+                    'customer_id'   => $newCustomer->id,
+                    'reply_message' => $finalMessage,
+                ], 200);
+            }
+
+            if (!$parsed || !empty($parsed['is_new_customer'])) {
                 $reply = "Pesanan Anda ({$pendingOrder->jumlah_ball} Ball Es Kristal {$pendingOrder->ukuran_produk}) sedang menunggu konfirmasi. Balas OKE untuk memproses ke kasir atau BATAL jika ingin membatalkan.";
-                $this->fonnteService->sendMessage($sender, $reply);
+                $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+                $this->fonnteService->sendMessage($sender, $finalMessage);
 
                 return response()->json([
                     'status'        => 'pending_reminder',
                     'message'       => 'Chat bukan revisi pesanan',
                     'order_id'      => $pendingOrder->id,
-                    'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
+                    'reply_message' => $finalMessage,
                 ], 200);
             }
 
@@ -165,24 +283,22 @@ class AiOrderWebhookController extends Controller
                 'last_chat'     => $message,
             ]);
 
-            // Kirim balasan revisi TANPA harga (dengan cek tagihan kasbon)
             $reply = "Pesanan diterima: {$parsed['jumlah_ball']} Ball Es Kristal {$parsed['ukuran_produk']}.";
 
             if ($customer && $customer->getTotalKasbon() > 0) {
                 $totalKasbonFormatted = number_format($customer->getTotalKasbon(), 0, ',', '.');
                 $reply .= " Namun saat ini sistem mencatat ada tagihan kasbon sebesar Rp {$totalKasbonFormatted} yang belum lunas. Mohon titipkan pelunasan ke supir kami saat pengiriman ya. Balas OKE untuk konfirmasi.";
-            } elseif (!$customer) {
-                $reply .= " Karena Anda adalah pelanggan baru, mohon balas OKE beserta Nama Toko dan Alamat Anda untuk konfirmasi.";
             } else {
                 $reply .= " Balas OKE untuk konfirmasi.";
             }
-            $this->fonnteService->sendMessage($sender, $reply);
+            $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+            $this->fonnteService->sendMessage($sender, $finalMessage);
 
             return response()->json([
                 'status'        => 'success',
                 'action'        => 'revised',
                 'order_id'      => $pendingOrder->id,
-                'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
+                'reply_message' => $finalMessage,
                 'data'          => $parsed,
             ], 200);
         }
@@ -190,17 +306,114 @@ class AiOrderWebhookController extends Controller
         // --------------------------------------------------------------
         // KASUS B: PESANAN BARU (BELUM ADA PENDING ORDER)
         // --------------------------------------------------------------
-        $parsed = $this->llmService->parseOrder($message);
+        $parsed = $this->llmService->parseOrder($message, $isNewCustomer, $customerName, $infoStok);
+
+        // Cek jika pesanan melebihi stok yang tersedia
+        if (!empty($parsed['is_out_of_stock'])) {
+            $reply = $parsed['reply'];
+            $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+            $this->fonnteService->sendMessage($sender, $finalMessage);
+
+            return response()->json([
+                'status'        => 'out_of_stock',
+                'message'       => 'Pesanan melebihi stok yang tersedia',
+                'reply_message' => $finalMessage,
+            ], 200);
+        }
 
         // Jika pesan bernilai null (sapaan seperti "bang", "halo", "p", dll), sistem JANGAN membuat TemporaryOrder
         if (!$parsed) {
-            $reply = "Halo! Ada yang bisa kami bantu untuk pemesanan Es Kristalnya? (Sedia ukuran 20kg, 15kg, 10kg).";
-            $this->fonnteService->sendMessage($sender, $reply);
+            $reply = "Halo {$customerName}! Ada yang bisa kami bantu untuk pemesanan Es Kristalnya? (Sedia ukuran 20kg, 15kg, 10kg).";
+            $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+            $this->fonnteService->sendMessage($sender, $finalMessage);
 
             return response()->json([
                 'status'        => 'greeting_replied',
                 'message'       => 'Pesan berupa sapaan/bukan format pesanan',
-                'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
+                'reply_message' => $finalMessage,
+            ], 200);
+        }
+
+        // Cek jika respons AI berupa pendaftaran data pelanggan baru (is_registration: true)
+        if (isset($parsed['is_registration']) && ($parsed['is_registration'] === true || $parsed['is_registration'] === 'true')) {
+            $namaToko = !empty($parsed['nama_toko']) ? trim((string)$parsed['nama_toko']) : 'Pelanggan Baru (' . $sender . ')';
+            $alamat = !empty($parsed['alamat']) ? trim((string)$parsed['alamat']) : '-';
+
+            $defaultBusinessId = Customer::first()?->business_id ?? 1;
+
+            $newCustomer = Customer::create([
+                'business_id' => $defaultBusinessId,
+                'name'        => $namaToko,
+                'phone'       => $sender,
+                'address'     => $alamat,
+                'join_date'   => now(),
+                'status'      => 'active',
+            ]);
+
+            if ($newCustomer) {
+                try {
+                    $newCustomer->phones()->create([
+                        'phone'      => $sender,
+                        'label'      => 'Utama',
+                        'is_primary' => true,
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning("[AiOrderWebhook] Gagal insert customer_phones: " . $e->getMessage());
+                }
+            }
+
+            Log::info("[AiOrderWebhook] Auto-Registration berhasil untuk {$sender}: {$namaToko} - {$alamat} (ID: {$newCustomer->id})");
+
+            // PERBAIKAN LOGIKA REGISTRASI (One-Step Registration):
+            // Cek apakah response juga memiliki key jumlah_ball dan ukuran_produk
+            if (!empty($parsed['jumlah_ball']) && !empty($parsed['ukuran_produk'])) {
+                $newOrder = TemporaryOrder::create([
+                    'customer_id'   => $newCustomer->id,
+                    'sender_phone'  => $sender,
+                    'jumlah_ball'   => $parsed['jumlah_ball'],
+                    'ukuran_produk' => $parsed['ukuran_produk'],
+                    'delivery_time' => $parsed['waktu_pengiriman'] ?? null,
+                    'status'        => 'pending',
+                    'last_chat'     => $message,
+                ]);
+
+                $reply = "Data toko berhasil didaftarkan! Pesanan Anda: {$parsed['jumlah_ball']} ball {$parsed['ukuran_produk']}. Balas 'oke' untuk konfirmasi masuk antrean kasir.";
+                $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+                $this->fonnteService->sendMessage($sender, $finalMessage);
+
+                return response()->json([
+                    'status'        => 'success',
+                    'action'        => 'registered_and_pending_created',
+                    'customer_id'   => $newCustomer->id,
+                    'order_id'      => $newOrder->id,
+                    'reply_message' => $finalMessage,
+                    'data'          => $parsed,
+                ], 200);
+            }
+
+            // Jika hanya registrasi tanpa pesanan
+            $reply = "Terima kasih, data toko Anda ({$namaToko}, {$alamat}) telah berhasil didaftarkan! Silakan ketik ulang pesanan Es Kristal Anda.";
+            $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+            $this->fonnteService->sendMessage($sender, $finalMessage);
+
+            return response()->json([
+                'status'        => 'success',
+                'action'        => 'customer_registered',
+                'customer_id'   => $newCustomer->id,
+                'reply_message' => $finalMessage,
+            ], 200);
+        }
+
+        // JIKA PELANGGAN BARU (Pesanan ditolak/tidak diproses sampai data lengkap diberikan)
+        if (!empty($parsed['is_new_customer']) || $isNewCustomer) {
+            $reply = $parsed['reply'] ?? "Halo {$customerName}! Sebelum kami dapat memproses pesanan Anda, mohon kirimkan Nama Toko/Cafe dan Alamat Lengkap Anda terlebih dahulu ya.";
+            $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+            $this->fonnteService->sendMessage($sender, $finalMessage);
+
+            return response()->json([
+                'status'        => 'new_customer_validation',
+                'message'       => 'Pelanggan baru wajib memberikan Nama Toko dan Alamat',
+                'reply_message' => $finalMessage,
             ], 200);
         }
 
@@ -214,24 +427,23 @@ class AiOrderWebhookController extends Controller
             'last_chat'     => $message,
         ]);
 
-        // Logika AI Penagih Kasbon & Balasan WhatsApp
+        // Logika AI Penagih Kasbon & Balasan WhatsApp (Pelanggan Lama)
         $reply = "Pesanan diterima: {$parsed['jumlah_ball']} Ball Es Kristal {$parsed['ukuran_produk']}.";
 
         if ($customer && $customer->getTotalKasbon() > 0) {
             $totalKasbonFormatted = number_format($customer->getTotalKasbon(), 0, ',', '.');
             $reply .= " Namun saat ini sistem mencatat ada tagihan kasbon sebesar Rp {$totalKasbonFormatted} yang belum lunas. Mohon titipkan pelunasan ke supir kami saat pengiriman ya. Balas OKE untuk konfirmasi.";
-        } elseif (!$customer) {
-            $reply .= " Karena Anda adalah pelanggan baru, mohon balas OKE beserta Nama Toko dan Alamat Anda untuk konfirmasi.";
         } else {
             $reply .= " Balas OKE untuk konfirmasi.";
         }
-        $this->fonnteService->sendMessage($sender, $reply);
+        $finalMessage = $reply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
+        $this->fonnteService->sendMessage($sender, $finalMessage);
 
         return response()->json([
             'status'        => 'success',
             'action'        => 'pending_created',
             'order_id'      => $newOrder->id,
-            'reply_message' => $reply ?? 'Pesan balasan tidak tersedia',
+            'reply_message' => $finalMessage,
             'data'          => $parsed,
         ], 200);
     }
@@ -320,7 +532,7 @@ class AiOrderWebhookController extends Controller
 
         // 2. Jika tidak ditemukan, cari di relasi customer_phones (multi-nomor)
         if (!$customer) {
-            $customerPhone = \App\Models\CustomerPhone::whereIn('phone', $variations)->first();
+            $customerPhone = CustomerPhone::whereIn('phone', $variations)->first();
             if ($customerPhone) {
                 $customer = $customerPhone->customer;
             }
@@ -331,7 +543,7 @@ class AiOrderWebhookController extends Controller
             $suffix = substr($clean, -9);
             $customer = Customer::where('phone', 'like', "%{$suffix}")->first();
             if (!$customer) {
-                $customerPhone = \App\Models\CustomerPhone::where('phone', 'like', "%{$suffix}")->first();
+                $customerPhone = CustomerPhone::where('phone', 'like', "%{$suffix}")->first();
                 if ($customerPhone) {
                     $customer = $customerPhone->customer;
                 }
@@ -387,5 +599,42 @@ class AiOrderWebhookController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Mengambil stok aktual produk berdasarkan ukuran.
+     */
+    protected function getStockByUkuran(string $ukuran): int
+    {
+        try {
+            if (Schema::hasColumn('products', 'ukuran')) {
+                $stockCol = Schema::hasColumn('products', 'stok') ? 'stok' : 'current_stock';
+                $val = Product::where('ukuran', $ukuran)->value($stockCol);
+                if ($val !== null) {
+                    return (int) $val;
+                }
+            }
+
+            $cleanUkuran = str_replace('kg', '', strtolower($ukuran));
+            $product = Product::where('name', 'like', "%{$cleanUkuran}%")
+                ->with('inventory')
+                ->first();
+
+            if ($product) {
+                if ($product->inventory && isset($product->inventory->current_stock)) {
+                    return (int) $product->inventory->current_stock;
+                }
+                if (isset($product->stok)) {
+                    return (int) $product->stok;
+                }
+                if (isset($product->current_stock)) {
+                    return (int) $product->current_stock;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning("[AiOrderWebhook] Gagal mengambil data stok {$ukuran}: " . $e->getMessage());
+        }
+
+        return 0;
     }
 }

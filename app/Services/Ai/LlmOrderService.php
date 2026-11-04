@@ -17,59 +17,195 @@ class LlmOrderService
     }
 
     /**
-     * Mem-parsing chat pelanggan WhatsApp menjadi JSON pesanan (jumlah_ball & ukuran_produk).
-     * Urusan harga (harga_asumsi) ditiadakan sesuai workflow baru (Drag & Drop kasir).
+     * Mem-parsing chat pelanggan WhatsApp menjadi JSON pesanan (jumlah_ball & ukuran_produk)
+     * atau data registrasi pelanggan baru (nama_toko & alamat).
      *
      * @param string $chatMessage Pesan masuk dari WhatsApp
-     * @return array|null [jumlah_ball, ukuran_produk] atau null jika bukan format pesanan
+     * @param bool $isNewCustomer Status apakah pengirim pelanggan baru
+     * @param string $customerName Nama panggilan pengirim
+     * @param string $infoStok Informasi stok real-time saat ini
+     * @return array|null [jumlah_ball, ukuran_produk] atau [is_registration, ...] atau [is_out_of_stock, reply] atau null
      */
-    public function parseOrder(string $chatMessage): ?array
+    public function parseOrder(string $chatMessage, bool $isNewCustomer = false, string $customerName = 'Kak', string $infoStok = ''): ?array
     {
-        // Guard Clause: Bukan pesanan (sapaan / pesan terlalu pendek)
-        if (!$this->isPotentialOrder($chatMessage)) {
+        // Guard Clause: Bukan pesanan atau data registrasi
+        if (!$this->isPotentialOrder($chatMessage, $isNewCustomer)) {
             return null;
         }
 
-        $systemPrompt = $this->buildSystemPrompt();
-        $userPrompt = "Pesan Pelanggan:\n\"{$chatMessage}\"\n\nEkstrak HANYA jumlah_ball dan ukuran_produk ke format JSON murni:";
+        $systemPrompt = $this->buildSystemPrompt($isNewCustomer, $customerName, $infoStok);
+        $userPrompt = "Pesan Pelanggan:\n\"{$chatMessage}\"\n\nProses sesuai aturan:";
 
         try {
             if (empty($this->apiKey)) {
                 Log::warning("[LlmOrderService] GEMINI_API_KEY belum diisi di .env. Menggunakan parser rule-based fallback.");
-                return $this->heuristicFallbackParser($chatMessage);
+                return $this->heuristicFallbackParser($chatMessage, $isNewCustomer, $customerName, $infoStok);
             }
 
             $rawResponse = $this->callGeminiApi($systemPrompt, $userPrompt);
             $parsed = $this->cleanAndDecodeJson($rawResponse);
 
+            // 1. Cek jika AI mengembalikan teks biasa (misal penolakan stok / out of stock)
+            if (!$parsed && !empty($rawResponse) && !str_starts_with(trim($rawResponse), '{')) {
+                return [
+                    'is_out_of_stock' => true,
+                    'reply'           => trim($rawResponse),
+                ];
+            }
+
+            // 2. Cek jika AI mengembalikan JSON penolakan stok / balasan out of stock
+            if ($parsed && !empty($parsed['balasan']) && empty($parsed['jumlah_ball']) && !$isNewCustomer) {
+                return [
+                    'is_out_of_stock' => true,
+                    'reply'           => $parsed['balasan'],
+                ];
+            }
+
+            // 3. Cek jika AI mengekstrak data registrasi pelanggan baru (mendukung One-Step Registration)
+            if ($parsed && isset($parsed['is_registration']) && ($parsed['is_registration'] === true || $parsed['is_registration'] === 'true')) {
+                $jumlahBall = !empty($parsed['jumlah_ball']) ? (int) $parsed['jumlah_ball'] : null;
+                $ukuranProduk = !empty($parsed['ukuran_produk']) ? (string) $parsed['ukuran_produk'] : null;
+                $waktuPengiriman = !empty($parsed['waktu_pengiriman']) ? (string) $parsed['waktu_pengiriman'] : null;
+
+                // Jika One-Step Registration memuat pesanan sekalian
+                if ($jumlahBall && $ukuranProduk) {
+                    $norm = $this->normalizeParsedData([
+                        'jumlah_ball'      => $jumlahBall,
+                        'ukuran_produk'    => $ukuranProduk,
+                        'waktu_pengiriman' => $waktuPengiriman,
+                    ], $chatMessage);
+
+                    $jumlahBall = $norm['jumlah_ball'];
+                    $ukuranProduk = $norm['ukuran_produk'];
+                    $waktuPengiriman = $norm['waktu_pengiriman'];
+
+                    // Validasi sisa stok pada One-Step Registration
+                    if ($this->isStockExceeded($jumlahBall, $ukuranProduk, $infoStok, $availableStock)) {
+                        return [
+                            'is_out_of_stock' => true,
+                            'reply'           => "Maaf {$customerName}, kebetulan stok es ukuran tersebut saat ini sedang kurang dari permintaan Kakak. Silakan kurangi jumlah pesanan, atau ketik *admin* agar kami dapat mengecek jadwal produksi selanjutnya.",
+                        ];
+                    }
+                }
+
+                return [
+                    'is_registration'  => true,
+                    'nama_toko'        => $parsed['nama_toko'] ?? '',
+                    'alamat'           => $parsed['alamat'] ?? '',
+                    'jumlah_ball'      => $jumlahBall,
+                    'ukuran_produk'    => $ukuranProduk,
+                    'waktu_pengiriman' => $waktuPengiriman,
+                ];
+            }
+
+            // 4. Jika pelanggan baru namun belum memberikan data lengkap / AI meminta data
+            if ($isNewCustomer) {
+                $balasan = $parsed['balasan'] ?? $parsed['reply'] ?? $parsed['message'] ?? null;
+                if (!empty($balasan)) {
+                    return [
+                        'is_new_customer' => true,
+                        'reply'           => $balasan,
+                    ];
+                }
+
+                return [
+                    'is_new_customer' => true,
+                    'reply'           => "Halo {$customerName}! Sebelum kami dapat memproses pesanan Anda, mohon kirimkan Nama Toko/Cafe dan Alamat Lengkap Anda terlebih dahulu ya.",
+                ];
+            }
+
+            // 5. Pelanggan lama: pesanan normal
             if ($parsed && isset($parsed['jumlah_ball'], $parsed['ukuran_produk'])) {
-                return $this->normalizeParsedData($parsed, $chatMessage);
+                $normalized = $this->normalizeParsedData($parsed, $chatMessage);
+
+                // Validasi sisa stok pada pesanan pelanggan lama
+                if ($this->isStockExceeded($normalized['jumlah_ball'], $normalized['ukuran_produk'], $infoStok, $availableStock)) {
+                    return [
+                        'is_out_of_stock' => true,
+                        'reply'           => "Maaf {$customerName}, kebetulan stok es ukuran tersebut saat ini sedang kurang dari permintaan Kakak. Silakan kurangi jumlah pesanan, atau ketik *admin* agar kami dapat mengecek jadwal produksi selanjutnya.",
+                    ];
+                }
+
+                return $normalized;
             }
 
             Log::warning("[LlmOrderService] Output Gemini tidak valid/kurang field, beralih ke fallback.", ['raw' => $rawResponse]);
-            return $this->heuristicFallbackParser($chatMessage);
+            return $this->heuristicFallbackParser($chatMessage, $isNewCustomer, $customerName, $infoStok);
         } catch (\Throwable $e) {
             Log::error("[LlmOrderService] Gagal memanggil Gemini API: " . $e->getMessage());
-            return $this->heuristicFallbackParser($chatMessage);
+            return $this->heuristicFallbackParser($chatMessage, $isNewCustomer, $customerName, $infoStok);
         }
     }
 
     /**
-     * System Prompt Ketat: HANYA mengekstrak jumlah_ball dan ukuran_produk (TANPA HARGA).
+     * System Prompt AI: Mendukung Validasi Stok Real-time, One-Step Registration, dan Ekstraksi Pesanan.
      */
-    protected function buildSystemPrompt(): string
+    protected function buildSystemPrompt(bool $isNewCustomer = false, string $customerName = 'Kak', string $infoStok = ''): string
     {
         $currentWib = now()->setTimezone('Asia/Jakarta')->format('Y-m-d H:i:s');
+        $stokHeader = !empty($infoStok) ? $infoStok : "Stok 15kg: Tersedia. Stok 20kg: Tersedia.";
+
+        if ($isNewCustomer) {
+            $customerStatusPrompt = <<<CUSTOMER_RULE
+PENTING: Pengguna ini adalah PELANGGAN BARU.
+1. Jika mereka belum memberikan Nama Toko/Cafe DAN Alamat Lengkap, tolak pesanan dengan sopan menyapa namanya ({$customerName}) dan minta data tersebut. Jangan merangkum pesanan atau meminta kata 'oke' sampai mereka memberikan data tersebut.
+2. JIKA mereka SUDAH memberikan Nama Toko/Cafe dan Alamat (meskipun dalam kalimat yang sama dengan pesanan):
+   - Jika dia juga menyebutkan niat pesanan (jumlah dan ukuran es), masukkan semuanya dalam SATU format JSON sekaligus (One-Step Registration) dengan key: "is_registration" (true), "nama_toko", "alamat", "jumlah_ball", "ukuran_produk", dan "waktu_pengiriman".
+   - Jika dia HANYA memberikan data toko tanpa pesanan, masukkan key "is_registration" (true), "nama_toko", "alamat", dan set "jumlah_ball": null, "ukuran_produk": null.
+CUSTOMER_RULE;
+        } else {
+            $customerStatusPrompt = "Pengguna ini adalah PELANGGAN LAMA. Proses pesanan seperti biasa, rangkum pesanan, tentukan waktu pengiriman, dan minta dia membalas 'oke' untuk konfirmasi.";
+        }
 
         return <<<PROMPT
-Anda adalah AI Order Extractor resmi untuk sistem POS "BukuDig" (distributor agen es kristal).
-Tugas Anda: Ekstraksi jumlah ball (jumlah_ball), ukuran produk (ukuran_produk), dan waktu pengiriman (waktu_pengiriman) dari chat WhatsApp pelanggan.
+INFORMASI STOK SAAT INI: {$stokHeader}
+
+ATURAN VALIDASI STOK:
+PENTING: Sebelum memproses pesanan, bandingkan jumlah pesanan dengan INFORMASI STOK SAAT INI. Jika pesanan MELEBIHI sisa stok, JANGAN kembalikan format JSON pesanan. Tolak pesanan dengan sopan, TETAPI KAMU DILARANG KERAS MENYEBUTKAN ANGKA SISA STOK AKTUAL KEPADA PELANGGAN. Gunakan bahasa yang natural seperti: "Maaf Kak, kebetulan stok es ukuran tersebut saat ini sedang kurang dari permintaan Kakak." Di akhir kalimat WAJIB tambahkan: "Silakan kurangi jumlah pesanan, atau ketik *admin* agar kami dapat mengecek jadwal produksi selanjutnya."
+
+ATURAN ONE-STEP REGISTRATION (UNTUK PELANGGAN BARU):
+Jika pelanggan baru memberikan Nama Toko dan Alamat, cek riwayat percakapan sebelumnya atau pesan saat ini. Jika dia sebelumnya/saat ini sudah menyebutkan niat pesanan (jumlah dan ukuran), masukkan semuanya dalam SATU format JSON sekaligus: is_registration: true, nama_toko, alamat, SERTA jumlah_ball, ukuran_produk, dan delivery_time.
+
+Anda adalah AI Order Extractor & Customer Registration Assistant resmi untuk sistem POS "BukuDig" (distributor agen es kristal).
+Tugas Anda: Ekstraksi data pendaftaran pelanggan baru (jika pelanggan baru) ATAU ekstraksi jumlah ball (jumlah_ball), ukuran produk (ukuran_produk), dan waktu pengiriman (waktu_pengiriman) dari chat WhatsApp pelanggan.
 DILARANG KERAS mengekstrak harga, nominal uang, atau asumsi rupiah apapun.
+
+STATUS PELANGGAN:
+{$customerStatusPrompt}
 
 WAKTU SISTEM SAAT INI (WIB / Asia/Jakarta): {$currentWib}
 
 FORMAT OUTPUT WAJIB (JSON murni tanpa markdown, tanpa teks pembuka/penutup):
+
+1. JIKA PELANGGAN BARU MENDAFTAR SEKALIGUS MEMESAN (ONE-STEP REGISTRATION):
 {
+  "is_registration": true,
+  "nama_toko": "<Nama Toko/Cafe/Warung>",
+  "alamat": "<Alamat Lengkap>",
+  "jumlah_ball": <integer minimal 1>,
+  "ukuran_produk": "<'20kg' | '15kg' | '10kg'>",
+  "waktu_pengiriman": "<'YYYY-MM-DD HH:MM:SS' | null>"
+}
+
+2. JIKA PELANGGAN BARU HANYA MEMBERIKAN NAMA TOKO DAN ALAMAT (TANPA PESANAN):
+{
+  "is_registration": true,
+  "nama_toko": "<Nama Toko/Cafe/Warung>",
+  "alamat": "<Alamat Lengkap>",
+  "jumlah_ball": null,
+  "ukuran_produk": null,
+  "waktu_pengiriman": null
+}
+
+3. JIKA PELANGGAN BARU BELUM MEMBERIKAN DATA LENGKAP:
+{
+  "is_registration": false,
+  "balasan": "<Pesan sopan menyapa {$customerName} dan meminta Nama Toko/Cafe serta Alamat Lengkap>"
+}
+
+4. JIKA PELANGGAN LAMA (PESANAN NORMAL):
+{
+  "is_registration": false,
   "jumlah_ball": <integer minimal 1>,
   "ukuran_produk": "<'20kg' | '15kg' | '10kg'>",
   "waktu_pengiriman": "<'YYYY-MM-DD HH:MM:SS' | null>"
@@ -95,6 +231,24 @@ PROMPT;
     }
 
     /**
+     * Memeriksa apakah jumlah pesanan melebihi stok yang ada di string infoStok.
+     */
+    protected function isStockExceeded(int $jumlahBall, string $ukuran, string $infoStok, ?int &$availableStock = null): bool
+    {
+        if (empty($infoStok)) {
+            return false;
+        }
+
+        $cleanUkuran = str_replace('kg', '', strtolower($ukuran));
+        if (preg_match('/Stok\s*' . preg_quote($cleanUkuran, '/') . 'kg?:\s*(\d+)/i', $infoStok, $m)) {
+            $availableStock = (int) $m[1];
+            return $jumlahBall > $availableStock;
+        }
+
+        return false;
+    }
+
+    /**
      * Melakukan HTTP Call ke Google Gemini API.
      */
     protected function callGeminiApi(string $systemPrompt, string $userPrompt): string
@@ -104,11 +258,6 @@ PROMPT;
         $generationConfig = [
             'temperature' => 0.1,
         ];
-
-        // responseMimeType hanya didukung pada model Gemini 1.5+
-        if (str_contains($this->model, '1.5') || str_contains($this->model, '2.0')) {
-            $generationConfig['responseMimeType'] = 'application/json';
-        }
 
         $payload = [
             'contents' => [
@@ -190,16 +339,25 @@ PROMPT;
     }
 
     /**
-     * Pengecekan guard clause: mendeteksi apakah pesan berpotensi menjadi pesanan.
-     * Mengembalikan false jika pesan hanya berupa sapaan/terlalu pendek tanpa angka atau kata kunci.
+     * Pengecekan guard clause: mendeteksi apakah pesan berpotensi menjadi pesanan atau data registrasi.
      */
-    public function isPotentialOrder(string $chat): bool
+    public function isPotentialOrder(string $chat, bool $isNewCustomer = false): bool
     {
         $text = strtolower(trim($chat));
 
         // 1. Jika panjang kurang dari 3 karakter (misal "p", "y")
         if (strlen($text) < 3) {
             return false;
+        }
+
+        // Jika pelanggan baru, cek juga kemungkinan pesan berisi nama toko & alamat pendaftaran
+        if ($isNewCustomer) {
+            $regKeywords = ['toko', 'cafe', 'kafe', 'warung', 'kedai', 'resto', 'depot', 'alamat', 'jl', 'jalan', 'rt', 'rw', 'nomor', 'no.'];
+            foreach ($regKeywords as $kw) {
+                if (str_contains($text, $kw)) {
+                    return true;
+                }
+            }
         }
 
         // 2. Cek apakah mengandung angka (0-9)
@@ -223,13 +381,35 @@ PROMPT;
      * Heuristic Rule-Based Fallback Parser (Bila koneksi LLM timeout atau tanpa API Key).
      *
      * @param string $chat
+     * @param bool $isNewCustomer
+     * @param string $customerName
+     * @param string $infoStok
      * @return array|null
      */
-    public function heuristicFallbackParser(string $chat): ?array
+    public function heuristicFallbackParser(string $chat, bool $isNewCustomer = false, string $customerName = 'Kak', string $infoStok = ''): ?array
     {
         // Guard Clause awal: Jika bukan format pesanan, return null
-        if (!$this->isPotentialOrder($chat)) {
+        if (!$this->isPotentialOrder($chat, $isNewCustomer)) {
             return null;
+        }
+
+        if ($isNewCustomer) {
+            $lower = strtolower($chat);
+            $hasStore = str_contains($lower, 'toko') || str_contains($lower, 'cafe') || str_contains($lower, 'kafe') || str_contains($lower, 'warung') || str_contains($lower, 'kedai') || str_contains($lower, 'resto');
+            $hasAddress = str_contains($lower, 'jl') || str_contains($lower, 'jalan') || str_contains($lower, 'alamat');
+
+            if ($hasStore && $hasAddress) {
+                return [
+                    'is_registration' => true,
+                    'nama_toko'       => trim($chat),
+                    'alamat'          => trim($chat),
+                ];
+            }
+
+            return [
+                'is_new_customer' => true,
+                'reply'           => "Halo {$customerName}! Sebelum kami dapat memproses pesanan Anda, mohon kirimkan Nama Toko/Cafe dan Alamat Lengkap Anda terlebih dahulu ya.",
+            ];
         }
 
         $text = strtolower(trim($chat));
@@ -253,6 +433,14 @@ PROMPT;
             if (!in_array($candidate, [19, 18, 15, 10])) {
                 $jumlah = $candidate;
             }
+        }
+
+        // Validasi stok pada fallback parser
+        if ($this->isStockExceeded($jumlah, $ukuran, $infoStok, $availableStock)) {
+            return [
+                'is_out_of_stock' => true,
+                'reply'           => "Maaf {$customerName}, kebetulan stok es ukuran tersebut saat ini sedang kurang dari permintaan Kakak. Silakan kurangi jumlah pesanan, atau ketik *admin* agar kami dapat mengecek jadwal produksi selanjutnya.",
+            ];
         }
 
         // 3. Deteksi Waktu Pengiriman Sederhana (Fallback)
