@@ -199,10 +199,11 @@ Prompt AI dirampingkan secara drastis: AI **dilarang menghasilkan teks sapaan/ba
 
 ### Penegakan Ukuran Produk Resmi (Hanya 20kg, 15kg, 10kg)
 Sistem Adin Crystal **HANYA** mendukung 3 varian ukuran es kristal:
-- **`20kg`**: Dipicu oleh istilah `"yang 19"`, `"19rb"`, `"19k"`, `"20kg"`, `"20"`, atau ukuran tidak disebut.
-- **`15kg`**: Dipicu oleh `"yang 15"`, `"15rb"`, `"15k"`, `"15kg"`, `"15"`.
-- **`10kg`**: Dipicu oleh `"yang 10"`, `"10rb"`, `"10k"`, `"10kg"`, `"10"`.
+- **`20kg`**: Dipicu oleh istilah `"yang 19"`, `"19rb"`, `"19k"`, `"20kg"`, `"20"`, `"20rb"`, `"20ribu"`, atau ukuran tidak disebut.
+- **`15kg`**: Dipicu oleh `"yang 15"`, `"15rb"`, `"15k"`, `"15kg"`, `"15"`, `"15ribu"`.
+- **`10kg`**: Dipicu oleh `"yang 10"`, `"10rb"`, `"10k"`, `"10kg"`, `"10"`, `"10ribu"`.
 - **Ukuran Tidak Dikenal (Contoh: "yang 5", "5kg")**: **DILARANG KERAS** dipetakan ke ukuran mana pun. Sistem menandai `unknown_ukuran = true`, mengosongkan slot ukuran, dan mengirimkan balasan template `unknown_ukuran`.
+- **Default Kuantitas Otomatis (1 Ball)**: Jika pelanggan menyebut niat memesan (kata kunci: *pesan*, *kirim*, *order*, *mau*, *minta*, *biasa*) beserta ukuran (misal: *"kirim es 20kg"* atau *"yang 20ribu biasa"*) tetapi **tidak** menyebutkan angka jumlah, sistem secara otomatis mengasumsikan `jumlah_ball = 1` (default 1 ball) agar pesanan langsung tervalidasi tanpa tertahan di draft pertanyaan `need_qty`.
 
 ### Validasi Stok Real-Time & Soft Reservation
 Pengecekan stok dilakukan sebelum pesanan disetujui:
