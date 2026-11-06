@@ -958,5 +958,40 @@ class AiOrderSystemTest extends TestCase
         $this->assertNotEmpty($capturedPayloads);
         $this->assertEquals('081234567890', $capturedPayloads[0]['target']);
     }
+
+    /**
+     * Skenario 22: Default kuantitas 1 ball jika pelanggan menyebut niat pesan & ukuran tanpa angka qty
+     */
+    public function test_scenario_22_default_quantity_when_size_and_intent_mentioned_without_qty(): void
+    {
+        $sender = '6281211110022';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Warung Titik Kumpul',
+            'phone'       => $sender,
+            'address'     => 'Deket Unsika',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Pelanggan menyebut ukuran tanpa angka qty: "kirim es ya kaya biasa yang 20ribu sekarang"
+        $processor = app(\App\Services\Ai\AiOrderProcessor::class);
+        $result = $processor->process($sender, 'kirim es ya kaya biasa yang 20ribu sekarang');
+
+        $this->assertEquals('order_validated', $result['status']);
+        $this->assertStringContainsString('1 ball 20kg', $capturedReply);
+
+        $order = TemporaryOrder::where('sender_phone', $sender)->latest('id')->first();
+        $this->assertNotNull($order);
+        $this->assertEquals(1, $order->jumlah_ball);
+        $this->assertEquals('20kg', $order->ukuran_produk);
+        $this->assertEquals('validated', $order->status);
+    }
 }
 

@@ -154,10 +154,11 @@ ATURAN EKSTRAKSI SLOT:
    - Jika AWAITING = "qty", angka tunggal (contoh: "3", "lima") = jumlah_ball.
    - Jika AWAITING = "ukuran", angka (contoh: "20", "15", "10", "19") = ukuran_produk.
    - Pola "N ball/karung/sak/biji" = jumlah_ball.
+   - PENTING (DEFAULT KUANTITAS): Jika pelanggan menyebutkan kata kunci pesanan (pesan, kirim, order, mau, minta, butuh) dan menyebutkan ukuran (10/15/20) TETAPI tidak menyebutkan jumlah kuantitas angka (misalnya 'kirim es 20kg' atau 'yg 20ribu biasa'), asumsikan jumlah_ball = 1.
    - Pemetaan ukuran resmi:
-     * "19", "19rb", "19k", "yang 19", "20kg", "20" -> "20kg".
-     * "15", "15rb", "15k", "yang 15", "15kg" -> "15kg".
-     * "10", "10rb", "10k", "yang 10", "10kg" -> "10kg".
+     * "19", "19rb", "19k", "yang 19", "20kg", "20", "20rb", "20ribu", "yang 20", "yang 20ribu" -> "20kg".
+     * "15", "15rb", "15k", "yang 15", "15kg", "15rb", "15ribu" -> "15kg".
+     * "10", "10rb", "10k", "yang 10", "10kg", "10rb", "10ribu" -> "10kg".
      * Jika ukuran tidak disebut sama sekali dan pelanggan memesan es, default "20kg".
      * Jika pelanggan menyebut ukuran di luar 20/15/10 (contoh: "yang 5"), set "ukuran_produk": null dan "unknown_ukuran": true. JANGAN PERNAH memetakan ukuran 5kg!
 
@@ -261,11 +262,24 @@ PROMPT;
         // Penegakan ukuran produk: HANYA 20kg, 15kg, 10kg
         $ukuran = null;
         if (!$unknownUkuran) {
-            if (preg_match('/(?:^|\D)19(?:rb|k)?(?:\D|$)/i', $textLower) || str_contains($textLower, 'yang 19') || str_contains($textLower, 'yg 19') || str_contains($textLower, '20kg') || str_contains($textLower, '20 kg')) {
+            if (
+                preg_match('/(?:^|\D)(?:20|19)(?:rb|k|ribu)?(?:\D|$)/i', $textLower) ||
+                str_contains($textLower, 'yang 20') || str_contains($textLower, 'yg 20') ||
+                str_contains($textLower, 'yang 19') || str_contains($textLower, 'yg 19') ||
+                str_contains($textLower, '20kg') || str_contains($textLower, '20 kg')
+            ) {
                 $ukuran = '20kg';
-            } elseif (preg_match('/(?:^|\D)15(?:rb|k)?(?:\D|$)/i', $textLower) || str_contains($textLower, 'yang 15') || str_contains($textLower, 'yg 15') || str_contains($textLower, '15kg') || str_contains($textLower, '15 kg')) {
+            } elseif (
+                preg_match('/(?:^|\D)15(?:rb|k|ribu)?(?:\D|$)/i', $textLower) ||
+                str_contains($textLower, 'yang 15') || str_contains($textLower, 'yg 15') ||
+                str_contains($textLower, '15kg') || str_contains($textLower, '15 kg')
+            ) {
                 $ukuran = '15kg';
-            } elseif (preg_match('/(?:^|\D)10(?:rb|k)?(?:\D|$)/i', $textLower) || str_contains($textLower, 'yang 10') || str_contains($textLower, 'yg 10') || str_contains($textLower, '10kg') || str_contains($textLower, '10 kg')) {
+            } elseif (
+                preg_match('/(?:^|\D)10(?:rb|k|ribu)?(?:\D|$)/i', $textLower) ||
+                str_contains($textLower, 'yang 10') || str_contains($textLower, 'yg 10') ||
+                str_contains($textLower, '10kg') || str_contains($textLower, '10 kg')
+            ) {
                 $ukuran = '10kg';
             } else {
                 $candidate = strtolower(trim((string) ($parsed['ukuran_produk'] ?? '')));
@@ -283,6 +297,17 @@ PROMPT;
             $jumlahBall = (int) $qm[1];
         } elseif (preg_match('/(\d+)\s*(?:ball|karung|sak|bungkus|pack|biji)/i', $textLower, $bm)) {
             $jumlahBall = (int) $bm[1];
+        }
+
+        // Default jumlah_ball = 1 jika ukuran terdeteksi & ada indikasi pemesanan / follow-up
+        if ($jumlahBall === null && $ukuran !== null) {
+            $hasOrderVerb = preg_match('/\b(?:pesan|pesen|kirim|order|mau|minta|butuh|beli|antar|bawa|drop)\b/i', $textLower)
+                || str_contains($textLower, 'kaya biasa') || str_contains($textLower, 'seperti biasa') || str_contains($textLower, 'biasa pesan');
+
+            if ($hasOrderVerb || !empty($awaiting) || !empty($namaToko)) {
+                $jumlahBall = 1;
+                Log::info("[LlmOrderService] normalizeParsedSlots: Mengasumsikan jumlah_ball = 1 (default) untuk ukuran {$ukuran}.");
+            }
         }
 
         // Waktu pengiriman
@@ -341,18 +366,22 @@ PROMPT;
                 }
             } else {
                 if (
-                    str_contains($text, 'yang 19') || str_contains($text, 'yg 19') || str_contains($text, '20kg') || str_contains($text, '20 kg') ||
-                    preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b19(?:rb|k)?\b(?!\s*(?:ball|karung|sak))/i', $text)
+                    str_contains($text, 'yang 20') || str_contains($text, 'yg 20') ||
+                    str_contains($text, 'yang 19') || str_contains($text, 'yg 19') ||
+                    str_contains($text, '20kg') || str_contains($text, '20 kg') ||
+                    preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b(?:20|19)(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $text)
                 ) {
                     $ukuran = '20kg';
                 } elseif (
-                    str_contains($text, 'yang 15') || str_contains($text, 'yg 15') || str_contains($text, '15kg') || str_contains($text, '15 kg') ||
-                    preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b15(?:rb|k)?\b(?!\s*(?:ball|karung|sak))/i', $text)
+                    str_contains($text, 'yang 15') || str_contains($text, 'yg 15') ||
+                    str_contains($text, '15kg') || str_contains($text, '15 kg') ||
+                    preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b15(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $text)
                 ) {
                     $ukuran = '15kg';
                 } elseif (
-                    str_contains($text, 'yang 10') || str_contains($text, 'yg 10') || str_contains($text, '10kg') || str_contains($text, '10 kg') ||
-                    preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b10(?:rb|k)?\b(?!\s*(?:ball|karung|sak))/i', $text)
+                    str_contains($text, 'yang 10') || str_contains($text, 'yg 10') ||
+                    str_contains($text, '10kg') || str_contains($text, '10 kg') ||
+                    preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b10(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $text)
                 ) {
                     $ukuran = '10kg';
                 }
@@ -367,8 +396,8 @@ PROMPT;
             $jumlah = (int) $m[1];
         } elseif (preg_match('/(?:kirim|pesan|minta|order|pesen)\s+(\d+)\b/i', $text, $m)) {
             $candidate = (int) $m[1];
-            // Pastikan bukan angka ukuran 19, 15, 10
-            if (!in_array($candidate, [19, 15, 10])) {
+            // Pastikan bukan angka ukuran 19, 15, 10, 20
+            if (!in_array($candidate, [19, 15, 10, 20])) {
                 $jumlah = $candidate;
             }
         }
@@ -376,8 +405,26 @@ PROMPT;
         // Jika ada kata 'pesan' atau 'es' tapi jumlah belum terdeteksi dan bukan awaiting ukuran
         if ($jumlah === null && preg_match('/\b(?:pesen|pesan|kirim|minta)\s+es\s+(\d+)\b/i', $text, $m)) {
             $candidate = (int) $m[1];
-            if (!in_array($candidate, [19, 15, 10])) {
+            if (!in_array($candidate, [19, 15, 10, 20])) {
                 $jumlah = $candidate;
+            }
+        }
+
+        // DEFAULT JUMLAH BALL: Jika ukuran tertangkap tetapi jumlah belum terisi, paksa jumlah = 1
+        // asalkan ada kata kerja indikasi pemesanan atau ini adalah konteks follow-up.
+        if ($jumlah === null && $ukuran !== null) {
+            $hasOrderVerb = preg_match('/\b(?:pesan|pesen|kirim|order|mau|minta|butuh|beli|antar|bawa|drop)\b/i', $text)
+                || str_contains($text, 'kaya biasa') || str_contains($text, 'seperti biasa') || str_contains($text, 'biasa pesan');
+
+            $isFollowUpContext = !empty($awaiting)
+                || !empty($currentDraft['jumlah_ball'])
+                || !empty($currentDraft['ukuran_produk'])
+                || !empty($currentDraft['nama_toko'])
+                || preg_match('/\b(?:jadi|ubah|ganti|tambah|sekarang)\b/i', $text);
+
+            if ($hasOrderVerb || $isFollowUpContext) {
+                $jumlah = 1;
+                Log::info("[LlmOrderService] Heuristic Default Qty: jumlah_ball diset ke 1 untuk ukuran {$ukuran}.");
             }
         }
 
@@ -411,10 +458,12 @@ PROMPT;
         $alamat = null;
         if ($isNewCustomer || $awaiting === 'nama_alamat') {
             // Cek kata kunci toko/cafe/caffe/resto
-            if (preg_match('/(?:toko|cafe|kafe|caffe|kedai|warung|resto|depot|kopi)\s+([^,\n\.]+)/i', $chat, $tm)) {
+            if (preg_match('/(?:toko|cafe|kafe|caffe|kedai|warung|resto|depot|kopi)\s+([^,\n\.\;\|]+)/i', $chat, $tm)) {
                 $namaToko = trim(substr($tm[0], 0, 100));
             }
-            if (preg_match('/(?:jl\.?|jalan|alamat|di\s+daerah|di)\s+([^,\n]+)/i', $chat, $am)) {
+            if (preg_match('/(?:jl\.?|jalan|alamat|di\s+daerah|di|deket|dekat)\s+([^,\n\.\;\|]+?)(?=\s+(?:warung|toko|cafe|kafe|kedai|resto)|$|[,\n\.\;\|])/i', $chat, $am)) {
+                $alamat = trim(substr($am[0], 0, 255));
+            } elseif (preg_match('/(?:jl\.?|jalan|alamat|di\s+daerah|di|deket|dekat)\s+([^,\n\.\;\|]+)/i', $chat, $am)) {
                 $alamat = trim(substr($am[0], 0, 255));
             }
 
@@ -550,7 +599,7 @@ PROMPT;
         }
 
         // Kata kunci pesanan
-        $keywords = ['es', 'ball', 'karung', 'sak', 'kirim', 'pesan', 'pesen', 'minta', 'order', 'toko', 'cafe', 'kafe', 'warung', 'alamat', 'jl'];
+        $keywords = ['es', 'ball', 'karung', 'sak', 'kirim', 'pesan', 'pesen', 'minta', 'order', 'mau', 'butuh', 'toko', 'cafe', 'kafe', 'warung', 'alamat', 'jl', 'biasa'];
         foreach ($keywords as $kw) {
             if (str_contains($text, $kw)) {
                 return true;
