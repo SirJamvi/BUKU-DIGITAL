@@ -1,55 +1,56 @@
 # DOKUMENTASI SISTEM PEMESANAN WHATSAPP BERBASIS AI (BUKUDIG - ADIN CRYSTAL)
 
-Dokumentasi ini menyajikan panduan arsitektur komprehensif, alur logika teknis, integrasi LLM Gemini, mekanisme perlindungan webhook, dan konfigurasi *environment* untuk modul **AI WhatsApp Order System** pada aplikasi POS BukuDig (Distributor Agen Es Kristal Adin Crystal).
+Dokumentasi ini menyajikan panduan arsitektur komprehensif, alur logika teknis, integrasi LLM Gemini, mekanisme draft state, sistem debouncing tanpa queue worker, template balasan terpusat, dan konfigurasi lingkungan untuk modul **AI WhatsApp Order System** pada aplikasi POS BukuDig (Distributor Agen Es Kristal Adin Crystal).
 
 ---
 
 ## DAFTAR ISI
 1. [Project Overview](#1-project-overview)
 2. [Tech Stack & Dependencies](#2-tech-stack--dependencies)
-3. [System Architecture & Alur Utama (Main Flow)](#3-system-architecture--alur-utama-main-flow)
-4. [Proteksi Duplikasi Webhook (Atomic Cache Lock)](#4-proteksi-duplikasi-webhook-atomic-cache-lock)
-5. [Logika Human Handoff (Admin Mode)](#5-logika-human-handoff-admin-mode)
-6. [Core Service & Integrasi AI (LlmOrderService)](#6-core-service--integrasi-ai-llmorderservice)
-   - [Dynamic System Prompt Construction](#dynamic-system-prompt-construction)
-   - [Validasi Stok Real-Time & Kebijakan Privasi Angka](#validasi-stok-real-time--kebijakan-privasi-angka)
-   - [One-Step Auto-Registration Pelanggan Baru](#one-step-auto-registration-pelanggan-baru)
-   - [Pemetaan Ukuran Produk Wajib (Normalizer)](#pemetaan-ukuran-produk-wajib-normalizer)
-7. [Mekanisme Cadangan (Regex Fallback Parser)](#7-mekanisme-cadangan-regex-fallback-parser)
-8. [Format UI/UX & Pesan Balasan WhatsApp](#8-format-uiux--pesan-balasan-whatsapp)
-9. [Integrasi Antrean Kasir (POS Integration)](#9-integrasi-antrean-kasir-pos-integration)
-10. [Konfigurasi Environment (.env) & Deployment](#10-konfigurasi-environment-env--deployment)
+3. [Arsitektur Baru & Alur Sistem (Sequence Diagram)](#3-arsitektur-baru--alur-sistem-sequence-diagram)
+4. [Mekanisme Debounce 7 Detik Tanpa Queue Worker](#4-mekanisme-debounce-7-detik-tanpa-queue-worker)
+5. [Draft State & Skema `ai_order_drafts`](#5-draft-state--skema-ai_order_drafts)
+6. [State Machine Pesanan Kasir (Order Lifecycle)](#6-state-machine-pesanan-kasir-order-lifecycle)
+7. [Integrasi LLM Gemini (`LlmOrderService`)](#7-integrasi-llm-gemini-llmorderservice)
+   - [Model Pinning & Latensi Riil](#model-pinning--latensi-riil)
+   - [Ekstraksi Slot JSON Murni](#ekstraksi-slot-json-murni)
+   - [Penegakan Ukuran Produk Resmi (Hanya 20kg, 15kg, 10kg)](#penegakan-ukuran-produk-resmi-hanya-20kg-15kg-10kg)
+   - [Validasi Stok Real-Time & Soft Reservation](#validasi-stok-real-time--soft-reservation)
+   - [Fallback Parser Heuristik (Regex Guard)](#fallback-parser-heuristik-regex-guard)
+8. [Tabel Template Balasan WhatsApp (PHP Engine)](#8-tabel-template-balasan-whatsapp-php-engine)
+9. [Fitur BATAL, UBAH & Share Location](#9-fitur-batal-ubah--share-location)
+10. [Konfigurasi Environment (.env) & Variabel Baru](#10-konfigurasi-environment-env--variabel-baru)
+11. [Troubleshooting & Panduan Pengujian (Testing)](#11-troubleshooting--panduan-pengujian-testing)
 
 ---
 
 ## 1. Project Overview
 
-**BukuDig AI WhatsApp Order System** adalah modul cerdas yang dirancang untuk mengotomatisasi penerimaan pesanan es kristal melalui WhatsApp Gateway (Fonnte). Sistem ini memanfaatkan Large Language Model (LLM) Google Gemini untuk mengurai percakapan bahasa alami pelanggan, mengekstrak niat pemesanan, melakukan validasi ketersediaan stok aktual, mendaftarkan toko pelanggan baru secara otomatis, dan menyajikan pesanan terkonfirmasi langsung ke layar antrean kasir POS secara *real-time*.
+**BukuDig AI WhatsApp Order System** adalah modul pemesanan otomatis terintegrasi yang melayani pelanggan agen es kristal **Adin Crystal** via WhatsApp Gateway (Fonnte). Sistem ini memanfaatkan kombinasi Google Gemini AI dan template PHP deterministik untuk mengubah chat bebas pelanggan menjadi draft transaksi terstruktur yang langsung masuk ke antrean kasir POS secara *real-time*.
 
-### Tujuan Utama:
-1. **Mengurangi Beban Kasir/Admin**: Meniadakan kebutuhan pengetikan manual untuk setiap chat WhatsApp yang masuk.
-2. **Eliminasi Human Error**: Normalisasi ukuran produk (misal: "yang 19" dipetakan otomatis ke 20kg), ekstraksi jumlah karung/ball secara presisi, serta parsing waktu pengiriman.
-3. **Pendaftaran Otomatis (Zero-Friction Onboarding)**: Pelanggan baru dapat langsung mendaftarkan nama toko dan alamat dalam satu kalimat pesanan.
-4. **Proteksi Stok & Integritas Bisnis**: Mencegah *overselling* tanpa membeberkan angka stok gudang yang sensitif kepada pelanggan.
+### Masalah Produksi yang Telah Diselesaikan:
+1. **Pesan Terpecah (Split Bubbles)**: Pelanggan sering mengirim 4-7 bubble chat terpisah dalam hitungan detik. Kini ditangani melalui sistem **Debounce 7 Detik** sehingga seluruh pesan digabung menjadi satu konteks utuh sebelum diproses.
+2. **Bot Stateless & Kehilangan Konteks**: Diterapkan tabel **`ai_order_drafts`** sehingga slot pesanan (qty, ukuran, nama toko, alamat, lokasi) disimpan bertahap dan slot yang sudah terisi tidak pernah ditimpa kosong.
+3. **Balasan Lambat & Inkonsisten**: Balasan ke pelanggan tidak lagi dibuat oleh LLM, melainkan dirakit secepat kilat oleh **PHP ReplyTemplates**. Gemini hanya bertugas mengekstrak slot data ke JSON murni.
+4. **Pesan Grup WhatsApp**: Pesan grup (`isgroup = true` atau berakhiran `@g.us`) difilter seketika di gerbang controller tanpa logging payload berat.
+5. **Dukungan Share Location**: Pelanggan dapat mengirim pin lokasi WhatsApp untuk mengisi alamat pengiriman secara instan.
 
 ---
 
 ## 2. Tech Stack & Dependencies
 
-| Komponen | Teknologi / Layanan | Fungsi & Keterangan |
+| Komponen | Spesifikasi / Layanan | Peran & Catatan |
 | :--- | :--- | :--- |
-| **Backend Framework** | Laravel 10.x / 11.x (PHP 8.2+) | MVC Core, Routing API, Database Eloquent ORM |
-| **WhatsApp Gateway** | Fonnte API (`https://api.fonnte.com/send`) | Webhook Receiver & REST API Pengiriman Pesan WA |
-| **AI Engine (LLM)** | Google Gemini API (`gemini-flash-latest`) | Ekstraksi JSON pesanan, NLU bahasa santai/gaul, registrasi data toko |
-| **Database** | MySQL 8.x / MariaDB | Relasi `customers`, `customer_phones`, `temporary_orders`, `products`, `inventories` |
-| **Cache & Locking** | Laravel Cache Engine (Atomic Lock) | Idempotensi webhook, isolasi Human Admin mode 15 menit |
-| **POS Kasir UI** | Blade + AlpineJS / TailwindCSS / Fetch API | Tampilan antrean pesanan tervalidasi yang siap diproses kasir |
+| **Backend Framework** | Laravel 11.x (PHP 8.2 / 8.3) | Routing API, MVC, Eloquent ORM, Cache Lock |
+| **WhatsApp Gateway** | Fonnte API (`https://api.fonnte.com/send`) | Webhook Receiver & Gateway Pengiriman Pesan |
+| **AI Engine (LLM)** | Google Gemini API (`gemini-flash-latest`) | Ekstraksi slot JSON (NLU) |
+| **Database** | MySQL 8.x / MariaDB | Tabel `customers`, `customer_phones`, `temporary_orders`, `ai_order_drafts`, `products`, `inventory` |
+| **Cache Engine** | Database / File Cache | Debounce buffer, atomic idempotency lock, human handoff mode |
+| **POS Frontend** | Blade + AlpineJS / TailwindCSS | Polling antrean pesanan tervalidasi (`/api/v1/kasir/ai-orders`) |
 
 ---
 
-## 3. System Architecture & Alur Utama (Main Flow)
-
-Sistem beroperasi melalui arsitektur berbasis webhook sinkron dengan proteksi kunci atomik.
+## 3. Arsitektur Baru & Alur Sistem (Sequence Diagram)
 
 ```mermaid
 sequenceDiagram
@@ -57,352 +58,279 @@ sequenceDiagram
     actor Pelanggan as Pelanggan WA
     participant Fonnte as Fonnte Gateway
     participant Webhook as AiOrderWebhookController
-    participant Cache as Laravel Cache (Atomic)
-    participant DB as Database (MySQL)
+    participant Debouncer as AiOrderDebouncer
+    participant Cache as Cache Buffer & Lock
+    participant Processor as AiOrderProcessor
     participant LLM as LlmOrderService (Gemini)
-    participant Kasir as Layar Antrean Kasir
+    participant DB as MySQL (Draft & Orders)
 
-    Pelanggan->>Fonnte: Kirim Chat ("Kirim 3 ball yang 19 jam 4 sore")
-    Fonnte->>Webhook: POST /api/v1/webhook/fonnte (JSON Payload)
-    Webhook->>Cache: Cache::add('lock_msg_' . $messageId, 5 min)
-    alt Request Duplikat (Fonnte Retry)
-        Cache-->>Webhook: false (Terkunci)
-        Webhook-->>Fonnte: 200 OK (ignored, duplicate)
-    else Request Baru
-        Cache-->>Webhook: true (Kunci Didapat)
-        Webhook->>Cache: Cek 'human_mode_' . $sender
-        alt Sedang dalam Human Mode
-            Webhook-->>Fonnte: 200 OK (ignored, human mode aktif)
-        else Pesan = "admin"
-            Webhook->>Cache: Put 'human_mode_' (15 menit)
-            Webhook->>Fonnte: Kirim balasan handoff admin
-            Webhook-->>Fonnte: 200 OK
-        else Alur Normal Bot
-            Webhook->>DB: Cek Pelanggan (customers & customer_phones)
-            Webhook->>DB: Query Stok Real-Time (15kg & 20kg)
-            Webhook->>LLM: parseOrder(pesan, isNewCustomer, nama, infoStok)
-            LLM-->>Webhook: JSON Pesanan / Penolakan Stok / Data Toko
-            alt Pesanan Melebihi Stok
-                Webhook->>Fonnte: Balasan penolakan sopan (tanpa bocor angka stok)
-            else Registrasi Pelanggan Baru (One-Step)
-                Webhook->>DB: Insert Customer & Phone, Buat TemporaryOrder
-                Webhook->>Fonnte: Minta konfirmasi balas "oke"
-            else Pelanggan Konfirmasi "OKE"
-                Webhook->>DB: Update status order -> 'validated'
-                Webhook->>Kasir: Order muncul di antrean kasir (GET /api/v1/kasir/ai-orders)
-                Webhook->>Fonnte: Konfirmasi order masuk antrean kasir
-            end
-            Webhook-->>Fonnte: 200 OK
-        end
-    end
+    Pelanggan->>Fonnte: Kirim Bubble 1 ("Pesen es 1")
+    Fonnte->>Webhook: POST /api/v1/webhook/fonnte
+    Webhook->>Debouncer: bufferMessage(sender, bubble_1)
+    Debouncer->>Cache: Simpan ke buffer & update Token_1
+    Webhook-->>Fonnte: 200 OK (Accepted / fastcgi_finish_request)
+
+    Pelanggan->>Fonnte: Kirim Bubble 2 ("Caffe Senja Klari yg 20")
+    Fonnte->>Webhook: POST /api/v1/webhook/fonnte
+    Webhook->>Debouncer: bufferMessage(sender, bubble_2)
+    Debouncer->>Cache: Tambahkan ke buffer & update Token_2
+    Webhook-->>Fonnte: 200 OK
+
+    Note over Webhook,Debouncer: Tunggu 7 detik sejak bubble terakhir
+    Webhook->>Debouncer: Cek isLatestToken(Token_1) -> FALSE (Batal proses)
+    Webhook->>Debouncer: Cek isLatestToken(Token_2) -> TRUE (Proses!)
+    
+    Webhook->>Cache: Ambil Lock Pengirim (proc_lock_sender)
+    Webhook->>Debouncer: flushBuffer(sender) -> Gabungkan Bubble 1 & 2
+    Webhook->>Processor: process(sender, combinedText, location)
+    
+    Processor->>DB: Ambil / Buat AiOrderDraft
+    Processor->>LLM: parseOrder(combinedText, currentDraft)
+    LLM-->>Processor: JSON Slots (qty:1, ukuran:20kg, toko:Caffe Senja, alamat:Klari)
+    Processor->>DB: Simpan Draft & Validasi Stok (Soft Reservation)
+    Processor->>DB: Buat Customer & Order (Status: VALIDATED)
+    Processor->>Fonnte: Kirim WA dari ReplyTemplates (Order Masuk)
+    Processor->>DB: clearDraft()
 ```
 
 ---
 
-## 4. Proteksi Duplikasi Webhook (Atomic Cache Lock)
+## 4. Mekanisme Debounce 7 Detik Tanpa Queue Worker
 
-### Latar Belakang Masalah
-Fonnte memiliki mekanisme *retry* agresif: jika server backend tidak merespons dalam waktu 4-5 detik (misalnya karena latensi jaringan saat memanggil Gemini API), Fonnte akan mengirimkan payload webhook yang sama berulang kali. Kondisi ini dapat memicu:
-- Pesanan tercatat ganda pada tabel `temporary_orders`.
-- Pengiriman balasan WhatsApp berulang kali ke pelanggan (*spamming*).
+Pada lingkungan hosting cPanel/shared hosting tanpa supervisor daemon (`php artisan queue:work`), proses debouncing dijalankan secara aman melalui mekanisme **Versioned Token Buffer** dan **After-Response FastCGI**:
 
-### Mengapa Tidak Menggunakan Laravel Queue/Jobs?
-Penggunaan Laravel Queue sempat diuji, namun diputuskan untuk **dibatalkan (revert)** karena:
-1. **Serialization Issue**: Payload webhook mentah sering mengandung karakter non-UTF8 atau struktur nested yang memicu *PHP serialization exception* pada worker.
-2. **Keterbatasan Shared/cPanel Hosting**: Lingkungan produksi tidak selalu menjalankan supervisor background worker (`php artisan queue:work`) secara persisten.
-3. **User Experience**: Pesanan WA membutuhkan respon dialog seketika (interaktif langsung).
-
-### Solusi Terpilih: Atomic Cache Lock
-Digunakan metode `Cache::add()` yang bersifat atomik di baris pertama controller:
-
-```php
-// File: app/Http/Controllers/Api/V1/AiOrderWebhookController.php
-
-$timestamp = $payload['timestamp'] ?? time();
-$senderRaw = $payload['sender'] ?? $payload['from'] ?? '';
-$messageId = $timestamp . '_' . $senderRaw;
-
-// Cache::add bersifat atomik (menghasilkan true hanya jika key belum pernah ada).
-// Retry berulang dari Fonnte dengan messageId yang sama akan bernilai false dan langsung dihentikan.
-if (!Cache::add('lock_msg_' . $messageId, true, now()->addMinutes(5))) {
-    Log::info("[AiOrderWebhook] Duplicate webhook request ignored: {$messageId}");
-    return response()->json(['status' => 'ignored', 'message' => 'Duplicate webhook request']);
-}
-```
+### Cara Kerja:
+1. Setiap pesan masuk disimpan ke array buffer pada Cache (`debounce_buffer_{sender}`) bersama token acak terbaru (`debounce_token_{sender}`).
+2. **Pola After-Response**:
+   - Jika server web mendukung `fastcgi_finish_request()` (PHP-FPM/cPanel), server langsung mengirimkan HTTP 200 OK ke Fonnte (`response()->send(); fastcgi_finish_request();`). Koneksi HTTP ditutup sehingga Fonnte **tidak pernah mengalami timeout atau retry**.
+   - Proses PHP di latar belakang tidur selama jeda debounce (`sleep($debounceSeconds)`). Default adalah **7 detik** (`AI_ORDER_DEBOUNCE_SECONDS=7`). Untuk pesan cepat seperti **BATAL** atau **UBAH**, debounce dipersingkat menjadi **2 detik**.
+3. **Pemeriksaan Token**:
+   - Setelah bangun, script memeriksa apakah token dirinya masih cocok dengan token terbaru di cache.
+   - Bila pelanggan mengirim bubble baru selama masa tidur, token di cache telah berubah. Proses lama akan berhenti secara diam-diam (*superseded*).
+   - Hanya proses dari **bubble terakhir** yang tokennya cocok, yang akan mengakuisisi lock pengirim, mengosongkan buffer, menggabungkan seluruh teks pesan, dan memprosesnya ke AI.
+4. **Human Handoff Bypassing**:
+   - Pesan yang mengandung kata `"admin"` atau pengirim yang sedang dalam masa *human mode* **tidak didebounce**, melainkan langsung dieksekusi detik itu juga.
 
 ---
 
-## 5. Logika Human Handoff (Admin Mode)
+## 5. Draft State & Skema `ai_order_drafts`
 
-Ketika pelanggan membutuhkan bantuan khusus di luar kemampuan bot (misal: komplain pesanan, negosiasi harga khusus, atau pertanyaan teknis), pelanggan dapat beralih ke Admin Manusia.
+Tabel `ai_order_drafts` menjamin bot memiliki ingatan percakapan (*stateful*). Jika pelanggan mengirim pesanan tanpa menyebutkan nama toko, pesanan disimpan di draft, dan bot hanya menanyakan nama toko/alamat.
 
-```mermaid
-flowchart TD
-    A["Chat Masuk"] --> B{"Pesan == 'admin'?"}
-    B -- Ya --> C["Set Cache: 'human_mode_' + sender<br/>Durasi: 15 Menit"]
-    C --> D["Kirim Pesan: 'Anda telah terhubung dengan Admin...'"]
-    D --> E["Return 200 OK (Hentikan Eksekusi AI)"]
-    B -- Tidak --> F{"Cache 'human_mode_' Masih Aktif?"}
-    F -- Ya --> G["Abaikan Pesan (Bot Hening, Admin Mengetik Manual)"]
-    F -- Tidak --> H["Lanjutkan ke Pemrosesan AI Order"]
+### Struktur Tabel `ai_order_drafts`:
+```sql
+CREATE TABLE ai_order_drafts (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    sender_phone VARCHAR(50) NOT NULL UNIQUE,
+    data JSON NULL,
+    awaiting VARCHAR(50) NULL,
+    last_message_at TIMESTAMP NULL,
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NULL,
+    INDEX (sender_phone)
+);
 ```
 
-### Implementasi Teknis:
-- **Keyword Pemicu**: Kata `admin` (case-insensitive).
-- **Durasi Kunci**: 15 Menit (`now()->addMinutes(15)`).
-- **Perilaku Bot**: Selama kunci ini aktif, bot tidak akan merespons chat apapun dari nomor tersebut, memberi kebebasan penuh kepada admin manusia untuk berdialog melalui aplikasi WhatsApp resmi tanpa interupsi AI.
-
----
-
-## 6. Core Service & Integrasi AI (`LlmOrderService`)
-
-Service `App\Services\Ai\LlmOrderService` bertindak sebagai *brain* yang mengubah teks bebas menjadi objek JSON terstruktur.
-
-### Dynamic System Prompt Construction
-System prompt tidak statis, melainkan dirakit secara dinamis sebelum panggilan API:
-1. **Waktu Server Riil**: Format WIB (`Asia/Jakarta`) diinjeksikan agar AI mengetahui konsep "hari ini", "besok", "sore", atau "siang".
-2. **Status Pelanggan**:
-   - Jika `$isNewCustomer === true`: Diinstruksikan untuk tidak memproses pesanan sebelum mendapatkan Nama Toko dan Alamat.
-   - Jika `$isNewCustomer === false`: Diinstruksikan untuk memproses pesanan dan meminta konfirmasi kata "oke".
-3. **Informasi Stok Aktual**: Diinjeksikan ke dalam header prompt: `INFORMASI STOK SAAT INI: Stok 15kg: X ball. Stok 20kg: Y ball.`
-
----
-
-### Validasi Stok Real-Time & Kebijakan Privasi Angka
-
-Salah satu fitur paling krusial adalah **perlindungan privasi bisnis**: AI wajib mengetahui sisa stok aktual untuk mencegah pesanan fiktif, tetapi **DILARANG KERAS** memberi tahu pelanggan berapa sisa stok di gudang.
-
-```text
-ATURAN VALIDASI STOK (System Prompt):
-PENTING: Sebelum memproses pesanan, bandingkan jumlah pesanan dengan INFORMASI STOK SAAT INI. 
-Jika pesanan MELEBIHI sisa stok, JANGAN kembalikan format JSON pesanan. 
-Tolak pesanan dengan sopan, TETAPI KAMU DILARANG KERAS MENYEBUTKAN ANGKA SISA STOK AKTUAL KEPADA PELANGGAN. 
-Gunakan bahasa yang natural seperti: 
-'Maaf Kak, kebetulan stok es ukuran tersebut saat ini sedang kurang dari permintaan Kakak.' 
-Di akhir kalimat WAJIB tambahkan: 
-'Silakan kurangi jumlah pesanan, atau ketik *admin* agar kami dapat mengecek jadwal produksi selanjutnya.'
-```
-
-#### Dual-Layer Stock Guard (PHP Fallback):
-Bila LLM secara tidak sengaja mengembalikan JSON meskipun stok tidak cukup, controller dan service memiliki lapisan verifikasi kedua pada level PHP (`isStockExceeded()`):
-```php
-if ($this->isStockExceeded($jumlahBall, $ukuranProduk, $infoStok, $availableStock)) {
-    return [
-        'is_out_of_stock' => true,
-        'reply' => "Maaf {$customerName}, kebetulan stok es ukuran tersebut saat ini sedang kurang dari permintaan Kakak. Silakan kurangi jumlah pesanan, atau ketik *admin* agar kami dapat mengecek jadwal produksi selanjutnya.",
-    ];
-}
-```
-
----
-
-### One-Step Auto-Registration Pelanggan Baru
-
-Untuk memangkas friksi pelanggan baru, sistem mendukung pendaftaran dan pemesanan sekaligus dalam 1 pesan WhatsApp (One-Step Registration).
-
-#### Contoh Pesan Pelanggan:
-> *"Halo saya dari Cafe Senja Kopi alamat Jl. Merdeka No 45 mau pesan es kristal 4 ball yang 19 kirim jam 3 sore ya"*
-
-#### Output JSON dari Gemini:
+### Format JSON pada Kolom `data`:
 ```json
 {
-  "is_registration": true,
-  "nama_toko": "Cafe Senja Kopi",
-  "alamat": "Jl. Merdeka No 45",
-  "jumlah_ball": 4,
+  "nama_toko": "Cafe Senja",
+  "alamat": "Jl. Merdeka No 10",
+  "lat": "-6.2088",
+  "lng": "106.8456",
+  "jumlah_ball": 3,
   "ukuran_produk": "20kg",
-  "waktu_pengiriman": "2026-11-06 15:00:00"
+  "waktu_pengiriman": "2026-11-06 16:00:00",
+  "is_registration": true
 }
 ```
 
-#### Aksi Otomatis di Controller:
-1. Menyimpan data toko ke tabel `customers` (`name`, `phone`, `address`, `status = 'active'`).
-2. Menghubungkan nomor telepon ke relasi `customer_phones` (`is_primary = true`).
-3. Membuat record pesanan di `temporary_orders` dengan `status = 'pending'`.
-4. Mengirim balasan:
-   > *"Data toko berhasil didaftarkan! Pesanan Anda: 4 ball 20kg. Balas 'oke' untuk konfirmasi masuk antrean kasir."*
+### Aturan Penggabungan Slot (Slot Merging):
+- **Immutabilitas Nilai Terisi**: Slot yang sudah memiliki nilai tidak boleh ditimpa oleh `null` atau string kosong pada pesan berikutnya.
+- **Kadaluarsa Otomatis**: Draft memiliki batas waktu inaktivitas 30 menit (`expires_at = now()->addMinutes(30)`). Bila lewat 30 menit tanpa aktivitas, draft di-reset otomatis.
 
 ---
 
-### Pemetaan Ukuran Produk Wajib (Normalizer)
+## 6. State Machine Pesanan Kasir (Order Lifecycle)
 
-Pelanggan es kristal sering menggunakan bahasa harga lama untuk menyebutkan ukuran fisik es. Sistem menerapkan standardisasi otomatis:
+Pesanan pada tabel `temporary_orders` mengikuti siklus hidup yang terdefinisi ketat:
 
-| Istilah Chat Pelanggan | Dipetakan Menjadi (`ukuran_produk`) | Alasan / Catatan |
-| :--- | :---: | :--- |
-| `"yang 19"`, `"19rb"`, `"19k"`, `"19"`, `"20kg"` | **`20kg`** | Es Kristal ukuran standar 20 kg (harga asosiasi 19 ribu) |
-| `"yang 15"`, `"15rb"`, `"15k"`, `"15"`, `"15kg"` | **`15kg`** | Es Kristal ukuran sedang 15 kg |
-| `"yang 10"`, `"10rb"`, `"10k"`, `"10"`, `"10kg"` | **`10kg`** | Es Kristal ukuran kecil 10 kg |
-| *(Tidak menyebutkan ukuran)* | **`20kg`** | Standar *default* pabrik Adin Crystal |
+```
+[Chat Pelanggan]
+       │
+       ▼
+  [validated] ───────────────► [cancelled] (Pelanggan ketik BATAL)
+       │
+       ▼ (Kasir drag ke POS / klik Proses)
+  [processed]
+```
+
+| Status | Arti & Perilaku Sistem |
+| :--- | :--- |
+| **`validated`** | Pesanan lengkap dan terkonfirmasi. **Langsung tampil di antrean kasir POS**. Pelanggan lama maupun baru yang datanya lengkap langsung berstatus `validated` (tanpa perlu balas "OKE"). Pelanggan masih dapat membatalkan (`BATAL`) atau merevisi (`UBAH`). |
+| **`processed`** | Pesanan telah diambil oleh kasir dan dipindahkan ke keranjang transaksi POS (melalui `POST /api/v1/kasir/ai-orders/{id}/processed`). Jika pelanggan chat `BATAL` atau `UBAH`, bot menolak dan membalas template `already_processed`. |
+| **`cancelled`** | Pesanan dibatalkan oleh pelanggan sebelum diproses kasir, atau ditandai batal secara manual. Tidak tampil di antrean kasir. |
 
 ---
 
-## 7. Mekanisme Cadangan (Regex Fallback Parser)
+## 7. Integrasi LLM Gemini (`LlmOrderService`)
 
-Bila terjadi kendala teknis pada layanan eksternal (misalnya Gemini API mengalami Error HTTP 400 Invalid Key, Error 429 Quota Exceeded, atau Timeout 60 detik), sistem **tidak akan crash**, melainkan otomatis mengalihkan ke fungsi internal `heuristicFallbackParser()`:
+### Model Pinning & Latensi Riil
+- **Model Resmi**: Dipin ke `gemini-flash-latest` (sesuai konfigurasi `.env` staging/produksi). Hindari alias dinamis yang tidak terdaftar.
+- **Latensi Produksi**: Log produksi mencatat waktu panggilan Gemini berkisar antara **10 hingga 13 detik**. Oleh karena itu:
+  - Timeout HTTP dipersingkat menjadi **8 detik** dengan **1x retry cepat (100ms)**.
+  - Jika Gemini timeout atau error, sistem segera beralih ke **Regex Fallback Parser** lokal (< 5ms) tanpa membuat pelanggan menunggu.
 
-```php
-// File: app/Services/Ai/LlmOrderService.php
-try {
-    $rawResponse = $this->callGeminiApi($systemPrompt, $chatMessage);
-    // ... decode dan validasi JSON ...
-} catch (\Throwable $e) {
-    Log::error("[LlmOrderService] Gagal memanggil Gemini API: " . $e->getMessage());
-    return $this->heuristicFallbackParser($chatMessage, $isNewCustomer, $customerName, $infoStok);
+### Ekstraksi Slot JSON Murni
+Prompt AI dirampingkan secara drastis: AI **dilarang menghasilkan teks sapaan/balasan**. AI hanya bertugas mengisi skema slot JSON:
+
+```json
+{
+  "nama_toko": "string|null",
+  "alamat": "string|null",
+  "jumlah_ball": "integer|null",
+  "ukuran_produk": "20kg|15kg|10kg|null",
+  "waktu_pengiriman": "YYYY-MM-DD HH:MM:SS|null",
+  "is_registration": "boolean",
+  "unknown_ukuran": "boolean"
 }
 ```
 
-### Logika Regex Fallback:
-1. **Deteksi Ukuran**: Mencari regex pattern `/(?:^|\D)(19|15|10)(?:rb|k)?(?:\D|$)/i`.
-2. **Deteksi Kuantitas**: Mencari pola `(\d+)\s*(?:ball|karung|sak|bungkus|pack|biji)`. Jika angka 19/15/10 muncul tanpa penanda ball, angka tersebut diposisikan sebagai ukuran, bukan kuantitas.
-3. **Deteksi Waktu**: Mencari format jam `jam\s*(\d{1,2})(?::(\d{2}))?\s*(pagi|siang|sore|malam)?` dan menghitung waktu datetime secara otomatis.
+### Penegakan Ukuran Produk Resmi (Hanya 20kg, 15kg, 10kg)
+Sistem Adin Crystal **HANYA** mendukung 3 varian ukuran es kristal:
+- **`20kg`**: Dipicu oleh istilah `"yang 19"`, `"19rb"`, `"19k"`, `"20kg"`, `"20"`, atau ukuran tidak disebut.
+- **`15kg`**: Dipicu oleh `"yang 15"`, `"15rb"`, `"15k"`, `"15kg"`, `"15"`.
+- **`10kg`**: Dipicu oleh `"yang 10"`, `"10rb"`, `"10k"`, `"10kg"`, `"10"`.
+- **Ukuran Tidak Dikenal (Contoh: "yang 5", "5kg")**: **DILARANG KERAS** dipetakan ke ukuran mana pun. Sistem menandai `unknown_ukuran = true`, mengosongkan slot ukuran, dan mengirimkan balasan template `unknown_ukuran`.
 
-### Perbandingan: AI vs Regex Fallback
+### Validasi Stok Real-Time & Soft Reservation
+Pengecekan stok dilakukan sebelum pesanan disetujui:
+$$\text{Stok Tersedia} = \text{Stok Fisik Gudang} - \sum (\text{Ball Pesanan Validated Hari Ini Belum Diproses})$$
 
-| Aspek | AI (Google Gemini NLU) | Regex Heuristic Fallback |
+- **Dual-Layer Guard**: Jika LLM lolos menghasilkan pesanan melebihi stok, guard level PHP (`isStockExceeded`) langsung mencegatnya.
+- **Kebijakan Kerahasiaan Angka**: Sistem **DILARANG** menyebutkan sisa angka stok aktual kepada pelanggan. Dilengkapi `filterStockNumbers` yang menyaring angka sisa gudang dari teks balasan.
+
+### Fallback Parser Heuristik (Regex Guard)
+Bila koneksi internet/Gemini terputus, parser regex lokal mengambil alih dengan aturan cermat:
+- Angka yang didahului `"jam"` (contoh: `"jam 10"`, `"jam 15"`) **BUKAN ukuran**, melainkan jam pengiriman.
+- Angka yang diikuti `"ball"` (contoh: `"10 ball"`) **BUKAN ukuran**, melainkan jumlah ball.
+- Konteks draft tidak dibuang, melainkan diperbarui secara deterministik.
+
+---
+
+## 8. Tabel Template Balasan WhatsApp (PHP Engine)
+
+Seluruh pesan balasan ke pelanggan dihasilkan secara instan oleh `App\Services\Ai\ReplyTemplates`. Nama bisnis selalu **"Adin Crystal"**. Panjang balasan dibatasi maksimal 2–3 baris tanpa *footer* statis berulang.
+
+| Kunci Template | Isi Pesan Template | Pemicu / Kondisi |
 | :--- | :--- | :--- |
-| **Fleksibilitas Bahasa** | Sangat Tinggi: Memahami slang, typo, singkatan, kalimat kompleks bertingkat. | Terbatas: Hanya mendeteksi kata kunci yang terdaftar dalam pola regex. |
-| **Ekstraksi Alamat** | Sangat Pintar: Mampu membedakan nama toko, patokan jalan, dan nomor rumah. | Dasar: Hanya memotong string jika mengandung kata penanda "alamat/jalan". |
-| **Kecepatan Respons** | 1.5 – 3.5 detik (tergantung jaringan ke Google). | < 5 milidetik (komputasi lokal memori PHP). |
-| **Ketergantungan** | Butuh koneksi internet & token API aktif. | 100% Berjalan offline di server internal. |
+| `greeting` | `Halo Kak, saya asisten otomatis Adin Crystal. Langsung ketik aja, contoh: 3 ball yang 20 jam 4 sore`<br>`(Ketik *admin* untuk bicara dengan staf)` | Chat hanya sapaan ("halo", "p") tanpa rincian order. |
+| `need_name_address` | `Siap, {qty} ball {ukuran}. Tinggal nama toko & alamat (atau share lokasi) ya.` | Pelanggan baru memesan tapi belum mencantumkan nama toko / alamat. |
+| `need_qty` | `Mau berapa ball? Ukuran 20 / 15 / 10 kg?` | Pelanggan menyebut toko/ukuran tanpa menyebut kuantitas. |
+| `need_ukuran` | `Ukuran berapa Kak? 20 / 15 / 10 kg?` | Kuantitas ada tetapi ukuran belum jelas. |
+| `unknown_ukuran` | `Ukuran yang tersedia 20 / 15 / 10 kg. Mau yang mana Kak?` | Pelanggan menyebut ukuran yang tidak didukung (misal "yang 5"). |
+| `order_in_existing` | `✅ Pesanan masuk: {qty} ball {ukuran} -> {nama_toko}{, jam HH:mm}.`<br>`Salah? Balas *BATAL* atau *UBAH*.` | Pesanan pelanggan lama lengkap (langsung masuk antrean kasir). |
+| `order_in_new` | `✅ Terdaftar & pesanan masuk: {qty} ball {ukuran} -> {nama_toko}, {alamat}.`<br>`Salah? Balas *BATAL* atau *UBAH*.` | Pendaftaran dan pesanan pelanggan baru berhasil (One-Step). |
+| `order_in_kasbon` | `Ada kasbon Rp {nominal}, titip ke supir saat pengiriman ya.` | Baris tambahan otomatis jika pelanggan memiliki tunggakan kasbon. |
+| `out_of_stock` | `Maaf Kak, stok ukuran itu belum cukup untuk jumlah segitu. Kurangi jumlahnya atau ketik *admin*.` | Jumlah pesanan melebihi stok gudang (tanpa membocorkan angka). |
+| `cancelled` | `Pesanan dibatalkan. Mau pesan lagi? Langsung ketik aja.` | Pelanggan membalas "BATAL" pada pesanan berstatus validated. |
+| `already_processed` | `Pesanan sudah diproses kasir. Ketik *admin* untuk perubahan.` | Pelanggan ingin batal/ubah padahal pesanan sudah diproses kasir. |
+| `location_only` | `Lokasi diterima 📍 Mau pesan berapa ball & ukuran berapa?` | Pelanggan mengirim share location WhatsApp tanpa teks pesanan. |
+| `unsupported_media` | `Maaf, saya hanya bisa baca teks dan lokasi.` | Pelanggan mengirim audio/video/dokumen tanpa teks atau lokasi. |
+| `ubah_prompt` | `Oke, ketik perubahannya aja, contoh: jadi 3 ball.` | Pelanggan membalas "UBAH" pada pesanan validated. |
 
 ---
 
-## 8. Format UI/UX & Pesan Balasan WhatsApp
+## 9. Fitur BATAL, UBAH & Share Location
 
-### 1. Personalized Greeting
-Sistem secara dinamis mengekstrak nama profil WhatsApp pengirim (`name` atau `pushname`). Jika pengirim adalah pelanggan lama, sistem memprioritaskan nama toko yang tersimpan di database:
-```php
-$customerName = $payload['name'] ?? $payload['pushname'] ?? 'Kak';
-if ($customer && !empty($customer->name)) {
-    $customerName = $customer->name;
-}
-```
+### Logika BATAL:
+- Pelanggan mengirim kata kunci `"batal"` atau `"cancel"` (pesan pendek).
+- Sistem memeriksa pesanan terakhir hari ini. Jika berstatus `validated`, status diubah menjadi `cancelled`, draft dibersihkan, dan dibalas konfirmasi pembatalan.
 
-### 2. Peringatan Kasbon Otomatis (Credit Control)
-Untuk pelanggan lama yang memiliki tunggakan kasbon, sistem secara otomatis menyisipkan nominal tagihan yang belum lunas sebagai pengingat sopan:
-> *"Pesanan diterima: 3 Ball Es Kristal 20kg. Namun saat ini sistem mencatat ada tagihan kasbon sebesar Rp 57.000 yang belum lunas. Mohon titipkan pelunasan ke supir kami saat pengiriman ya. Balas OKE untuk konfirmasi."*
+### Logika UBAH:
+- Pelanggan membalas `"ubah"` atau `"ganti"`.
+- Sistem membuka kembali draft dari data pesanan aktif terakhir dan mengirim prompt: *"Oke, ketik perubahannya aja, contoh: jadi 3 ball."*
+- Chat berikutnya (contoh: `"jadi 4 ball"`) di-merge ke draft, lalu sistem **memperbarui pesanan yang sama** (tidak membuat order duplikat).
 
-### 3. Footer Statis (Human Escape Route)
-Setiap pesan yang dikirim oleh bot diakhiri dengan footer navigasi statis:
-```php
-$finalMessage = $aiReply . "\n\n_Ketik *admin* untuk chat langsung dengan admin adin crystal_";
-```
-*Keuntungan*: Menghemat token prompt LLM (tidak perlu dibangkitkan oleh AI) dan memastikan pelanggan selalu memiliki jalan pintas menuju manusia jika menemui kebingungan.
+### Heuristik 5 Menit:
+- Jika dalam kurun waktu 5 menit setelah order tercatat pelanggan mengirim chat angka/ukuran (contoh: `"tambah 1 lagi"`, `"jadikan 2 ball"`), sistem mengenalinya sebagai revisi dari order terakhir.
+
+### Integrasi Share Location:
+- Fonnte mengirimkan koordinat pada field payload `location` (format `"latitude,longitude"`).
+- Sistem menyimpan latitude dan longitude ke kolom draft. Alamat teks otomatis diisi `"Lokasi WhatsApp"` bila belum ada teks jalan.
+- Pada antrean kasir, kasir mendapatkan link otomatis: `https://www.google.com/maps?q={lat},{lng}` untuk panduan supir pengiriman.
 
 ---
 
-## 9. Integrasi Antrean Kasir (POS Integration)
+## 10. Konfigurasi Environment (.env) & Variabel Baru
 
-Pesanan yang telah dikonfirmasi oleh pelanggan (membalas "OKE" atau "YA") statusnya akan berubah menjadi `validated` pada tabel `temporary_orders`.
-
-### Endpoint Kasir:
-1. **Mengambil Antrean Pesanan AI**:
-   - **Method**: `GET /api/v1/kasir/ai-orders`
-   - **Fungsi**: Digunakan oleh dashboard POS Kasir untuk polling daftar pesanan WhatsApp yang siap diproses.
-   - **Payload Return**:
-     ```json
-     {
-       "status": "success",
-       "count": 1,
-       "data": [
-         {
-           "id": 42,
-           "customer_id": 15,
-           "customer_name": "Warung Barokah",
-           "sender_phone": "081234567890",
-           "customer_address": "Jl. Kaliurang KM 5",
-           "jumlah_ball": 3,
-           "ukuran_produk": "20kg",
-           "delivery_time": "2026-11-06 16:00:00",
-           "delivery_time_formatted": "16:00",
-           "status": "validated",
-           "last_chat": "oke siap kirim ya"
-         }
-       ]
-     }
-     ```
-
-2. **Menandai Pesanan Selesai / Masuk Transaksi**:
-   - **Method**: `POST /api/v1/kasir/ai-orders/{id}/processed`
-   - **Fungsi**: Dipanggil saat kasir mendrag order ke keranjang POS atau mengklik tombol "Proses Transaksi". Status order diubah menjadi `cancelled` / `processed` agar tidak tampil lagi di antrean kasir.
-
----
-
-## 10. Konfigurasi Environment (.env) & Deployment
-
-### 1. Variabel Wajib di File `.env`
-
-Pastikan variabel-variabel berikut telah terdefinisi dengan benar:
+Tambahkan variabel berikut ke file `.env`:
 
 ```ini
 # ==============================================================
-# KONFIGURASI WHATSAPP GATEWAY (FONNTE)
+# KONFIGURASI AI WHATSAPP ORDER SYSTEM (BUKUDIG)
 # ==============================================================
-FONNTE_TOKEN=your_fonnte_device_token_here
+# Jeda debounce penggabungan bubble chat (detik). Default: 7
+AI_ORDER_DEBOUNCE_SECONDS=7
+
+# Menggunakan pola fastcgi_finish_request agar Fonnte tidak timeout. Default: true
+AI_ORDER_AFTER_RESPONSE=true
+
+# Mode pengujian tanpa mengirim WA riil ke pelanggan (true/false). Default: false
+AI_ORDER_DRY_RUN=false
+
+# Batas maksimal pesan per nomor per menit untuk proteksi spam/DDoS. Default: 20
+AI_ORDER_RATE_LIMIT=20
+
+# Token rahasia webhook opsional untuk verifikasi header/query Fonnte
+FONNTE_WEBHOOK_SECRET=
+
+# ==============================================================
+# GOOGLE GEMINI LLM
+# ==============================================================
+GEMINI_API_KEY=AIzaSyYourGeminiApiKeyHere
+GEMINI_MODEL=gemini-flash-latest
+
+# ==============================================================
+# WHATSAPP GATEWAY (FONNTE)
+# ==============================================================
+FONNTE_TOKEN=YourFonnteDeviceTokenHere
 FONNTE_API_URL=https://api.fonnte.com/send
 
 # ==============================================================
-# KONFIGURASI GOOGLE GEMINI AI (TIER 1)
+# CACHE STORE (Disarankan 'database' atau 'redis' untuk shared hosting)
 # ==============================================================
-GEMINI_API_KEY=AIzaSyYourGeminiApiKeyHere
-GEMINI_MODEL=gemini-1.5-flash-latest
-
-# ==============================================================
-# KONFIGURASI CACHE (UNTUK ATOMIC LOCK & HUMAN MODE)
-# ==============================================================
-CACHE_DRIVER=file
-# Catatan: Di server produksi, 'file', 'database', atau 'redis' dapat digunakan.
+CACHE_STORE=database
 ```
 
 ---
 
-### 2. Perintah Pemeliharaan & Reset Cache Server
+## 11. Troubleshooting & Panduan Pengujian (Testing)
 
-Setiap kali Anda memperbarui konfigurasi di file `.env` atau mengubah routing sistem, jalankan perintah berikut pada terminal server:
+### Menjalankan Automated Feature Test:
+Test suite komprehensif mencakup 10 skenario pengujian utama berada di `tests/Feature/AiOrderSystemTest.php`:
 
 ```bash
-# Menghapus cache konfigurasi
-php artisan config:clear
-
-# Menghapus cache rute API
-php artisan route:clear
-
-# Menghapus cache aplikasi (mengosongkan state human mode / lock msg jika dibutuhkan)
-php artisan cache:clear
-
-# Mengoptimalkan autoload kelas
-composer dump-autoload -o
+# Menjalankan seluruh skenario pengujian AI Order System
+php artisan test --filter=AiOrderSystemTest
 ```
 
----
+### 10 Skenario Pengujian yang Tercover:
+1. **Transkrip Nyata Pelanggan Baru**: Uji coba 4 bubble terpecah yang digabung rapi menjadi 1 pelanggan dan 1 pesanan tervalidasi.
+2. **Pesan Tunggal Lengkap (One-Step)**: Registrasi nama toko + alamat sekaligus order 1 langkah.
+3. **Pelanggan Lama**: Order langsung berstatus `validated` dan memuat instruksi BATAL/UBAH.
+4. **Alur BATAL & UBAH**: Pengujian pembatalan, revisi pesanan tanpa duplikasi, dan penolakan pada order yang sudah diproses kasir.
+5. **Guard Stok Ketat**: Penolakan saat pesanan melebihi stok gudang dan verifikasi tidak bocornya angka stok riil.
+6. **Filtrasi Pesan Grup**: Pesan `@g.us` diabaikan seketika tanpa menulis ke database.
+7. **Idempotensi Retry Fonnte**: Request ganda dengan ID identik diabaikan oleh cache lock.
+8. **Share Location WhatsApp**: Koordinat latitude/longitude tersimpan ke draft dan alamat terisi.
+9. **Ketahanan Regex Fallback**: Pengujian ketika Gemini API error/timeout, pembedaan `"jam 10"` vs ukuran 10kg, dan penolakan ukuran tidak sah (`"yang 5"`).
+10. **Normalisasi Nomor Telepon**: Format `08...`, `628...`, dan `+628...` dipetakan ke record pelanggan tunggal.
 
-### 3. Informasi Lingkungan Server (Staging vs Production)
-
-| Parameter | Staging Server (SPB) | Production Server (PB) |
-| :--- | :--- | :--- |
-| **Domain Host** | `spb.resdigaza.my.id` | `pb.resdigaza.my.id` |
-| **Webhook URL di Fonnte** | `https://spb.resdigaza.my.id/api/v1/webhook/fonnte` | `https://pb.resdigaza.my.id/api/v1/webhook/fonnte` |
-| **FTP Host / Mode** | `ftp.resdigaza.my.id` (Port 21, Passive EPSV) | Sesuai kredensial produksi |
-| **Basis Data** | Database Staging (Uji Coba) | Database Live Transaksi Adin Crystal |
-| **Catatan Khusus** | Digunakan untuk pengujian fitur baru, verifikasi prompt AI, dan uji beban Fonnte. | Pastikan `GEMINI_API_KEY` menggunakan Tier 1 berbayar/aktif agar terhindar dari limitasi RPM (Requests Per Minute). |
-
----
-
-### 4. Perintah Upload Manual via FTP (Terminal Command Reference)
-
-Bila sistem CI/CD otomatis tidak aktif, berkas pengendali dapat diunggah secara instan menggunakan `curl.exe`:
-
-```powershell
-# 1. Upload Controller Utama
-curl.exe -v --ftp-pasv -T "app/Http/Controllers/Api/V1/AiOrderWebhookController.php" "ftp://ftp.resdigaza.my.id/app/Http/Controllers/Api/V1/AiOrderWebhookController.php" --user "$SFTP_USER:$SFTP_PASS"
-
-# 2. Upload LLM Service
-curl.exe -v --ftp-pasv -T "app/Services/Ai/LlmOrderService.php" "ftp://ftp.resdigaza.my.id/app/Services/Ai/LlmOrderService.php" --user "$SFTP_USER:$SFTP_PASS"
+### Pemeriksaan Log Produksi & Staging:
+Bila terjadi kendala di server staging, periksa log menggunakan:
+```bash
+tail -n 100 storage/logs/laravel.log | grep "\[AiOrder"
 ```
-
-*(Output terminal yang berhasil wajib menampilkan status `< 226 Transfer complete`).*
-
----
-*Dokumentasi ini disusun dan diverifikasi pada November 2026 untuk proyek BukuDig POS Adin Crystal.*
-
+Log sistem telah dirancang ringkas dengan penyensoran nomor telepon (`0812****7890`) untuk menjaga privasi pelanggan.
