@@ -14,6 +14,9 @@ return [
     // Jeda debounce penggabungan bubble chat (detik). Default: 7 detik
     'debounce_seconds' => (int) env('AI_ORDER_DEBOUNCE_SECONDS', 7),
 
+    // Jeda debounce singkat untuk pesan ACK dan BATAL/UBAH (detik). Default: 2 detik
+    'debounce_short_seconds' => (int) env('AI_ORDER_DEBOUNCE_SHORT_SECONDS', 2),
+
     // Menggunakan pemutusan koneksi cepat fastcgi/litespeed_finish_request agar Fonnte tidak timeout
     'after_response' => filter_var(env('AI_ORDER_AFTER_RESPONSE', true), FILTER_VALIDATE_BOOLEAN),
 
@@ -41,3 +44,4 @@ return [
     // Aktifkan pengiriman notifikasi grup admin
     'admin_notify' => filter_var(env('AI_ORDER_ADMIN_NOTIFY', true), FILTER_VALIDATE_BOOLEAN),
 ];
+

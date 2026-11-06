@@ -55,13 +55,48 @@ class LlmOrderService
             ];
         }
 
+        // ==============================================================
+        // FAST-PATH REGEX: Jalankan heuristik lebih dulu
+        // ==============================================================
+        $heuristic = $this->heuristicFallbackParser($combinedMessage, $currentDraft, $awaiting, $isNewCustomer);
+
+        // Cek apakah slot sudah cukup untuk menghindari pemanggilan Gemini API:
+        // 1. unknown_ukuran terdeteksi
+        // 2. Pelanggan lama: jumlah_ball & ukuran_produk sudah terisi
+        // 3. Pelanggan baru: jumlah_ball, ukuran_produk, nama_toko, & alamat sudah terisi
+        // 4. Awaiting khusus (qty / ukuran) sudah terisi
+        $hasQty = $heuristic['jumlah_ball'] !== null || !empty($currentDraft['jumlah_ball']);
+        $hasUkuran = $heuristic['ukuran_produk'] !== null || !empty($currentDraft['ukuran_produk']);
+        $hasName = !empty($heuristic['nama_toko']) || !empty($currentDraft['nama_toko']);
+        $hasAddress = !empty($heuristic['alamat']) || !empty($currentDraft['alamat']);
+
+        $slotCukup = false;
+        if ($heuristic['unknown_ukuran']) {
+            $slotCukup = true;
+        } elseif (!$isNewCustomer && $hasQty && $hasUkuran) {
+            $slotCukup = true;
+        } elseif ($isNewCustomer && $hasQty && $hasUkuran && $hasName && $hasAddress) {
+            $slotCukup = true;
+        } elseif ($awaiting === 'qty' && $heuristic['jumlah_ball'] !== null) {
+            $slotCukup = true;
+        } elseif ($awaiting === 'ukuran' && $heuristic['ukuran_produk'] !== null) {
+            $slotCukup = true;
+        }
+
+        if ($slotCukup) {
+            Log::info("[AI-ORDER-PATH] regex: slot cukup, melewati pemanggilan Gemini.");
+            return $heuristic;
+        }
+
+        Log::info("[AI-ORDER-PATH] gemini: memanggil Gemini API untuk ekstraksi teks bebas/alamat.");
+
         $systemPrompt = $this->buildSystemPrompt($currentDraft, $awaiting, $isNewCustomer, $infoStok);
         $userPrompt = "Pesan Pelanggan:\n\"{$combinedMessage}\"\n\nEkstrak slot JSON sesuai schema:";
 
         try {
             if (empty($this->apiKey)) {
                 Log::warning("[LlmOrderService] GEMINI_API_KEY belum diisi di .env. Menggunakan rule-based fallback parser.");
-                return $this->heuristicFallbackParser($combinedMessage, $currentDraft, $awaiting, $isNewCustomer);
+                return $heuristic;
             }
 
             $rawResponse = $this->callGeminiApi($systemPrompt, $userPrompt);
@@ -69,7 +104,7 @@ class LlmOrderService
 
             if (!$parsed || !is_array($parsed)) {
                 Log::warning("[LlmOrderService] Output Gemini bukan JSON valid, menggunakan fallback.", ['raw' => $rawResponse]);
-                return $this->heuristicFallbackParser($combinedMessage, $currentDraft, $awaiting, $isNewCustomer);
+                return $heuristic;
             }
 
             Log::info("[LlmOrderService] Ekstraksi slot via Gemini API sukses.");
@@ -79,7 +114,7 @@ class LlmOrderService
             try {
                 app(AdminGroupNotifier::class)->notifyGeminiFailure($e->getMessage());
             } catch (\Throwable $ignored) {}
-            return $this->heuristicFallbackParser($combinedMessage, $currentDraft, $awaiting, $isNewCustomer);
+            return $heuristic;
         }
     }
 
@@ -160,15 +195,24 @@ PROMPT;
                 ],
             ],
             'generationConfig' => [
-                'temperature'        => 0.1,
+                'temperature'        => 0,
+                'maxOutputTokens'    => 300,
                 'responseMimeType'   => 'application/json',
+                'thinkingConfig'     => [
+                    'thinkingBudget' => 0,
+                ],
             ],
         ];
+
+        $startTime = microtime(true);
 
         // Timeout 12 detik dengan 1x retry (delay 100ms)
         $response = Http::timeout(12)
             ->retry(1, 100)
             ->post($url, $payload);
+
+        $durationMs = round((microtime(true) - $startTime) * 1000, 2);
+        Log::info("[AI-ORDER-LATENCY] Gemini API duration: {$durationMs}ms");
 
         if (!$response->successful()) {
             throw new \Exception("Gemini HTTP Error {$response->status()}: " . $response->body());

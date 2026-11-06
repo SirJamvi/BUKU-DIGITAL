@@ -36,13 +36,28 @@ class AiOrderDebouncer
     }
 
     /**
+     * Cek apakah pesan merupakan kata persetujuan/terima kasih (ACK).
+     */
+    public static function isAckMessage(string $message): bool
+    {
+        $clean = strtolower(trim($message));
+        if (strlen($clean) > 40) {
+            return false;
+        }
+
+        $ackWords = 'oke|ok|siap|iya|ya|sip|makasih|makasi|terima\s*kasih|terimakasih|thanks|thx';
+        $honorifics = 'kak|pak|min|admin|ya|mas|bang|gan';
+        return (bool) preg_match("/^(?:(?:{$ackWords})\s*)+(?:(?:{$honorifics})\s*)*[\.!\s]*$/i", $clean);
+    }
+
+    /**
      * Tentukan durasi debounce dalam detik.
-     * Pesan pembatalan/perubahan diberi durasi singkat (2 detik) agar responsif.
+     * Pesan pembatalan/perubahan dan pesan ACK diberi durasi singkat (default 2 detik).
      */
     public static function getDebounceSeconds(string $message): int
     {
-        if (self::isCancelOrChange($message)) {
-            return 2;
+        if (self::isCancelOrChange($message) || self::isAckMessage($message)) {
+            return (int) config('ai_order.debounce_short_seconds', 2);
         }
 
         return (int) config('ai_order.debounce_seconds', 7);
@@ -83,6 +98,16 @@ class AiOrderDebouncer
     {
         $currentToken = Cache::get('debounce_token_' . $sender);
         return $currentToken === $token;
+    }
+
+    /**
+     * Cek apakah saat ini masih ada bubble lain yang belum diproses di buffer antrean pengirim.
+     */
+    public static function hasPendingBuffer(string $sender): bool
+    {
+        $bufferKey = 'debounce_buffer_' . $sender;
+        $buffer = Cache::get($bufferKey, []);
+        return !empty($buffer);
     }
 
     /**
