@@ -255,14 +255,38 @@ Seluruh pesan balasan ke pelanggan dihasilkan secara instan oleh `App\Services\A
 
 ### Logika Pesan Susulan (Follow-up) & Jendela Ack:
 - **Jendela Pesan Susulan (`AI_ORDER_FOLLOWUP_MINUTES=5`)**:
-  - Jika pelanggan mengirim pesan penegasan/perubahan (misalnya *"yang 20kg"*, *"yg 15kg"*, *"2 ball"*, *"tambah 1"*) dalam 5 menit setelah order tercatat:
+  - **Revisi / Ubah Order Terakhir**: Jika pesan memuat kata *"jadi"*, *"ubah"*, *"ganti"*, *"kurangi"*, *"ralat"*, *"tambah N"*, ATAU hanya menyebutkan angka/ukuran (contoh: *"2 ball"*, *"yang 20kg"*):
     - **Nilai Sama**: Balas template pengakuan (*"Siap Kak, pesanan tetap {qty} ball {ukuran} 👍"*), database tidak diubah.
-    - **Nilai Beda**: Update order berjalan, cek stok, dan balas konfirmasi baru dengan reminder BATAL/UBAH.
+    - **Nilai Berbeda**: Perbarui order berjalan, cek ketersediaan stok, dan balas format revisi:
+      `"✅ Diubah: {old_qty} ball -> {new_qty} ball {ukuran}. Salah? Balas *BATAL* atau *UBAH*."`
     - **Order Sudah Diproses Kasir (`processed`)**: Balas template penolakan (*"Pesanan sudah diproses kasir. Ketik \*admin\* untuk perubahan."*).
+  - **Pesanan Baru Terpisah Hari Ini**: Jika pesan memuat kata *"pesen"*, *"mau"*, *"kirim"*, *"order"*, ATAU waktu pengiriman (*"jam 4 sore"*, *"besok"*), ATAU kombinasi qty+ukuran+waktu (contoh: *"3 ball yang 19 jam 4 sore"*):
+    - Sistem **TIDAK menimpa** pesanan sebelumnya, melainkan mencatat pesanan baru yang terpisah.
+    - Balas format pesanan bertingkat:
+      `"✅ Pesanan ke-{index} masuk: {qty} ball {ukuran}{jam} (pesanan sebelumnya tetap ada). Salah? Balas *BATAL* atau *UBAH*."`
+  - **Pembatalan (`BATAL`)**: Hanya membatalkan order terbaru.
+
 - **Jendela Pengakuan / Ack (`AI_ORDER_ACK_MINUTES=10`)**:
-  - Kata sopan/pengakuan seperti *"oke"*, *"ok"*, *"siap"*, *"iya"*, *"makasih"*, *"terima kasih"*, *"sip"* dalam 10 menit setelah order tidak akan memicu pertanyaan ulang (*"Mau berapa ball?"*), melainkan dibalas santun (*"Siap Kak 👍"*) atau diam (`AI_ORDER_ACK_REPLY=true/false`).
+  - Kata sopan/pengakuan murni seperti *"oke"*, *"ok"*, *"siap"*, *"iya"*, *"makasih"*, *"terima kasih"*, *"sip"* dalam 10 menit setelah order tidak akan memicu pertanyaan ulang (*"Mau berapa ball?"*), melainkan dibalas santun (*"Siap Kak 👍"*) atau diam (`AI_ORDER_ACK_REPLY=true/false`).
 - **Di Luar Jendela (> 5 menit)**:
   - Pesan ukuran saja seperti *"yang 20kg"* akan membuka alur pesanan baru secara wajar (menanyakan jumlah ball).
+
+### Optimasi Kecepatan & Debounce Adaptif (Target < 10 Detik):
+1. **Fast-Path Regex**: Heuristik parser regex dijalankan lebih awal. Jika slot kuantitas dan ukuran telah lengkap (dan untuk pelanggan baru, nama toko + alamat sudah ada), sistem **tidak memanggil Google Gemini API**, memangkas latensi dari ~8 detik menjadi < 20 milidetik. Log mencatat `[AI-ORDER-PATH] (regex|gemini)`.
+2. **Konfigurasi Ringan Gemini**: Ketika Gemini dibutuhkan, dipanggil dengan `temperature=0`, `maxOutputTokens=300`, dan `thinkingConfig: { thinkingBudget: 0 }` (mematikan token penalaran berlebih) sehingga eksekusi LLM turun drastis ke ~1.8 detik.
+3. **Debounce Adaptif**:
+   - `AI_ORDER_DEBOUNCE_SHORT_SECONDS=2` untuk pesan cepat seperti ACK (*"oke"*, *"siap"*), BATAL, dan UBAH.
+   - `AI_ORDER_DEBOUNCE_SECONDS=7` untuk pesanan normal agar pelanggan sempat mengetik beberapa bubble.
+4. **Re-check Buffer Sebelum Menjawab**: Sebelum mengirim balasan bertipe pertanyaan (`need_qty`, `need_ukuran`, `need_name_address`, `location_only`), sistem memeriksa buffer antrean. Jika pelanggan sedang mengetik bubble berikutnya, pertanyaan ditahan agar tidak memotong kalimat pelanggan, dan draft dijawab sekaligus di gelombang berikutnya.
+
+### Template Lokasi Adaptif:
+- Jika pelanggan share lokasi saat draft sudah memiliki `qty` dan `ukuran`:
+  - Jika nama toko belum ada (pelanggan baru): Balas *"Lokasi diterima 📍 Nama tokonya apa Kak?"*.
+  - Jika pelanggan lama / nama toko sudah ada: Langsung divalidasi ke antrean kasir tanpa pertanyaan berulang.
+- Jika draft belum memiliki `qty`: Balas *"Lokasi diterima 📍 Mau pesan berapa ball & ukuran berapa?"*.
+
+### Hasil Analisis Finish Request Webhook:
+- Pengujian fungsi `fastcgi_finish_request()` dan `litespeed_finish_request()` pada server staging Apache/LSAPI menunjukkan kedua fungsi tidak aktif di SAPI runtime staging. Oleh karena itu, arsitektur webhook menggunakan sinkron debounce yang aman dan deterministik di bawah atomic lock `proc_lock_{$sender}`.
 
 ### Notifikasi Grup WhatsApp Admin (Fonnte):
 Sistem dapat mengirimkan peringatan instan ke grup WhatsApp internal toko (`AI_ORDER_ADMIN_GROUP_ID`, format `...@g.us`):
@@ -295,6 +319,9 @@ Semua konfigurasi terpusat pada file `config/ai_order.php` dan dibaca menggunaka
 # ==============================================================
 # Jeda debounce penggabungan bubble chat (detik). Default: 7
 AI_ORDER_DEBOUNCE_SECONDS=7
+
+# Jeda debounce singkat untuk ACK / BATAL / UBAH (detik). Default: 2
+AI_ORDER_DEBOUNCE_SHORT_SECONDS=2
 
 # Menggunakan pola fastcgi/litespeed_finish_request agar Fonnte tidak timeout. Default: true
 AI_ORDER_AFTER_RESPONSE=true
@@ -353,7 +380,7 @@ Test suite komprehensif mencakup 17 skenario pengujian utama berada di `tests/Fe
 php artisan test --filter=AiOrderSystemTest
 ```
 
-### 17 Skenario Pengujian yang Tercover:
+### 20 Skenario Pengujian yang Tercover:
 1. **Transkrip Nyata Pelanggan Baru**: Uji coba 4 bubble terpecah yang digabung rapi menjadi 1 pelanggan dan 1 pesanan tervalidasi.
 2. **Pesan Tunggal Lengkap (One-Step)**: Registrasi nama toko + alamat sekaligus order 1 langkah.
 3. **Pelanggan Lama**: Order langsung berstatus `validated` dan memuat instruksi BATAL/UBAH.
@@ -365,12 +392,15 @@ php artisan test --filter=AiOrderSystemTest
 9. **Ketahanan Regex Fallback**: Pengujian ketika Gemini API error/timeout, pembedaan `"jam 10"` vs ukuran 10kg, dan penolakan ukuran tidak sah (`"yang 5"`).
 10. **Normalisasi Nomor Telepon**: Format `08...`, `628...`, dan `+628...` dipetakan ke record pelanggan tunggal.
 11. **Follow-up Ukuran Sama**: Balas "pesanan tetap {qty} ball {ukuran} 👍", database tidak berubah.
-12. **Follow-up Qty Berbeda**: Order berjalan ter-update kuantitasnya, memicu balasan konfirmasi baru.
-13. **Ack Ucapan Terima Kasih**: "oke" / "makasih" dibalas "Siap Kak 👍" tanpa menanyakan ulang jumlah ball.
+12. **Follow-up UBAH Format Lama -> Baru**: "✅ Diubah: 1 ball -> 2 ball 20kg", order ter-update di database.
+13. **Ack Ucapan Terima Kasih**: "oke" / "makasih min" dibalas "Siap Kak 👍" tanpa menanyakan ulang jumlah ball.
 14. **Follow-up Di Luar Jendela (> 5 menit)**: Permintaan ukuran diproses sebagai pesanan baru (menanyakan jumlah ball).
 15. **Follow-up Order Processed**: Penolakan perubahan pesanan yang sudah diproses kasir.
 16. **Soft-reservation 24 Jam & Lazy-Expiry**: Pesan tervalidasi > 24 jam berubah menjadi `expired` dan alokasi stok dilepaskan.
 17. **Notifikasi Grup Admin**: Verifikasi pengiriman event Human Mode, Pelanggan Baru, dan Stok Kurang ke grup WhatsApp admin.
+18. **Pesanan Baru Terpisah Hari Ini**: "3 ball yang 19 jam 4 sore" memicu "✅ Pesanan ke-2 masuk: 3 ball 20kg jam 16:00 (pesanan sebelumnya tetap ada)" tanpa menimpa order pertama.
+19. **Template Lokasi Adaptif**: Meminta nama toko bila qty/ukuran sudah ada, atau langsung validasi bila customer sudah terdaftar.
+20. **Re-check Buffer**: Menahan balasan pertanyaan jika masih ada bubble antrean berikutnya dari pengirim.
 
 ### Pemeriksaan Log Produksi & Staging:
 Bila terjadi kendala di server staging, periksa log menggunakan:

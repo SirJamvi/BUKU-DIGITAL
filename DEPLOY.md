@@ -73,6 +73,7 @@ composer dump-autoload -o
 Pastikan variabel berikut ada di file `.env` staging:
 ```ini
 AI_ORDER_DEBOUNCE_SECONDS=7
+AI_ORDER_DEBOUNCE_SHORT_SECONDS=2
 AI_ORDER_AFTER_RESPONSE=true
 AI_ORDER_DRY_RUN=false
 AI_ORDER_RATE_LIMIT=20
@@ -110,6 +111,7 @@ CACHE_STORE=database
   - `GEMINI_MODEL=gemini-flash-latest` (pastikan kuota Gemini Tier 1 berbayar aktif).
   - `FONNTE_TOKEN=...` (token device WhatsApp resmi Adin Crystal).
   - `AI_ORDER_DEBOUNCE_SECONDS=7`.
+  - `AI_ORDER_DEBOUNCE_SHORT_SECONDS=2`.
   - `AI_ORDER_AFTER_RESPONSE=true`.
   - `AI_ORDER_DRY_RUN=false`.
   - `AI_ORDER_RATE_LIMIT=20`.

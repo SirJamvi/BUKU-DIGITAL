@@ -610,7 +610,7 @@ class AiOrderSystemTest extends TestCase
         ]);
 
         $response->assertStatus(200);
-        $this->assertStringContainsString('2 ball 20kg', $capturedReply);
+        $this->assertStringContainsString('Diubah: 1 ball -> 2 ball 20kg', $capturedReply);
 
         // Order ter-update di database
         $order->refresh();
@@ -814,6 +814,121 @@ class AiOrderSystemTest extends TestCase
         $this->assertNotEmpty($capturedGroupMessages);
         $this->assertStringContainsString('[STOK KURANG]', $capturedGroupMessages[0]['message']);
         $this->assertStringNotContainsString('100', $capturedGroupMessages[0]['message']); // Angka stok riil tidak bocor
+    }
+
+    /**
+     * Skenario 18: Pesanan Baru Terpisah ("3 ball yang 19 jam 4 sore" memicu pesanan ke-2 tanpa menimpa order pertama)
+     */
+    public function test_scenario_18_new_separate_order_in_followup_window(): void
+    {
+        $sender = '6281211110007';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Resto Rasa',
+            'phone'       => $sender,
+            'address'     => 'Klari',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        // Order pertama #1 sudah validated
+        $order1 = TemporaryOrder::create([
+            'customer_id'   => $customer->id,
+            'sender_phone'  => $sender,
+            'jumlah_ball'   => 1,
+            'ukuran_produk' => '20kg',
+            'status'        => 'validated',
+            'last_chat'     => 'pesen 1 ball',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Masuk pesan baru dengan kuantitas, ukuran, dan waktu: "3 ball yang 19 jam 4 sore"
+        $response = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => '3 ball yang 19 jam 4 sore',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString('Pesanan ke-2 masuk: 3 ball 20kg', $capturedReply);
+        $this->assertStringContainsString('pesanan sebelumnya tetap ada', $capturedReply);
+
+        // Verifikasi di database: ada 2 order berbeda untuk sender ini!
+        $orders = TemporaryOrder::where('sender_phone', $sender)->get();
+        $this->assertCount(2, $orders);
+
+        $order1->refresh();
+        $this->assertEquals(1, $order1->jumlah_ball); // Order pertama tidak ditimpa!
+
+        $order2 = $orders->where('id', '!=', $order1->id)->first();
+        $this->assertNotNull($order2);
+        $this->assertEquals(3, $order2->jumlah_ball);
+        $this->assertEquals('20kg', $order2->ukuran_produk);
+    }
+
+    /**
+     * Skenario 19: Template Lokasi Adaptif
+     */
+    public function test_scenario_19_adaptive_location_templates(): void
+    {
+        $sender = '6281211110008';
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Kasus 1: Lokasi diterima tanpa qty di draft -> minta qty & ukuran
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'   => $sender,
+            'location' => '-6.3000,107.3000',
+        ])->assertStatus(200);
+
+        $this->assertStringContainsString('Mau pesan berapa ball & ukuran berapa', $capturedReply);
+
+        // Kasus 2: Draft sudah punya qty & ukuran tapi belum ada nama toko -> minta nama toko
+        $draft = AiOrderDraft::getOrCreateDraft($sender);
+        $draft->mergeData(['jumlah_ball' => 2, 'ukuran_produk' => '20kg']);
+
+        $capturedReply = '';
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'   => $sender,
+            'location' => '-6.3000,107.3000',
+        ])->assertStatus(200);
+
+        $this->assertStringContainsString('Nama tokonya apa Kak', $capturedReply);
+    }
+
+    /**
+     * Skenario 20: Re-check Buffer (balasan pertanyaan ditahan saat buffer pengirim masih berisi bubble lain)
+     */
+    public function test_scenario_20_recheck_buffer_suppresses_question_replies(): void
+    {
+        $sender = '6281211110009';
+
+        // Simulasikan ada bubble baru di buffer
+        Cache::put('debounce_buffer_' . $sender, [
+            ['message' => 'bubble berikutnya sedang antre', 'payload' => [], 'timestamp' => microtime(true)]
+        ], now()->addMinutes(2));
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Pesan parsial yang harusnya tanya qty ("yang 20kg")
+        $processor = app(\App\Services\Ai\AiOrderProcessor::class);
+        $result = $processor->process($sender, 'yang 20kg');
+
+        // Balasan pertanyaan ditahan agar dibalas di gelombang berikutnya
+        $this->assertEquals('pending_more_bubbles', $result['status']);
+        $this->assertEmpty($capturedReply);
     }
 }
 
