@@ -13,11 +13,16 @@ Panduan ini berisi langkah-langkah deployment untuk administrator dan developer 
 Pastikan berkas-berkas berikut terunggah ke direktori server tujuan:
 
 ```text
+config/
+└── ai_order.php
 app/
 ├── Http/Controllers/Api/V1/AiOrderWebhookController.php
-├── Models/AiOrderDraft.php
+├── Models/
+│   ├── AiOrderDraft.php
+│   └── TemporaryOrder.php
 ├── Services/
 │   ├── Ai/
+│   │   ├── AdminGroupNotifier.php
 │   │   ├── AiOrderDebouncer.php
 │   │   ├── AiOrderProcessor.php
 │   │   ├── LlmOrderService.php
@@ -26,7 +31,9 @@ app/
 │       └── PhoneNumberHelper.php
 database/
 └── migrations/
-    └── 2026_11_06_100000_create_ai_order_drafts_table.php
+    ├── 2026_11_06_100000_create_ai_order_drafts_table.php
+    ├── 2026_11_06_110000_update_status_enum_in_temporary_orders_table.php
+    └── 2026_11_06_120000_add_is_new_customer_to_temporary_orders_table.php
 tests/
 └── Feature/
     └── AiOrderSystemTest.php
@@ -69,6 +76,11 @@ AI_ORDER_DEBOUNCE_SECONDS=7
 AI_ORDER_AFTER_RESPONSE=true
 AI_ORDER_DRY_RUN=false
 AI_ORDER_RATE_LIMIT=20
+AI_ORDER_FOLLOWUP_MINUTES=5
+AI_ORDER_ACK_MINUTES=10
+AI_ORDER_ACK_REPLY=true
+AI_ORDER_ADMIN_GROUP_ID=
+AI_ORDER_ADMIN_NOTIFY=true
 GEMINI_MODEL=gemini-flash-latest
 CACHE_STORE=database
 ```
@@ -100,6 +112,12 @@ CACHE_STORE=database
   - `AI_ORDER_DEBOUNCE_SECONDS=7`.
   - `AI_ORDER_AFTER_RESPONSE=true`.
   - `AI_ORDER_DRY_RUN=false`.
+  - `AI_ORDER_RATE_LIMIT=20`.
+  - `AI_ORDER_FOLLOWUP_MINUTES=5`.
+  - `AI_ORDER_ACK_MINUTES=10`.
+  - `AI_ORDER_ACK_REPLY=true`.
+  - `AI_ORDER_ADMIN_GROUP_ID=` (ID grup WA kasir/admin toko).
+  - `AI_ORDER_ADMIN_NOTIFY=true`.
   - `CACHE_STORE=database` (atau `redis`).
 - [ ] **6. Reset Cache di Produksi**:
   ```bash
@@ -127,3 +145,4 @@ Bila terjadi kendala kritis pada sistem pemesanan AI:
    php artisan cache:clear
    ```
 3. Pesanan yang masuk melalui WhatsApp tetap dapat dilayani secara manual oleh admin dengan mengaktifkan kata kunci `"admin"` (Human Mode).
+

@@ -253,8 +253,30 @@ Seluruh pesan balasan ke pelanggan dihasilkan secara instan oleh `App\Services\A
 - Sistem membuka kembali draft dari data pesanan aktif terakhir dan mengirim prompt: *"Oke, ketik perubahannya aja, contoh: jadi 3 ball."*
 - Chat berikutnya (contoh: `"jadi 4 ball"`) di-merge ke draft, lalu sistem **memperbarui pesanan yang sama** (tidak membuat order duplikat).
 
-### Heuristik 5 Menit:
-- Jika dalam kurun waktu 5 menit setelah order tercatat pelanggan mengirim chat angka/ukuran (contoh: `"tambah 1 lagi"`, `"jadikan 2 ball"`), sistem mengenalinya sebagai revisi dari order terakhir.
+### Logika Pesan Susulan (Follow-up) & Jendela Ack:
+- **Jendela Pesan Susulan (`AI_ORDER_FOLLOWUP_MINUTES=5`)**:
+  - Jika pelanggan mengirim pesan penegasan/perubahan (misalnya *"yang 20kg"*, *"yg 15kg"*, *"2 ball"*, *"tambah 1"*) dalam 5 menit setelah order tercatat:
+    - **Nilai Sama**: Balas template pengakuan (*"Siap Kak, pesanan tetap {qty} ball {ukuran} 👍"*), database tidak diubah.
+    - **Nilai Beda**: Update order berjalan, cek stok, dan balas konfirmasi baru dengan reminder BATAL/UBAH.
+    - **Order Sudah Diproses Kasir (`processed`)**: Balas template penolakan (*"Pesanan sudah diproses kasir. Ketik \*admin\* untuk perubahan."*).
+- **Jendela Pengakuan / Ack (`AI_ORDER_ACK_MINUTES=10`)**:
+  - Kata sopan/pengakuan seperti *"oke"*, *"ok"*, *"siap"*, *"iya"*, *"makasih"*, *"terima kasih"*, *"sip"* dalam 10 menit setelah order tidak akan memicu pertanyaan ulang (*"Mau berapa ball?"*), melainkan dibalas santun (*"Siap Kak 👍"*) atau diam (`AI_ORDER_ACK_REPLY=true/false`).
+- **Di Luar Jendela (> 5 menit)**:
+  - Pesan ukuran saja seperti *"yang 20kg"* akan membuka alur pesanan baru secara wajar (menanyakan jumlah ball).
+
+### Notifikasi Grup WhatsApp Admin (Fonnte):
+Sistem dapat mengirimkan peringatan instan ke grup WhatsApp internal toko (`AI_ORDER_ADMIN_GROUP_ID`, format `...@g.us`):
+1. **Human Mode**: `🔔 [HUMAN MODE] Pelanggan {nama/nomor} meminta bantuan admin. Pesan: "{pesan}"`
+2. **Pelanggan Baru**: `🆕 [PELANGGAN BARU] {nama_toko} ({alamat}) order {qty} ball {ukuran}. Status: menunggu kasir.`
+3. **Stok Kurang**: `⚠️ [STOK KURANG] Permintaan {qty} ball {ukuran} dari {nama/nomor} melebihi sisa stok.` (angka stok riil dirahasiakan).
+4. **Kendala Gemini API**: `⚠️ [SISTEM] Gemini API mengalami kendala, sistem beralih ke regex parser.` (maksimal 1x per 10 menit).
+- Anti-spam: Setiap tipe notifikasi memiliki deduplikasi cache maksimal 1 kali per pelanggan per 15 menit.
+- Auto-discovery Group ID: Jika `AI_ORDER_ADMIN_GROUP_ID` kosong di `.env`, sistem otomatis mencatat ID grup yang masuk ke log staging 1x per 24 jam agar memudahkan konfigurasi.
+
+### Soft Reservation 24 Jam & Lazy-Expiry:
+- Hanya pesanan berstatus `validated` dalam kurun waktu 24 jam terakhir yang memotong alokasi stok sementara gudang.
+- Pesanan lama yang belum diselesaikan kasir lebih dari 24 jam otomatis diubah statusnya menjadi `expired` saat antrean atau stok dibaca (Lazy Expiry).
+- Kolom boolean `is_new_customer` pada tabel `temporary_orders` diset `true` hanya saat pelanggan baru mendaftar, memudahkan identifikasi kasir.
 
 ### Integrasi Share Location:
 - Fonnte mengirimkan koordinat pada field payload `location` (format `"latitude,longitude"`).
@@ -265,7 +287,7 @@ Seluruh pesan balasan ke pelanggan dihasilkan secara instan oleh `App\Services\A
 
 ## 10. Konfigurasi Environment (.env) & Variabel Baru
 
-Tambahkan variabel berikut ke file `.env`:
+Semua konfigurasi terpusat pada file `config/ai_order.php` dan dibaca menggunakan helper `config('ai_order.xxx')`. Tambahkan variabel berikut ke file `.env`:
 
 ```ini
 # ==============================================================
@@ -274,7 +296,7 @@ Tambahkan variabel berikut ke file `.env`:
 # Jeda debounce penggabungan bubble chat (detik). Default: 7
 AI_ORDER_DEBOUNCE_SECONDS=7
 
-# Menggunakan pola fastcgi_finish_request agar Fonnte tidak timeout. Default: true
+# Menggunakan pola fastcgi/litespeed_finish_request agar Fonnte tidak timeout. Default: true
 AI_ORDER_AFTER_RESPONSE=true
 
 # Mode pengujian tanpa mengirim WA riil ke pelanggan (true/false). Default: false
@@ -285,6 +307,21 @@ AI_ORDER_RATE_LIMIT=20
 
 # Token rahasia webhook opsional untuk verifikasi header/query Fonnte
 FONNTE_WEBHOOK_SECRET=
+
+# Jendela waktu pesan susulan penegasan/perubahan (menit). Default: 5
+AI_ORDER_FOLLOWUP_MINUTES=5
+
+# Jendela waktu pengakuan / ucapan terima kasih (menit). Default: 10
+AI_ORDER_ACK_MINUTES=10
+
+# Balasan bot terhadap ucapan terima kasih ("Siap Kak 👍"). Default: true
+AI_ORDER_ACK_REPLY=true
+
+# ID WhatsApp Group Admin untuk notifikasi sistem (format ...@g.us)
+AI_ORDER_ADMIN_GROUP_ID=
+
+# Aktifkan pengiriman notifikasi grup admin. Default: true
+AI_ORDER_ADMIN_NOTIFY=true
 
 # ==============================================================
 # GOOGLE GEMINI LLM
@@ -309,14 +346,14 @@ CACHE_STORE=database
 ## 11. Troubleshooting & Panduan Pengujian (Testing)
 
 ### Menjalankan Automated Feature Test:
-Test suite komprehensif mencakup 10 skenario pengujian utama berada di `tests/Feature/AiOrderSystemTest.php`:
+Test suite komprehensif mencakup 17 skenario pengujian utama berada di `tests/Feature/AiOrderSystemTest.php`:
 
 ```bash
 # Menjalankan seluruh skenario pengujian AI Order System
 php artisan test --filter=AiOrderSystemTest
 ```
 
-### 10 Skenario Pengujian yang Tercover:
+### 17 Skenario Pengujian yang Tercover:
 1. **Transkrip Nyata Pelanggan Baru**: Uji coba 4 bubble terpecah yang digabung rapi menjadi 1 pelanggan dan 1 pesanan tervalidasi.
 2. **Pesan Tunggal Lengkap (One-Step)**: Registrasi nama toko + alamat sekaligus order 1 langkah.
 3. **Pelanggan Lama**: Order langsung berstatus `validated` dan memuat instruksi BATAL/UBAH.
@@ -327,6 +364,13 @@ php artisan test --filter=AiOrderSystemTest
 8. **Share Location WhatsApp**: Koordinat latitude/longitude tersimpan ke draft dan alamat terisi.
 9. **Ketahanan Regex Fallback**: Pengujian ketika Gemini API error/timeout, pembedaan `"jam 10"` vs ukuran 10kg, dan penolakan ukuran tidak sah (`"yang 5"`).
 10. **Normalisasi Nomor Telepon**: Format `08...`, `628...`, dan `+628...` dipetakan ke record pelanggan tunggal.
+11. **Follow-up Ukuran Sama**: Balas "pesanan tetap {qty} ball {ukuran} 👍", database tidak berubah.
+12. **Follow-up Qty Berbeda**: Order berjalan ter-update kuantitasnya, memicu balasan konfirmasi baru.
+13. **Ack Ucapan Terima Kasih**: "oke" / "makasih" dibalas "Siap Kak 👍" tanpa menanyakan ulang jumlah ball.
+14. **Follow-up Di Luar Jendela (> 5 menit)**: Permintaan ukuran diproses sebagai pesanan baru (menanyakan jumlah ball).
+15. **Follow-up Order Processed**: Penolakan perubahan pesanan yang sudah diproses kasir.
+16. **Soft-reservation 24 Jam & Lazy-Expiry**: Pesan tervalidasi > 24 jam berubah menjadi `expired` dan alokasi stok dilepaskan.
+17. **Notifikasi Grup Admin**: Verifikasi pengiriman event Human Mode, Pelanggan Baru, dan Stok Kurang ke grup WhatsApp admin.
 
 ### Pemeriksaan Log Produksi & Staging:
 Bila terjadi kendala di server staging, periksa log menggunakan:

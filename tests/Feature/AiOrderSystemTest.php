@@ -27,6 +27,14 @@ class AiOrderSystemTest extends TestCase
 
         Config::set('cache.default', 'array');
         Config::set('services.ai_order.debounce_seconds', 0); // Non-aktifkan sleep saat testing
+        Config::set('ai_order.debounce_seconds', 0);
+        Config::set('ai_order.after_response', false);
+        Config::set('ai_order.dry_run', true);
+        Config::set('ai_order.followup_minutes', 5);
+        Config::set('ai_order.ack_minutes', 10);
+        Config::set('ai_order.ack_reply', true);
+        Config::set('ai_order.admin_notify', true);
+        Config::set('ai_order.admin_group_id', '120363028123456789@g.us');
         putenv('AI_ORDER_DEBOUNCE_SECONDS=0');
         putenv('AI_ORDER_AFTER_RESPONSE=false');
 
@@ -518,4 +526,294 @@ class AiOrderSystemTest extends TestCase
         $this->assertNotNull($found);
         $this->assertEquals($customer->id, $found->id);
     }
+
+    /**
+     * Skenario 11: Follow-up pesan ukuran saja dengan nilai sama -> balas 'pesanan tetap', DB tidak berubah
+     */
+    public function test_scenario_11_followup_same_size_reply_pesanan_tetap(): void
+    {
+        $sender = '6281211110001';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Cafe Ding',
+            'phone'       => $sender,
+            'address'     => 'Klari',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        $order = TemporaryOrder::create([
+            'customer_id'   => $customer->id,
+            'sender_phone'  => $sender,
+            'jumlah_ball'   => 1,
+            'ukuran_produk' => '20kg',
+            'status'        => 'validated',
+            'last_chat'     => 'pesen es 1',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Bubble susulan 10 detik kemudian: "yang 20kg"
+        $response = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'yang 20kg',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString('pesanan tetap 1 ball 20kg', $capturedReply);
+
+        // Database tidak berubah
+        $order->refresh();
+        $this->assertEquals(1, $order->jumlah_ball);
+        $this->assertEquals('20kg', $order->ukuran_produk);
+        $this->assertEquals('validated', $order->status);
+    }
+
+    /**
+     * Skenario 12: Follow-up pesan qty saja dengan nilai beda -> order berjalan ter-update
+     */
+    public function test_scenario_12_followup_different_qty_updates_order(): void
+    {
+        $sender = '6281211110002';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Warung Barokah',
+            'phone'       => $sender,
+            'address'     => 'Telukjambe',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        $order = TemporaryOrder::create([
+            'customer_id'   => $customer->id,
+            'sender_phone'  => $sender,
+            'jumlah_ball'   => 1,
+            'ukuran_produk' => '20kg',
+            'status'        => 'validated',
+            'last_chat'     => 'pesen 1 ball 20kg',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Follow-up: "jadi 2 ball"
+        $response = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'jadi 2 ball',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString('2 ball 20kg', $capturedReply);
+
+        // Order ter-update di database
+        $order->refresh();
+        $this->assertEquals(2, $order->jumlah_ball);
+        $this->assertEquals('20kg', $order->ukuran_produk);
+    }
+
+    /**
+     * Skenario 13: Ack 'oke' / 'makasih' dalam jendela ack -> balas 'Siap Kak' tanpa tanya qty
+     */
+    public function test_scenario_13_ack_within_window_replies_siap_kak(): void
+    {
+        $sender = '6281211110003';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Kedai Kopi',
+            'phone'       => $sender,
+            'address'     => 'Galuh Mas',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        TemporaryOrder::create([
+            'customer_id'   => $customer->id,
+            'sender_phone'  => $sender,
+            'jumlah_ball'   => 2,
+            'ukuran_produk' => '20kg',
+            'status'        => 'validated',
+            'last_chat'     => 'order 2 ball 20kg',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Kirim ack: "makasih min"
+        $response = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'makasih min',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertEquals(ReplyTemplates::render('ack'), trim($capturedReply));
+        $this->assertStringNotContainsString('Mau berapa ball', $capturedReply);
+    }
+
+    /**
+     * Skenario 14: Follow-up lewat dari jendela -> mulai order baru (atau tanya qty normal)
+     */
+    public function test_scenario_14_followup_outside_window_asks_qty(): void
+    {
+        $sender = '6281211110004';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Depot Air',
+            'phone'       => $sender,
+            'address'     => 'Cikampek',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        // Order yang dibuat 15 menit lalu (di luar jendela followup 5 menit)
+        $order = TemporaryOrder::create([
+            'customer_id'   => $customer->id,
+            'sender_phone'  => $sender,
+            'jumlah_ball'   => 1,
+            'ukuran_produk' => '20kg',
+            'status'        => 'validated',
+            'last_chat'     => 'order 1 ball 20kg',
+        ]);
+        $order->created_at = now()->subMinutes(15);
+        $order->updated_at = now()->subMinutes(15);
+        $order->save();
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Pesan ukuran saja "yang 20kg" setelah 15 menit -> tanya qty (bukan update order lama)
+        $response = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'yang 20kg',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString('Mau berapa ball', $capturedReply);
+    }
+
+    /**
+     * Skenario 15: Follow-up pada order yang sudah 'processed' -> template already_processed
+     */
+    public function test_scenario_15_followup_on_processed_order_returns_already_processed(): void
+    {
+        $sender = '6281211110005';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Kantin RS',
+            'phone'       => $sender,
+            'address'     => 'Karawang Barat',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        TemporaryOrder::create([
+            'customer_id'   => $customer->id,
+            'sender_phone'  => $sender,
+            'jumlah_ball'   => 1,
+            'ukuran_produk' => '20kg',
+            'status'        => 'processed', // Sudah diproses kasir!
+            'last_chat'     => 'order 1 ball',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Pelanggan coba ubah: "jadinya 2 ball"
+        $response = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'jadinya 2 ball',
+        ]);
+
+        $response->assertStatus(200);
+        $this->assertStringContainsString('sudah diproses', $capturedReply);
+    }
+
+    /**
+     * Skenario 16: Soft-reservation 24 jam: order validated > 24 jam di-lazy-expire
+     */
+    public function test_scenario_16_soft_reservation_lazy_expires_orders_over_24h(): void
+    {
+        $sender = '6281211110006';
+        $orderOld = TemporaryOrder::create([
+            'customer_id'   => 1,
+            'sender_phone'  => $sender,
+            'jumlah_ball'   => 10,
+            'ukuran_produk' => '20kg',
+            'status'        => 'validated',
+        ]);
+        $orderOld->created_at = now()->subHours(25);
+        $orderOld->save();
+
+        $orderRecent = TemporaryOrder::create([
+            'customer_id'   => 1,
+            'sender_phone'  => $sender,
+            'jumlah_ball'   => 5,
+            'ukuran_produk' => '20kg',
+            'status'        => 'validated',
+        ]);
+
+        // Jalankan lazy-expire
+        $expiredCount = TemporaryOrder::lazyExpireOldOrders();
+        $this->assertEquals(1, $expiredCount);
+
+        $orderOld->refresh();
+        $this->assertEquals('expired', $orderOld->status);
+
+        $orderRecent->refresh();
+        $this->assertEquals('validated', $orderRecent->status);
+
+        // Service hanya menghitung order validated dalam 24 jam terakhir (5 ball)
+        $llmService = app(\App\Services\Ai\LlmOrderService::class);
+        $stock = $llmService->getAvailableStockWithReservation('20kg');
+        $this->assertEquals(5, $stock['reserved']);
+    }
+
+    /**
+     * Skenario 17: Notifikasi grup admin terkirim saat human mode / pelanggan baru / stok kurang
+     */
+    public function test_scenario_17_admin_group_notifier_events(): void
+    {
+        $capturedGroupMessages = [];
+        $this->mockFonnteService(function ($target, $message) use (&$capturedGroupMessages) {
+            $capturedGroupMessages[] = ['target' => $target, 'message' => $message];
+            return ['status' => true];
+        });
+
+        $notifier = app(\App\Services\Ai\AdminGroupNotifier::class);
+        Config::set('ai_order.dry_run', false);
+
+        // 1. Human Mode
+        $notifier->notifyHumanMode('Toko Kopi', '628123456789', 'admin mau nanya');
+        $this->assertNotEmpty($capturedGroupMessages);
+        $this->assertStringContainsString('[HUMAN MODE]', $capturedGroupMessages[0]['message']);
+
+        // 2. Pelanggan Baru Order
+        $capturedGroupMessages = [];
+        $notifier->notifyNewCustomerOrder('Kedai Baru', 'Jl Mangga', 2, '20kg', '628123456789');
+        $this->assertNotEmpty($capturedGroupMessages);
+        $this->assertStringContainsString('[PELANGGAN BARU]', $capturedGroupMessages[0]['message']);
+
+        // 3. Stok Kurang
+        $capturedGroupMessages = [];
+        $notifier->notifyStockInsufficient('Toko Kopi', '628123456789', 500, '20kg');
+        $this->assertNotEmpty($capturedGroupMessages);
+        $this->assertStringContainsString('[STOK KURANG]', $capturedGroupMessages[0]['message']);
+        $this->assertStringNotContainsString('100', $capturedGroupMessages[0]['message']); // Angka stok riil tidak bocor
+    }
 }
+
