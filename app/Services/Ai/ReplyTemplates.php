@@ -26,6 +26,14 @@ class ReplyTemplates
 
     public const ORDER_IN_NEW = "✅ Terdaftar & pesanan masuk: {qty} ball {ukuran} -> {nama_toko}, {alamat}.\nSalah? Balas *BATAL* atau *UBAH*.";
 
+    public const ORDER_IN_MULTIPLE = "✅ Pesanan ke-{index} masuk: {qty} ball {ukuran}{jam} (pesanan sebelumnya tetap ada).\nSalah? Balas *BATAL* atau *UBAH*.";
+
+    public const ORDER_UPDATED = "✅ Diubah: {old_qty} ball -> {new_qty} ball {ukuran}.\nSalah? Balas *BATAL* atau *UBAH*.";
+
+    public const LOCATION_NEED_NAME = "Lokasi diterima 📍 Nama tokonya apa Kak?";
+
+    public const LOCATION_NEED_QTY_UKURAN = "Lokasi diterima 📍 Mau pesan berapa ball & ukuran berapa?";
+
     public const ORDER_IN_KASBON = "Ada kasbon Rp {nominal}, titip ke supir saat pengiriman ya.";
 
     public const OUT_OF_STOCK = "Maaf Kak, stok ukuran itu belum cukup untuk jumlah segitu. Kurangi jumlahnya atau ketik *admin*.";
@@ -55,9 +63,13 @@ class ReplyTemplates
             'need_qty'           => self::NEED_QTY,
             'need_ukuran'        => self::NEED_UKURAN,
             'unknown_ukuran'     => self::UNKNOWN_UKURAN,
-            'order_in_existing'  => self::ORDER_IN_EXISTING,
-            'order_in_new'       => self::ORDER_IN_NEW,
-            'order_in_kasbon'    => self::ORDER_IN_KASBON,
+            'order_in_existing'        => self::ORDER_IN_EXISTING,
+            'order_in_new'             => self::ORDER_IN_NEW,
+            'order_in_multiple'        => self::ORDER_IN_MULTIPLE,
+            'order_updated'            => self::ORDER_UPDATED,
+            'location_need_name'       => self::LOCATION_NEED_NAME,
+            'location_need_qty_ukuran' => self::LOCATION_NEED_QTY_UKURAN,
+            'order_in_kasbon'          => self::ORDER_IN_KASBON,
             'out_of_stock'       => self::OUT_OF_STOCK,
             'cancelled'          => self::CANCELLED,
             'already_processed'  => self::ALREADY_PROCESSED,
@@ -137,6 +149,40 @@ class ReplyTemplates
         }
 
         return $base;
+    }
+
+    /**
+     * Helper untuk balasan pembaruan pesanan (UBAH).
+     */
+    public static function renderOrderUpdated(int $oldQty, int $newQty, string $ukuran, ?string $oldUkuran = null): string
+    {
+        if ($oldUkuran && $oldUkuran !== $ukuran) {
+            $template = "✅ Diubah: {old_qty} ball {old_ukuran} -> {new_qty} ball {ukuran}.\nSalah? Balas *BATAL* atau *UBAH*.";
+            return str_replace(
+                ['{old_qty}', '{old_ukuran}', '{new_qty}', '{ukuran}'],
+                [(string) $oldQty, $oldUkuran, (string) $newQty, $ukuran],
+                $template
+            );
+        }
+
+        return self::render('order_updated', [
+            'old_qty' => $oldQty,
+            'new_qty' => $newQty,
+            'ukuran'  => $ukuran,
+        ]);
+    }
+
+    /**
+     * Helper untuk balasan pesanan ke-2 dan seterusnya hari ini (pesanan terpisah).
+     */
+    public static function renderOrderInMultiple(int $index, int $qty, string $ukuran, ?string $jam = null): string
+    {
+        return self::render('order_in_multiple', [
+            'index'  => $index,
+            'qty'    => $qty,
+            'ukuran' => $ukuran,
+            'jam'    => $jam,
+        ]);
     }
 }
 
