@@ -103,3 +103,4 @@ class PhoneNumberHelper
         return $prefix . str_repeat('*', min(4, $middleLen)) . $suffix;
     }
 }
+

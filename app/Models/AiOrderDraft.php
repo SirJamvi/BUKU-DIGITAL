@@ -166,3 +166,4 @@ class AiOrderDraft extends Model
         return $hasName && $hasAddress;
     }
 }
+

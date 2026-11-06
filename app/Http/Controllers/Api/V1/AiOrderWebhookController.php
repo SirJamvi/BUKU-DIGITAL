@@ -40,13 +40,14 @@ class AiOrderWebhookController extends Controller
             || str_ends_with(strtolower($senderRaw), '@g.us');
 
         if ($isGroup) {
+            \App\Services\Ai\AdminGroupNotifier::logDiscoveredGroupOnce($senderRaw);
             return response()->json(['status' => 'ignored', 'reason' => 'group'], 200);
         }
 
         // ==============================================================
         // 2. VERIFIKASI WEBHOOK SECRET (OPSIONAL)
         // ==============================================================
-        $expectedSecret = env('FONNTE_WEBHOOK_SECRET');
+        $expectedSecret = config('ai_order.webhook_secret');
         if (!empty($expectedSecret)) {
             $providedSecret = $request->header('X-Fonnte-Secret')
                 ?? $request->header('Authorization')
@@ -101,12 +102,14 @@ class AiOrderWebhookController extends Controller
             // ==============================================================
             [$token, $debounceSeconds] = AiOrderDebouncer::bufferMessage($sender, $message, $payload);
 
-            $useAfterResponse = filter_var(env('AI_ORDER_AFTER_RESPONSE', true), FILTER_VALIDATE_BOOLEAN);
+            $useAfterResponse = config('ai_order.after_response', true);
+            $supportsFastCgi = function_exists('fastcgi_finish_request');
+            $supportsLiteSpeed = function_exists('litespeed_finish_request');
 
             // ==============================================================
             // 7. STRATEGI AFTER-RESPONSE vs SYNCHRONOUS
             // ==============================================================
-            if ($useAfterResponse && function_exists('fastcgi_finish_request')) {
+            if ($useAfterResponse && ($supportsFastCgi || $supportsLiteSpeed)) {
                 // Kirim HTTP 200 langsung ke Fonnte secepat kilat
                 $response = response()->json([
                     'status'  => 'accepted',
@@ -114,7 +117,11 @@ class AiOrderWebhookController extends Controller
                 ], 200);
 
                 $response->send();
-                fastcgi_finish_request();
+                if ($supportsFastCgi) {
+                    fastcgi_finish_request();
+                } elseif ($supportsLiteSpeed) {
+                    litespeed_finish_request();
+                }
 
                 // Eksekusi penundaan debounce pada worker PHP yang sama
                 $this->executeDebounceWaitAndProcess($sender, $token, $debounceSeconds);
@@ -186,6 +193,13 @@ class AiOrderWebhookController extends Controller
      */
     public function getValidatedOrders(Request $request): JsonResponse
     {
+        // Lazy-expiry pesanan validated > 24 jam menjadi expired
+        try {
+            TemporaryOrder::lazyExpireOldOrders();
+        } catch (\Throwable $e) {
+            Log::warning("[AiOrderWebhook] Gagal menjalankan lazyExpireOldOrders: " . $e->getMessage());
+        }
+
         $orders = TemporaryOrder::where('status', 'validated')
             ->with(['customer:id,name,phone,address,created_at'])
             ->latest('updated_at')
@@ -210,7 +224,7 @@ class AiOrderWebhookController extends Controller
                 }
 
                 $mapUrl = ($lat && $lng) ? "https://www.google.com/maps?q={$lat},{$lng}" : null;
-                $isNewCustomer = ($order->customer_id == 108 || ($order->customer && $order->customer->created_at && $order->customer->created_at->isToday()));
+                $isNewCustomer = (bool) ($order->is_new_customer ?? ($order->customer_id == 108 || ($order->customer && $order->customer->created_at && $order->customer->created_at->isToday())));
 
                 return [
                     'id'                      => $order->id,

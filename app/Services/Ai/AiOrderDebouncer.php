@@ -45,7 +45,7 @@ class AiOrderDebouncer
             return 2;
         }
 
-        return (int) config('services.ai_order.debounce_seconds', env('AI_ORDER_DEBOUNCE_SECONDS', 7));
+        return (int) config('ai_order.debounce_seconds', 7);
     }
 
     /**
@@ -135,3 +135,4 @@ class AiOrderDebouncer
         ];
     }
 }
+

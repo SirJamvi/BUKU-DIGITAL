@@ -72,9 +72,13 @@ class LlmOrderService
                 return $this->heuristicFallbackParser($combinedMessage, $currentDraft, $awaiting, $isNewCustomer);
             }
 
+            Log::info("[LlmOrderService] Ekstraksi slot via Gemini API sukses.");
             return $this->normalizeParsedSlots($parsed, $combinedMessage, $awaiting);
         } catch (\Throwable $e) {
             Log::error("[LlmOrderService] Gagal memanggil Gemini API ({$e->getMessage()}), beralih ke fallback.");
+            try {
+                app(AdminGroupNotifier::class)->notifyGeminiFailure($e->getMessage());
+            } catch (\Throwable $ignored) {}
             return $this->heuristicFallbackParser($combinedMessage, $currentDraft, $awaiting, $isNewCustomer);
         }
     }
@@ -270,6 +274,7 @@ PROMPT;
         ?string $awaiting = null,
         bool $isNewCustomer = false
     ): array {
+        Log::info("[LlmOrderService] Menjalankan heuristic regex fallback parser.");
         $text = strtolower(trim($chat));
 
         // 1. Cek ukuran tidak dikenal (misal "yang 5")
@@ -413,10 +418,17 @@ PROMPT;
             Log::warning("[LlmOrderService] Gagal membaca stok produk {$ukuran}: " . $e->getMessage());
         }
 
-        // Hitung total ball order berstatus 'validated' yang belum dipindahkan ke transaksi kasir hari ini (Soft Reservation)
+        // Lazy-expiry pesanan validated > 24 jam menjadi expired
+        try {
+            TemporaryOrder::lazyExpireOldOrders();
+        } catch (\Throwable $e) {
+            Log::warning("[LlmOrderService] Gagal menjalankan lazyExpireOldOrders: " . $e->getMessage());
+        }
+
+        // Hitung total ball order berstatus 'validated' dalam 24 jam terakhir (Soft Reservation)
         $reserved = (int) TemporaryOrder::where('status', 'validated')
             ->where('ukuran_produk', $ukuran)
-            ->whereDate('created_at', Carbon::today())
+            ->where('created_at', '>=', now()->subHours(24))
             ->sum('jumlah_ball');
 
         $availableStock = max(0, $actualStock - $reserved);

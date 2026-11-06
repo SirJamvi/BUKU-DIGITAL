@@ -8,6 +8,14 @@ class ReplyTemplates
 
     public const NEED_NAME_ADDRESS = "Siap, {qty} ball {ukuran}. Tinggal nama toko & alamat (atau share lokasi) ya.";
 
+    public const NEED_NAME_ONLY = "Siap, {qty} ball {ukuran}. Tinggal nama tokonya ya.";
+
+    public const NEED_ADDRESS_ONLY = "Siap, {qty} ball {ukuran}. Tinggal alamat (atau share lokasi) ya.";
+
+    public const FOLLOWUP_UNCHANGED = "Siap Kak, pesanan tetap {qty} ball {ukuran} 👍";
+
+    public const ACK = "Siap Kak 👍";
+
     public const NEED_QTY = "Mau berapa ball? Ukuran 20 / 15 / 10 kg?";
 
     public const NEED_UKURAN = "Ukuran berapa Kak? 20 / 15 / 10 kg?";
@@ -38,21 +46,25 @@ class ReplyTemplates
     public static function render(string $key, array $params = []): string
     {
         $template = match ($key) {
-            'greeting'          => self::GREETING,
-            'need_name_address' => self::NEED_NAME_ADDRESS,
-            'need_qty'          => self::NEED_QTY,
-            'need_ukuran'       => self::NEED_UKURAN,
-            'unknown_ukuran'    => self::UNKNOWN_UKURAN,
-            'order_in_existing' => self::ORDER_IN_EXISTING,
-            'order_in_new'      => self::ORDER_IN_NEW,
-            'order_in_kasbon'   => self::ORDER_IN_KASBON,
-            'out_of_stock'      => self::OUT_OF_STOCK,
-            'cancelled'         => self::CANCELLED,
-            'already_processed' => self::ALREADY_PROCESSED,
-            'location_only'     => self::LOCATION_ONLY,
-            'unsupported_media' => self::UNSUPPORTED_MEDIA,
-            'ubah_prompt'       => self::UBAH_PROMPT,
-            default             => self::GREETING,
+            'greeting'           => self::GREETING,
+            'need_name_address'  => self::NEED_NAME_ADDRESS,
+            'need_name_only'     => self::NEED_NAME_ONLY,
+            'need_address_only'  => self::NEED_ADDRESS_ONLY,
+            'followup_unchanged' => self::FOLLOWUP_UNCHANGED,
+            'ack'                => self::ACK,
+            'need_qty'           => self::NEED_QTY,
+            'need_ukuran'        => self::NEED_UKURAN,
+            'unknown_ukuran'     => self::UNKNOWN_UKURAN,
+            'order_in_existing'  => self::ORDER_IN_EXISTING,
+            'order_in_new'       => self::ORDER_IN_NEW,
+            'order_in_kasbon'    => self::ORDER_IN_KASBON,
+            'out_of_stock'       => self::OUT_OF_STOCK,
+            'cancelled'          => self::CANCELLED,
+            'already_processed'  => self::ALREADY_PROCESSED,
+            'location_only'      => self::LOCATION_ONLY,
+            'unsupported_media'  => self::UNSUPPORTED_MEDIA,
+            'ubah_prompt'        => self::UBAH_PROMPT,
+            default              => self::GREETING,
         };
 
         // Format khusus jam pengiriman untuk template order_in_existing
@@ -72,6 +84,25 @@ class ReplyTemplates
         }
 
         return trim($template);
+    }
+
+    /**
+     * Helper adaptif untuk meminta nama toko dan/atau alamat pelanggan baru.
+     */
+    public static function renderNeedNameAddress(int $qty, string $ukuran, bool $hasName = false, bool $hasAddress = false): string
+    {
+        if ($hasName && !$hasAddress) {
+            $key = 'need_address_only';
+        } elseif (!$hasName && $hasAddress) {
+            $key = 'need_name_only';
+        } else {
+            $key = 'need_name_address';
+        }
+
+        return self::render($key, [
+            'qty'    => $qty,
+            'ukuran' => $ukuran,
+        ]);
     }
 
     /**
@@ -108,3 +139,4 @@ class ReplyTemplates
         return $base;
     }
 }
+

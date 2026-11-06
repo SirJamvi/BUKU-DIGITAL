@@ -24,3 +24,4 @@ return new class extends Migration
         DB::statement("ALTER TABLE temporary_orders MODIFY COLUMN status ENUM('pending', 'validated', 'cancelled') NOT NULL DEFAULT 'pending'");
     }
 };
+
