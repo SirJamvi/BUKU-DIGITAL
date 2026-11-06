@@ -165,8 +165,8 @@ PROMPT;
             ],
         ];
 
-        // Timeout 8 detik dengan 1x retry (delay 100ms)
-        $response = Http::timeout(8)
+        // Timeout 12 detik dengan 1x retry (delay 100ms)
+        $response = Http::timeout(12)
             ->retry(1, 100)
             ->post($url, $payload);
 
@@ -366,12 +366,27 @@ PROMPT;
         $namaToko = null;
         $alamat = null;
         if ($isNewCustomer || $awaiting === 'nama_alamat') {
-            // Cek kata kunci toko/cafe
-            if (preg_match('/(?:toko|cafe|kafe|warung|kedai|resto|depot)\s+([^,\n\.]+)/i', $chat, $tm)) {
+            // Cek kata kunci toko/cafe/caffe/resto
+            if (preg_match('/(?:toko|cafe|kafe|caffe|kedai|warung|resto|depot|kopi)\s+([^,\n\.]+)/i', $chat, $tm)) {
                 $namaToko = trim(substr($tm[0], 0, 100));
             }
-            if (preg_match('/(?:jl\.?|jalan|alamat)\s+([^,\n]+)/i', $chat, $am)) {
+            if (preg_match('/(?:jl\.?|jalan|alamat|di\s+daerah|di)\s+([^,\n]+)/i', $chat, $am)) {
                 $alamat = trim(substr($am[0], 0, 255));
+            }
+
+            // Jika sedang awaiting nama_alamat dan dipisahkan koma atau baris baru: "Nama Toko, Alamat"
+            if (empty($namaToko) && empty($alamat) && $awaiting === 'nama_alamat') {
+                if (str_contains($chat, ',')) {
+                    $parts = explode(',', $chat, 2);
+                    $namaToko = trim($parts[0]);
+                    $alamat = trim($parts[1]);
+                } elseif (!preg_match('/[0-9]/', $chat) && strlen(trim($chat)) > 2 && strlen(trim($chat)) <= 40) {
+                    if (str_starts_with(strtolower(trim($chat)), 'di ')) {
+                        $alamat = trim($chat);
+                    } else {
+                        $namaToko = trim($chat);
+                    }
+                }
             }
         }
 

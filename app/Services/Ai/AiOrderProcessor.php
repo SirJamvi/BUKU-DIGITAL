@@ -163,7 +163,9 @@ class AiOrderProcessor
         // ==============================================================
         // 7. PENANGANAN KATA ACK / TERIMA KASIH (Jendela: AI_ORDER_ACK_MINUTES)
         // ==============================================================
-        $ackPattern = '/^(?:oke|ok|siap|iya|ya|iya\s+pak|iya\s+kak|siap\s+kak|siap\s+pak|ok\s+kak|oke\s+kak|makasih|makasi|terima\s*kasih|terimakasih|sip|thanks|thx)(?:\s*(?:kak|pak|min|admin|ya|mas|bang|gan))?[\.!\s]*$/i';
+        $ackWords = 'oke|ok|siap|iya|ya|sip|makasih|makasi|terima\s*kasih|terimakasih|thanks|thx';
+        $honorifics = 'kak|pak|min|admin|ya|mas|bang|gan';
+        $ackPattern = "/^(?:(?:{$ackWords})\s*)+(?:(?:{$honorifics})\s*)*[\.!\s]*$/i";
         if (preg_match($ackPattern, $textLower)) {
             $ackMinutes = (int) config('ai_order.ack_minutes', 10);
             $hasRecentOrder = $latestOrder &&
