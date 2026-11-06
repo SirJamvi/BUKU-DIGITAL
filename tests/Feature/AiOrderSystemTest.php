@@ -930,5 +930,33 @@ class AiOrderSystemTest extends TestCase
         $this->assertEquals('pending_more_bubbles', $result['status']);
         $this->assertEmpty($capturedReply);
     }
+
+    /**
+     * Skenario 21: FonnteService menjaga target grup WhatsApp (@g.us) agar tidak terhapus regex
+     */
+    public function test_scenario_21_fonnte_service_preserves_group_jid(): void
+    {
+        $capturedPayloads = [];
+        Http::fake([
+            'https://api.fonnte.com/*' => function ($request) use (&$capturedPayloads) {
+                $capturedPayloads[] = $request->data();
+                return Http::response(['status' => true], 200);
+            },
+        ]);
+
+        Config::set('services.fonnte.token', 'dummy-token');
+        $fonnteService = app(\App\Services\Whatsapp\FonnteService::class);
+
+        // 1. Target grup WhatsApp (mengandung @g.us)
+        $fonnteService->sendMessage('120363423987962193@g.us', 'Halo grup admin');
+        $this->assertNotEmpty($capturedPayloads);
+        $this->assertEquals('120363423987962193@g.us', $capturedPayloads[0]['target']);
+
+        // 2. Target nomor biasa dengan strip/spasi
+        $capturedPayloads = [];
+        $fonnteService->sendMessage('0812-3456-7890', 'Halo personal');
+        $this->assertNotEmpty($capturedPayloads);
+        $this->assertEquals('081234567890', $capturedPayloads[0]['target']);
+    }
 }
 

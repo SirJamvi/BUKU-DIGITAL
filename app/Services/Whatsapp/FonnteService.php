@@ -35,7 +35,13 @@ class FonnteService
         }
 
         try {
-            $cleanTarget = preg_replace('/[^0-9]/', '', $target);
+            if (!str_contains($target, '@g.us')) {
+                // normalisasi nomor biasa (hapus karakter non-angka)
+                $cleanTarget = preg_replace('/[^0-9]/', '', $target);
+            } else {
+                // Target grup WhatsApp: pertahankan format JID grup (termasuk akhiran @g.us)
+                $cleanTarget = trim($target);
+            }
 
             $response = Http::withHeaders([
                 'Authorization' => $this->token,
@@ -47,12 +53,14 @@ class FonnteService
             ]);
 
             $result = $response->json() ?? [];
+            $isSuccess = $response->successful() && ($result['status'] ?? true);
+
             Log::info("[FonnteService] Kirim WA ke {$cleanTarget} - Status HTTP: {$response->status()}", [
                 'response' => $result,
             ]);
 
             return [
-                'status'   => $response->successful(),
+                'status'   => $isSuccess,
                 'response' => $result,
             ];
         } catch (\Throwable $e) {

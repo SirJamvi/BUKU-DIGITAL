@@ -22,11 +22,16 @@ class AdminGroupNotifier
     public function sendToAdminGroup(string $message, string $eventType, ?string $sender = null): bool
     {
         $enabled = config('ai_order.admin_notify', true);
-        $groupId = config('ai_order.admin_group_id', '');
+        $groupId = trim(config('ai_order.admin_group_id', ''));
 
         if (!$enabled || empty($groupId)) {
             Log::info("[AdminGroupNotifier] Notifikasi admin dilewati: enabled=" . ($enabled ? 'true' : 'false') . ", group=" . ($groupId ?: 'KOSONG'));
             return false;
+        }
+
+        // Pastikan akhiran @g.us ada jika format berupa numeric WhatsApp Group JID
+        if (!str_contains($groupId, '@g.us') && (str_starts_with($groupId, '120') || strlen($groupId) > 15)) {
+            $groupId .= '@g.us';
         }
 
         // Anti-spam deduplikasi per tipe per pengirim (15 menit)
@@ -47,6 +52,11 @@ class AdminGroupNotifier
 
         try {
             $result = $this->fonnteService->sendMessage($groupId, $message);
+            if (!($result['status'] ?? false)) {
+                $reason = $result['response']['reason'] ?? ($result['error'] ?? 'Pengiriman Fonnte ditolak/gagal');
+                Log::warning("[AdminGroupNotifier] Gagal mengirim notifikasi ke grup {$groupId}: {$reason}");
+                return false;
+            }
             Log::info("[AdminGroupNotifier] Berhasil kirim ke grup {$groupId}: {$eventType}");
             return true;
         } catch (\Throwable $e) {
