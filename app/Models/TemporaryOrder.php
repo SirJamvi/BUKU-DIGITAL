@@ -21,18 +21,30 @@ class TemporaryOrder extends Model
         'harga_asumsi',
         'total_harga',
         'status',
+        'is_new_customer',
         'last_chat',
         'transaction_id',
     ];
 
     protected $casts = [
-        'jumlah_ball'   => 'integer',
-        'delivery_time' => 'datetime',
-        'harga_asumsi'  => 'decimal:2',
-        'total_harga'   => 'decimal:2',
-        'created_at'    => 'datetime',
-        'updated_at'    => 'datetime',
+        'jumlah_ball'     => 'integer',
+        'is_new_customer' => 'boolean',
+        'delivery_time'   => 'datetime',
+        'harga_asumsi'    => 'decimal:2',
+        'total_harga'     => 'decimal:2',
+        'created_at'      => 'datetime',
+        'updated_at'      => 'datetime',
     ];
+
+    /**
+     * Lazy-expiry: Menandai pesanan berstatus 'validated' yang lebih lama dari 24 jam menjadi 'expired'.
+     */
+    public static function lazyExpireOldOrders(): int
+    {
+        return self::where('status', 'validated')
+            ->where('created_at', '<', now()->subHours(24))
+            ->update(['status' => 'expired']);
+    }
 
     /**
      * Relasi ke Pelanggan di tabel customers
