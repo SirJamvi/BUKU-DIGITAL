@@ -13,6 +13,7 @@ use App\Models\WaOrder;
 use Carbon\Carbon;
 use App\Services\Ai\LlmOrderService;
 use App\Services\Whatsapp\FonnteService;
+use App\Services\Whatsapp\PhoneNumberHelper;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -36,52 +37,76 @@ class AiOrderWebhookController extends Controller
     public function handle(Request $request): JsonResponse
     {
         $payload = $request->all();
-        Log::info('[AiOrderWebhook] Webhook Fonnte Masuk. Payload: ' . json_encode($payload));
 
         // ==============================================================
-        // ATOMIC CACHE LOCK (ANTI-DUPLIKASI WEBHOOK RETRY FONNTE)
+        // 1. FILTRASI PESAN GRUP WHATSAPP (sebelum lock, DB, atau log berat)
         // ==============================================================
-        $timestamp = $payload['timestamp'] ?? time();
-        $senderRaw = $payload['sender'] ?? $payload['from'] ?? '';
-        $messageId = $timestamp . '_' . $senderRaw;
+        $senderRaw = (string) ($payload['sender'] ?? $payload['from'] ?? $payload['phone'] ?? '');
+        $isGroup = (isset($payload['isgroup']) && ($payload['isgroup'] === true || $payload['isgroup'] === 'true' || $payload['isgroup'] == 1))
+            || (isset($payload['isGroup']) && ($payload['isGroup'] === true || $payload['isGroup'] === 'true' || $payload['isGroup'] == 1))
+            || str_ends_with(strtolower($senderRaw), '@g.us');
 
-        // Cache::add bersifat atomik. Hanya request pertama yang berhasil (return true).
-        // Request retry dari Fonnte akan gagal (return false) dan langsung dikembalikan.
-        if (!Cache::add('lock_msg_' . $messageId, true, now()->addMinutes(5))) {
-            Log::info("[AiOrderWebhook] Duplicate webhook request ignored: {$messageId}");
-            return response()->json(['status' => 'ignored', 'message' => 'Duplicate webhook request']);
+        if ($isGroup) {
+            return response()->json(['status' => 'ignored', 'reason' => 'group'], 200);
         }
 
-        // Abaikan pesan dari Grup WhatsApp
-        if (
-            (isset($payload['isgroup']) && ($payload['isgroup'] === true || $payload['isgroup'] === 'true' || $payload['isgroup'] == 1)) ||
-            (isset($payload['isGroup']) && ($payload['isGroup'] === true || $payload['isGroup'] === 'true' || $payload['isGroup'] == 1)) ||
-            $request->input('isgroup') == true ||
-            $request->input('isgroup') === 'true'
-        ) {
-            return response()->json(['message' => 'Group message ignored'], 200);
+        // ==============================================================
+        // 2. VERIFIKASI WEBHOOK SECRET (OPSIONAL)
+        // ==============================================================
+        $expectedSecret = env('FONNTE_WEBHOOK_SECRET');
+        if (!empty($expectedSecret)) {
+            $providedSecret = $request->header('X-Fonnte-Secret')
+                ?? $request->header('Authorization')
+                ?? $request->query('secret');
+            if ($providedSecret !== $expectedSecret && $providedSecret !== 'Bearer ' . $expectedSecret) {
+                return response()->json(['status' => 'unauthorized', 'message' => 'Invalid webhook secret'], 401);
+            }
         }
 
-        $sender = $request->input('sender') ?? $request->input('from') ?? $request->input('phone');
-        $message = trim((string) ($request->input('message') ?? $request->input('text') ?? ''));
+        $message = trim((string) ($payload['message'] ?? $payload['text'] ?? ''));
 
-        // Ekstrak nama sender dari payload
-        $customerName = $payload['name'] ?? $payload['pushname'] ?? 'Kak';
-        if (empty(trim($customerName))) {
-            $customerName = 'Kak';
+        // ==============================================================
+        // 3. LOG RINGKAS & AMAN (Masking 4 Digit Tengah)
+        // ==============================================================
+        $msgType = !empty($payload['location']) ? 'location' : ($message === 'non-text message' ? 'media' : (empty($message) ? 'empty' : 'text'));
+        $maskedSender = PhoneNumberHelper::mask($senderRaw);
+        Log::info("[AiOrderWebhook] Masuk: sender={$maskedSender}, len=" . strlen($message) . ", type={$msgType}");
+
+        // ==============================================================
+        // 4. ATOMIC CACHE LOCK (ANTI-DUPLIKASI WEBHOOK RETRY FONNTE)
+        // ==============================================================
+        $msgId = $payload['id'] ?? $payload['inboxid'] ?? null;
+        if (empty($msgId)) {
+            $timestamp = $payload['timestamp'] ?? '';
+            $msgId = hash('sha256', $senderRaw . '_' . $timestamp . '_' . $message);
         }
 
-        // 2. Abaikan pesan media/VN jika non-text message
-        if ($message === 'non-text message' || $message === 'non-button message') {
-            return response()->json(['status' => 'ignored', 'message' => 'Pesan media tidak didukung oleh konfigurasi saat ini'], 200);
+        $lockKey = 'lock_msg_' . $msgId;
+        if (!Cache::add($lockKey, true, now()->addMinutes(5))) {
+            Log::info("[AiOrderWebhook] Duplicate webhook request ignored: {$msgId}");
+            return response()->json(['status' => 'ignored', 'message' => 'Duplicate webhook request'], 200);
         }
 
-        if (empty($sender) || empty($message)) {
-            return response()->json([
-                'status'  => 'ignored',
-                'message' => 'Pengirim atau pesan kosong',
-            ], 200);
-        }
+        try {
+            $sender = PhoneNumberHelper::normalize($senderRaw);
+
+            // Ekstrak nama sender dari payload
+            $customerName = $payload['name'] ?? $payload['pushname'] ?? 'Kak';
+            if (empty(trim($customerName))) {
+                $customerName = 'Kak';
+            }
+
+            // Abaikan pesan media/VN jika non-text message (kecuali share location)
+            if (($message === 'non-text message' || $message === 'non-button message') && empty($payload['location'])) {
+                return response()->json(['status' => 'ignored', 'message' => 'Pesan media tidak didukung oleh konfigurasi saat ini'], 200);
+            }
+
+            if (empty($sender) || (empty($message) && empty($payload['location']))) {
+                return response()->json([
+                    'status'  => 'ignored',
+                    'message' => 'Pengirim atau pesan kosong',
+                ], 200);
+            }
 
         // ==============================================================
         // 3. LOGIKA HUMAN HANDOFF (ADMIN MODE)
@@ -446,6 +471,11 @@ class AiOrderWebhookController extends Controller
             'reply_message' => $finalMessage,
             'data'          => $parsed,
         ], 200);
+        } catch (\Throwable $e) {
+            Cache::forget($lockKey);
+            Log::error("[AiOrderWebhook] Error saat memproses webhook: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            throw $e;
+        }
     }
 
     /**
@@ -514,18 +544,10 @@ class AiOrderWebhookController extends Controller
      */
     protected function findCustomerByPhone(string $phone): ?Customer
     {
-        $clean = preg_replace('/[^0-9]/', '', $phone);
-        if (empty($clean)) {
+        $variations = PhoneNumberHelper::variations($phone);
+        if (empty($variations)) {
             return null;
         }
-
-        $variations = array_unique(array_filter([
-            $phone,
-            $clean,
-            str_starts_with($clean, '62') ? '0' . substr($clean, 2) : null,
-            str_starts_with($clean, '0') ? '62' . substr($clean, 1) : null,
-            '+' . $clean,
-        ]));
 
         // 1. Cari langsung di tabel customers (nomor utama)
         $customer = Customer::whereIn('phone', $variations)->first();
@@ -539,6 +561,7 @@ class AiOrderWebhookController extends Controller
         }
 
         // 3. Fallback suffix 9 digit jika masih belum cocok tepat
+        $clean = preg_replace('/[^0-9]/', '', $phone);
         if (!$customer && strlen($clean) >= 9) {
             $suffix = substr($clean, -9);
             $customer = Customer::where('phone', 'like', "%{$suffix}")->first();
