@@ -625,6 +625,23 @@ class AiOrderProcessor
     }
 
     /**
+     * Cek apakah pesan pelanggan mengandung kata kunci urgensi/mendesak.
+     */
+    public static function isUrgent(string $message): bool
+    {
+        $keywords = ['urgent', 'segera', 'buruan', 'cepet', 'cepat', 'darurat'];
+        $clean = strtolower($message);
+
+        foreach ($keywords as $kw) {
+            if (str_contains($clean, $kw)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Cek apakah balasan bertipe pertanyaan harus ditahan karena ada bubble baru yang masuk.
      */
     protected function shouldSuppressQuestionReply(string $sender): bool
