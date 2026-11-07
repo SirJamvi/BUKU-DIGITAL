@@ -34,7 +34,10 @@ class AiOrderWebhookController extends Controller
         // ==============================================================
         // 1. FILTRASI PESAN GRUP WHATSAPP (sebelum lock, DB, atau log berat)
         // ==============================================================
-        $senderRaw = (string) ($payload['sender'] ?? $payload['from'] ?? $payload['phone'] ?? '');
+        $rawSender = $payload['sender'] ?? $payload['from'] ?? $payload['phone'] ?? $request->input('sender') ?? $request->input('from') ?? $request->input('phone') ?? '';
+        $senderRaw = is_array($rawSender) ? (string) ($rawSender[0] ?? '') : (string) $rawSender;
+        $senderRaw = trim($senderRaw);
+
         $isGroup = (isset($payload['isgroup']) && ($payload['isgroup'] === true || $payload['isgroup'] === 'true' || $payload['isgroup'] == 1))
             || (isset($payload['isGroup']) && ($payload['isGroup'] === true || $payload['isGroup'] === 'true' || $payload['isGroup'] == 1))
             || str_ends_with(strtolower($senderRaw), '@g.us');
@@ -57,7 +60,13 @@ class AiOrderWebhookController extends Controller
             }
         }
 
-        $message = trim((string) ($request->input('message') ?? $request->input('text') ?? ''));
+        $rawMessage = $request->input('message') ?? $request->input('text') ?? $payload['message'] ?? $payload['text'] ?? '';
+        if (is_array($rawMessage)) {
+            $message = !empty($rawMessage) && is_scalar($rawMessage[0]) ? (string) $rawMessage[0] : (empty($rawMessage) ? '' : json_encode($rawMessage));
+        } else {
+            $message = (string) $rawMessage;
+        }
+        $message = trim($message);
 
         // ==============================================================
         // 3. LOG RINGKAS & AMAN (Masking 4 Digit Tengah)
@@ -69,10 +78,20 @@ class AiOrderWebhookController extends Controller
         // ==============================================================
         // 4. ATOMIC CACHE LOCK (ANTI-DUPLIKASI WEBHOOK RETRY FONNTE)
         // ==============================================================
-        $msgId = $payload['id'] ?? $payload['inboxid'] ?? null;
-        if (empty($msgId)) {
-            $timestamp = $payload['timestamp'] ?? '';
-            $msgId = hash('sha256', $senderRaw . '_' . $timestamp . '_' . $message);
+        $rawId = $payload['id'] ?? $payload['inboxid'] ?? $request->input('id') ?? $request->input('inboxid') ?? null;
+        if (is_array($rawId)) {
+            $msgId = !empty($rawId) && is_scalar($rawId[0]) ? (string) $rawId[0] : (empty($rawId) ? '' : json_encode($rawId));
+        } elseif ($rawId !== null) {
+            $msgId = (string) $rawId;
+        } else {
+            $msgId = '';
+        }
+        $msgId = trim($msgId);
+
+        if ($msgId === '') {
+            $rawTimestamp = $payload['timestamp'] ?? $request->input('timestamp') ?? '';
+            $timestamp = is_array($rawTimestamp) ? (string) ($rawTimestamp[0] ?? '') : (string) $rawTimestamp;
+            $msgId = hash('sha256', (string) $senderRaw . '_' . $timestamp . '_' . (string) $message);
         }
 
         $lockKey = 'lock_msg_' . $msgId;
@@ -83,7 +102,8 @@ class AiOrderWebhookController extends Controller
 
         try {
             $sender = PhoneNumberHelper::normalize($senderRaw);
-            $location = !empty($payload['location']) ? (string) $payload['location'] : null;
+            $rawLocation = $payload['location'] ?? $request->input('location') ?? null;
+            $location = !empty($rawLocation) ? (is_array($rawLocation) ? implode(',', $rawLocation) : (string) $rawLocation) : null;
 
             if (empty($sender)) {
                 return response()->json(['status' => 'ignored', 'message' => 'Pengirim kosong'], 200);

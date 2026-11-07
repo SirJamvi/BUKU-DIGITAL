@@ -427,6 +427,54 @@ class AiOrderSystemTest extends TestCase
     }
 
     /**
+     * Skenario 7b: Hotfix Array to string conversion - Payload Fonnte dengan field array
+     */
+    public function test_scenario_7b_webhook_payload_with_array_fields_no_crash(): void
+    {
+        Http::fake([
+            'https://api.fonnte.com/*' => Http::response(['status' => true], 200),
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => json_encode([
+                    'nama_toko' => null,
+                    'alamat' => null,
+                    'jumlah_ball' => 1,
+                    'ukuran_produk' => '20kg',
+                    'waktu_pengiriman' => null,
+                    'is_registration' => false,
+                    'unknown_ukuran' => false,
+                ])]]]]]
+            ], 200),
+        ]);
+
+        // Uji case 1: id berupa array [191184359] seperti kiriman Fonnte
+        $payload1 = [
+            'id'        => [191184359],
+            'sender'    => '628199997788',
+            'message'   => 'pesan 1 ball 20kg',
+            'timestamp' => [1731000000],
+        ];
+
+        $res1 = $this->postJson('/api/v1/webhook/fonnte', $payload1);
+        $res1->assertStatus(200);
+
+        // Uji retry dengan id array yang sama
+        $res2 = $this->postJson('/api/v1/webhook/fonnte', $payload1);
+        $res2->assertStatus(200);
+        $res2->assertJson(['status' => 'ignored', 'message' => 'Duplicate webhook request']);
+
+        // Uji case 2: id kosong, timestamp berupa array, message berupa array
+        $payload2 = [
+            'sender'    => ['628199997799'],
+            'message'   => ['pesan 1 ball 20kg'],
+            'timestamp' => [1731000005],
+            'location'  => ['-6.200000', '106.816666'],
+        ];
+
+        $res3 = $this->postJson('/api/v1/webhook/fonnte', $payload2);
+        $res3->assertStatus(200);
+    }
+
+    /**
      * Skenario 8: Share location mengisi alamat; lokasi tanpa order -> location_only
      */
     public function test_scenario_8_share_location(): void
