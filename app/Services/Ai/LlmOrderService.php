@@ -144,14 +144,15 @@ ATURAN EKSTRAKSI SLOT:
 1. Slot yang diekstrak:
    - "nama_toko": string nama warung/toko/cafe/resto/depot bila disebutkan, atau null.
    - "alamat": string jalan/patokan alamat bila disebutkan, atau null.
-   - "jumlah_ball": integer jumlah ball/karung bila disebutkan, atau null.
+   - "jumlah_ball": number jumlah ball/karung (integer atau float/desimal seperti 0.5) bila disebutkan, atau null.
    - "ukuran_produk": HANYA "20kg", "15kg", atau "10kg", atau null.
    - "waktu_pengiriman": format "YYYY-MM-DD HH:MM:SS" bila pelanggan menyebut jam pengiriman, atau null.
    - "is_registration": boolean true jika pelanggan baru menyebutkan nama toko atau alamat.
    - "unknown_ukuran": boolean true jika pelanggan menyebutkan ukuran es selain 20kg/15kg/10kg (misalnya "yang 5", "5kg", "ukuran 5").
 
 2. Aturan Angka & Ukuran:
-   - Jika AWAITING = "qty", angka tunggal (contoh: "3", "lima") = jumlah_ball.
+   - Jika pelanggan menyebut jumlah 'setengah', '1/2', atau 'separuh', tetapkan nilai jumlah_ball menjadi 0.5.
+   - Jika AWAITING = "qty", angka tunggal (contoh: "3", "lima", "setengah", "0.5") = jumlah_ball.
    - Jika AWAITING = "ukuran", angka (contoh: "20", "15", "10", "19") = ukuran_produk.
    - Pola "N ball/karung/sak/biji" = jumlah_ball.
    - PENTING (DEFAULT KUANTITAS): Jika pelanggan menyebutkan kata kunci pesanan (pesan, kirim, order, mau, minta, butuh) dan menyebutkan ukuran (10/15/20) TETAPI tidak menyebutkan jumlah kuantitas angka (misalnya 'kirim es 20kg' atau 'yg 20ribu biasa'), asumsikan jumlah_ball = 1.
@@ -170,7 +171,7 @@ SCHEMA OUTPUT WAJIB (JSON murni):
 {
   "nama_toko": string|null,
   "alamat": string|null,
-  "jumlah_ball": integer|null,
+  "jumlah_ball": number|null,
   "ukuran_produk": "20kg"|"15kg"|"10kg"|null,
   "waktu_pengiriman": string|null,
   "is_registration": boolean,
@@ -289,14 +290,19 @@ PROMPT;
             }
         }
 
-        // Jumlah ball
+        // Jumlah ball (mendukung bilangan bulat dan desimal seperti 0.5 untuk setengah ball)
         $jumlahBall = null;
-        if (!empty($parsed['jumlah_ball']) && (int) $parsed['jumlah_ball'] >= 1) {
-            $jumlahBall = (int) $parsed['jumlah_ball'];
-        } elseif ($awaiting === 'qty' && preg_match('/^\s*(\d+)\s*$/', $textLower, $qm)) {
-            $jumlahBall = (int) $qm[1];
-        } elseif (preg_match('/(\d+)\s*(?:ball|karung|sak|bungkus|pack|biji)/i', $textLower, $bm)) {
-            $jumlahBall = (int) $bm[1];
+        if (preg_match('/(?:^|\b)(?:setengah|separuh|1\/2|0[,.]5)\s*(?:ball|karung|sak|bungkus|pack|biji)?(?:\b|$)/i', $textLower)) {
+            $jumlahBall = 0.5;
+        } elseif (!empty($parsed['jumlah_ball']) && (float) $parsed['jumlah_ball'] > 0) {
+            $val = (float) $parsed['jumlah_ball'];
+            $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+        } elseif ($awaiting === 'qty' && preg_match('/^\s*(\d+(?:[.,]\d+)?)\s*$/', $textLower, $qm)) {
+            $val = (float) str_replace(',', '.', $qm[1]);
+            $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+        } elseif (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:ball|karung|sak|bungkus|pack|biji)/i', $textLower, $bm)) {
+            $val = (float) str_replace(',', '.', $bm[1]);
+            $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
         }
 
         // Default jumlah_ball = 1 jika ukuran terdeteksi & ada indikasi pemesanan / follow-up
@@ -388,25 +394,29 @@ PROMPT;
             }
         }
 
-        // 3. Deteksi Jumlah Ball
+        // 3. Deteksi Jumlah Ball (mendukung desimal dan setengah ball)
         $jumlah = null;
-        if ($awaiting === 'qty' && preg_match('/^\s*(\d+)\s*$/', $text, $qm)) {
-            $jumlah = (int) $qm[1];
-        } elseif (preg_match('/(\d+)\s*(?:ball|karung|sak|bungkus|pack|biji)/i', $text, $m)) {
-            $jumlah = (int) $m[1];
-        } elseif (preg_match('/(?:kirim|pesan|minta|order|pesen)\s+(\d+)\b/i', $text, $m)) {
-            $candidate = (int) $m[1];
+        if (preg_match('/(?:^|\b)(?:setengah|separuh|1\/2|0[,.]5)\s*(?:ball|karung|sak|bungkus|pack|biji)?(?:\b|$)/i', $text)) {
+            $jumlah = 0.5;
+        } elseif ($awaiting === 'qty' && preg_match('/^\s*(\d+(?:[.,]\d+)?)\s*$/', $text, $qm)) {
+            $val = (float) str_replace(',', '.', $qm[1]);
+            $jumlah = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+        } elseif (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:ball|karung|sak|bungkus|pack|biji)/i', $text, $m)) {
+            $val = (float) str_replace(',', '.', $m[1]);
+            $jumlah = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+        } elseif (preg_match('/(?:kirim|pesan|minta|order|pesen)\s+(\d+(?:[.,]\d+)?)\b/i', $text, $m)) {
+            $candidate = (float) str_replace(',', '.', $m[1]);
             // Pastikan bukan angka ukuran 19, 15, 10, 20
             if (!in_array($candidate, [19, 15, 10, 20])) {
-                $jumlah = $candidate;
+                $jumlah = (fmod($candidate, 1.0) === 0.0) ? (int) $candidate : round($candidate, 2);
             }
         }
 
         // Jika ada kata 'pesan' atau 'es' tapi jumlah belum terdeteksi dan bukan awaiting ukuran
-        if ($jumlah === null && preg_match('/\b(?:pesen|pesan|kirim|minta)\s+es\s+(\d+)\b/i', $text, $m)) {
-            $candidate = (int) $m[1];
+        if ($jumlah === null && preg_match('/\b(?:pesen|pesan|kirim|minta)\s+es\s+(\d+(?:[.,]\d+)?)\b/i', $text, $m)) {
+            $candidate = (float) str_replace(',', '.', $m[1]);
             if (!in_array($candidate, [19, 15, 10, 20])) {
-                $jumlah = $candidate;
+                $jumlah = (fmod($candidate, 1.0) === 0.0) ? (int) $candidate : round($candidate, 2);
             }
         }
 
@@ -551,7 +561,7 @@ PROMPT;
     /**
      * Dual-Layer Stock Guard: Memeriksa apakah jumlah pesanan melebihi stok yang tersedia.
      */
-    public function isStockExceeded(int $jumlahBall, string $ukuran, ?int &$availableStock = null): bool
+    public function isStockExceeded(float|int $jumlahBall, string $ukuran, ?int &$availableStock = null): bool
     {
         $stockData = $this->getAvailableStockWithReservation($ukuran);
         $availableStock = $stockData['available'];
@@ -599,7 +609,7 @@ PROMPT;
         }
 
         // Kata kunci pesanan
-        $keywords = ['es', 'ball', 'karung', 'sak', 'kirim', 'pesan', 'pesen', 'minta', 'order', 'mau', 'butuh', 'toko', 'cafe', 'kafe', 'warung', 'alamat', 'jl', 'biasa'];
+        $keywords = ['es', 'ball', 'karung', 'sak', 'kirim', 'pesan', 'pesen', 'minta', 'order', 'mau', 'butuh', 'toko', 'cafe', 'kafe', 'warung', 'alamat', 'jl', 'biasa', 'setengah', 'separuh', '1/2', '0.5', '0,5'];
         foreach ($keywords as $kw) {
             if (str_contains($text, $kw)) {
                 return true;

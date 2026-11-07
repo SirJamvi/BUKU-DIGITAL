@@ -91,6 +91,14 @@ class ReplyTemplates
             $params['nominal'] = number_format((float) $params['nominal'], 0, ',', '.');
         }
 
+        // Format qty jika float bulat tampilkan int, jika desimal (misal 0.5) tampilkan desimal
+        foreach (['qty', 'old_qty', 'new_qty'] as $qtyKey) {
+            if (isset($params[$qtyKey]) && is_numeric($params[$qtyKey])) {
+                $qVal = (float) $params[$qtyKey];
+                $params[$qtyKey] = (fmod($qVal, 1.0) === 0.0) ? (string) (int) $qVal : (string) $qVal;
+            }
+        }
+
         foreach ($params as $k => $v) {
             $template = str_replace('{' . $k . '}', (string) $v, $template);
         }
@@ -101,7 +109,7 @@ class ReplyTemplates
     /**
      * Helper adaptif untuk meminta nama toko dan/atau alamat pelanggan baru.
      */
-    public static function renderNeedNameAddress(int $qty, string $ukuran, bool $hasName = false, bool $hasAddress = false): string
+    public static function renderNeedNameAddress(float|int $qty, string $ukuran, bool $hasName = false, bool $hasAddress = false): string
     {
         if ($hasName && !$hasAddress) {
             $key = 'need_address_only';
@@ -122,7 +130,7 @@ class ReplyTemplates
      */
     public static function renderOrderIn(
         bool $isNewCustomer,
-        int $qty,
+        float|int $qty,
         string $ukuran,
         string $namaToko,
         ?string $alamat = null,

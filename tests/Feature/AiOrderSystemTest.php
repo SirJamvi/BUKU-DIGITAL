@@ -1041,5 +1041,97 @@ class AiOrderSystemTest extends TestCase
         $this->assertEquals('20kg', $order->ukuran_produk);
         $this->assertEquals('validated', $order->status);
     }
+
+    /**
+     * Skenario 23: Ekstraksi "setengah ball" ("setengah", "1/2", "separuh") menghasilkan jumlah_ball 0.5
+     */
+    public function test_scenario_23_setengah_ball_extraction(): void
+    {
+        $sender = '6281211110023';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Warung Setengah',
+            'phone'       => $sender,
+            'address'     => 'Jl Veteran',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // 1. Ekstraksi langsung via processor
+        $processor = app(\App\Services\Ai\AiOrderProcessor::class);
+        $result = $processor->process($sender, 'kirim setengah ball yang 20kg ya');
+
+        $this->assertEquals('order_validated', $result['status']);
+        $this->assertStringContainsString('0.5 ball 20kg', $capturedReply);
+
+        $order = TemporaryOrder::where('sender_phone', $sender)->latest('id')->first();
+        $this->assertNotNull($order);
+        $this->assertEquals(0.5, (float) $order->jumlah_ball);
+        $this->assertEquals('20kg', $order->ukuran_produk);
+
+        // 2. Ekstraksi via variasi '1/2' pada LlmOrderService
+        $llmService = app(\App\Services\Ai\LlmOrderService::class);
+        $parsed = $llmService->heuristicFallbackParser('pesan 1/2 ball 15kg');
+        $this->assertEquals(0.5, (float) $parsed['jumlah_ball']);
+        $this->assertEquals('15kg', $parsed['ukuran_produk']);
+
+        // 3. Ekstraksi via variasi 'separuh'
+        $parsed2 = $llmService->heuristicFallbackParser('minta separuh karung yang 10kg');
+        $this->assertEquals(0.5, (float) $parsed2['jumlah_ball']);
+        $this->assertEquals('10kg', $parsed2['ukuran_produk']);
+    }
+
+    /**
+     * Skenario 24: Deteksi kata kunci urgent/darurat memicu alert ke grup admin WhatsApp
+     */
+    public function test_scenario_24_urgent_keyword_triggers_admin_alert(): void
+    {
+        $sender = '6281211110024';
+        Customer::create([
+            'business_id' => 1,
+            'name'        => 'Cafe Cepat',
+            'phone'       => $sender,
+            'address'     => 'Jl Cepat',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        $capturedMessages = [];
+        $this->mockFonnteService(function ($target, $message) use (&$capturedMessages) {
+            $capturedMessages[] = ['target' => $target, 'message' => $message];
+            return ['status' => true];
+        });
+
+        Config::set('ai_order.dry_run', false);
+
+        $processor = app(\App\Services\Ai\AiOrderProcessor::class);
+        $processor->process($sender, 'pesan 2 ball 20kg urgent buruan cepet ya mau habis');
+
+        // Verifikasi bahwa ada pesan yang dikirim ke admin group
+        $adminMsg = collect($capturedMessages)->first(function ($m) {
+            return str_contains($m['message'], '[URGENT]');
+        });
+
+        $this->assertNotNull($adminMsg);
+        $this->assertEquals(config('ai_order.admin_group_id'), $adminMsg['target']);
+        $this->assertStringContainsString('🚨 [URGENT] Pelanggan Cafe Cepat meminta pesanan disegerakan!', $adminMsg['message']);
+    }
+
+    /**
+     * Helper mock FonnteService
+     */
+    protected function mockFonnteService(callable $callback): void
+    {
+        $mock = \Mockery::mock(\App\Services\Whatsapp\FonnteService::class);
+        $mock->shouldReceive('sendMessage')
+            ->andReturnUsing($callback);
+        $this->app->instance(\App\Services\Whatsapp\FonnteService::class, $mock);
+    }
 }
 

@@ -86,9 +86,10 @@ class AdminGroupNotifier
      * (b) Pelanggan Baru Terdaftar & Order Masuk
      * Format: 🆕 [PELANGGAN BARU] {nama_toko} ({alamat}) order {qty} ball {ukuran}. Status: menunggu kasir.
      */
-    public function notifyNewCustomerOrder(string $namaToko, string $alamat, int $qty, string $ukuran, string $sender): bool
+    public function notifyNewCustomerOrder(string $namaToko, string $alamat, float|int $qty, string $ukuran, string $sender): bool
     {
-        $text = "🆕 [PELANGGAN BARU] {$namaToko} ({$alamat}) order {$qty} ball {$ukuran}. Status: menunggu kasir.";
+        $qtyStr = (fmod((float) $qty, 1.0) === 0.0) ? (string) (int) $qty : (string) $qty;
+        $text = "🆕 [PELANGGAN BARU] {$namaToko} ({$alamat}) order {$qtyStr} ball {$ukuran}. Status: menunggu kasir.";
         return $this->sendToAdminGroup($text, 'new_customer_order', $sender);
     }
 
@@ -96,17 +97,31 @@ class AdminGroupNotifier
      * (c) Stok Tidak Cukup (Dilarang sebutkan angka stok riil)
      * Format: ⚠️ [STOK KURANG] Permintaan {qty} ball {ukuran} dari {nama/nomor} melebihi sisa stok.
      */
-    public function notifyStockInsufficient(string $customerName, string $sender, int $qty, string $ukuran): bool
+    public function notifyStockInsufficient(string $customerName, string $sender, float|int $qty, string $ukuran): bool
     {
         $masked = PhoneNumberHelper::mask($sender);
         $label = ($customerName !== 'Kak' && !empty($customerName)) ? "{$customerName} ({$masked})" : $masked;
+        $qtyStr = (fmod((float) $qty, 1.0) === 0.0) ? (string) (int) $qty : (string) $qty;
 
-        $text = "⚠️ [STOK KURANG] Permintaan {$qty} ball {$ukuran} dari {$label} melebihi sisa stok.";
+        $text = "⚠️ [STOK KURANG] Permintaan {$qtyStr} ball {$ukuran} dari {$label} melebihi sisa stok.";
         return $this->sendToAdminGroup($text, 'stock_insufficient', $sender);
     }
 
     /**
-     * (d) Gemini Error & Fallback Aktif (Max 1x per 10 menit global)
+     * (d) Pesanan Mendesak / Urgent
+     * Format: 🚨 [URGENT] Pelanggan {nama} meminta pesanan disegerakan!
+     */
+    public function notifyUrgentOrder(string $customerName, string $sender): bool
+    {
+        $masked = PhoneNumberHelper::mask($sender);
+        $displayName = ($customerName !== 'Kak' && !empty($customerName)) ? $customerName : "Kak ({$masked})";
+
+        $text = "🚨 [URGENT] Pelanggan {$displayName} meminta pesanan disegerakan!";
+        return $this->sendToAdminGroup($text, 'urgent_order', $sender);
+    }
+
+    /**
+     * (e) Gemini Error & Fallback Aktif (Max 1x per 10 menit global)
      * Format: ⚠️ [SISTEM] Gemini API mengalami kendala, sistem beralih ke regex parser.
      */
     public function notifyGeminiFailure(string $errorMessage = ''): bool

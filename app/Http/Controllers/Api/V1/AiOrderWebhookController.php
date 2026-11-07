@@ -252,7 +252,7 @@ class AiOrderWebhookController extends Controller
                     'customer_name'           => $customerName,
                     'sender_phone'            => $order->sender_phone,
                     'customer_address'        => $address,
-                    'jumlah_ball'             => (int) $order->jumlah_ball,
+                    'jumlah_ball'             => (fmod((float) $order->jumlah_ball, 1.0) === 0.0) ? (int) $order->jumlah_ball : (float) $order->jumlah_ball,
                     'ukuran_produk'           => $order->ukuran_produk,
                     'delivery_time'           => $order->delivery_time ? $order->delivery_time->format('Y-m-d H:i:s') : null,
                     'delivery_time_formatted' => $order->delivery_time 
