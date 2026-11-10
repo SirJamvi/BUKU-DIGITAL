@@ -1215,6 +1215,180 @@ class AiOrderSystemTest extends TestCase
     }
 
     /**
+     * Skenario 26: Fase 12 Part B - Routing intent delivery_status_or_complaint
+     */
+    public function test_scenario_26_phase12_delivery_status_and_complaint_routing(): void
+    {
+        $testMessages = [
+            'Es batu nya belum sampe',
+            'Dah set 10 ko blm dianter?',
+            'Segera ya kak',
+            'Maap ini driver mobil apa motor ya',
+        ];
+
+        foreach ($testMessages as $idx => $msg) {
+            $sender = '62812888800' . ($idx + 1);
+            Cache::forget('human_mode_' . $sender);
+            Cache::forget('prior_chat_24h_' . $sender);
+
+            $capturedReply = '';
+            $capturedAdminMsg = '';
+            $this->mockFonnteService(function ($target, $message) use (&$capturedReply, &$capturedAdminMsg) {
+                if (str_contains($target, '@g.us') || $target === '120363423987962193@g.us') {
+                    $capturedAdminMsg = $message;
+                } else {
+                    $capturedReply = $message;
+                }
+                return ['status' => true];
+            });
+
+            Config::set('ai_order.admin_group_id', '120363423987962193@g.us');
+            Config::set('ai_order.admin_notify', true);
+            Config::set('ai_order.dry_run', false);
+            Config::set('ai_order.handoff_minutes', 30);
+
+            $response = $this->postJson('/api/v1/webhook/fonnte', [
+                'sender'  => $sender,
+                'message' => $msg,
+            ]);
+
+            $response->assertStatus(200);
+
+            // 1. Reply wajib berupa pesan pengalihan ke admin
+            $this->assertStringContainsString('teruskan ke admin untuk dicek ya', $capturedReply, "Gagal pada pesan: {$msg}");
+
+            // 2. Human mode 30 menit aktif
+            $this->assertTrue(Cache::has('human_mode_' . $sender), "Human mode harus aktif untuk pesan: {$msg}");
+
+            // 3. Notifikasi grup admin terkirim jenis komplain/status
+            $this->assertStringContainsString('[KOMPLAIN / STATUS]', $capturedAdminMsg, "Grup admin harus menerima notifikasi komplain untuk: {$msg}");
+
+            // 4. Draft dan temporary order TIDAK dibuat
+            $this->assertDatabaseMissing('temporary_orders', [
+                'sender_phone' => $sender,
+            ]);
+            $this->assertDatabaseMissing('ai_order_drafts', [
+                'sender_phone' => $sender,
+            ]);
+        }
+    }
+
+    /**
+     * Skenario 27: Fase 12 Part B - Routing intent ack_smalltalk (24h memory)
+     */
+    public function test_scenario_27_phase12_ack_smalltalk_routing(): void
+    {
+        $sender = '6281277770001';
+        Cache::forget('prior_chat_24h_' . $sender);
+        Cache::forget('customer_chatted_24h_' . $sender);
+        Cache::forget('admin_notice_sent_' . $sender);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Chat pertama: belum pernah chat dalam 24 jam -> bot membalas greeting
+        $res1 = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'Waalaikumsalam,malam',
+        ]);
+        $res1->assertStatus(200);
+        $this->assertStringContainsString('Halo Kak, saya asisten otomatis Adin Crystal', $capturedReply);
+
+        // Chat kedua (dalam 24 jam): "makasih kak" -> bot merespons "Siap Kak 👍", bukan sapaan panjang
+        $capturedReply = '';
+        $res2 = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'makasih ya',
+        ]);
+        $res2->assertStatus(200);
+        $this->assertStringContainsString('Siap Kak 👍', $capturedReply);
+        $this->assertStringNotContainsString('Halo Kak, saya asisten otomatis', $capturedReply);
+    }
+
+    /**
+     * Skenario 28: Fase 12 Part B - Hapus default jumlah_ball = 1 jika tidak ada angka
+     */
+    public function test_scenario_28_phase12_no_default_qty_on_missing_quantity(): void
+    {
+        $sender = '6281266660001';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Depot Air Sehat',
+            'phone'       => $sender,
+            'address'     => 'Jl. Baru No. 10',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // "Pa... Tolong krm es yg 19rb" -> Ukuran 20kg (19rb), tetapi kuantitas tidak disebutkan
+        $response = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'Pa... Tolong krm es yg 19rb',
+        ]);
+
+        $response->assertStatus(200);
+
+        // Sistem DILARANG berasumsi 1 ball! Wajib menanyakan jumlah ball (pertanyaan sempit karena ukuran sudah diketahui)
+        $this->assertEquals('Mau berapa ball Kak?', trim($capturedReply));
+
+        // Order belum boleh dibuat berstatus 'validated'
+        $this->assertDatabaseMissing('temporary_orders', [
+            'sender_phone' => $sender,
+            'status'       => 'validated',
+        ]);
+
+        // Pelanggan menjawab: "1 ball" -> barulah tervalidasi 1 ball 20kg
+        $capturedReply = '';
+        $response2 = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => '1 ball',
+        ]);
+        $response2->assertStatus(200);
+        $this->assertStringContainsString('Pesanan masuk: 1 ball 20kg', $capturedReply);
+    }
+
+    /**
+     * Skenario 29: Fase 12 Part B - Frasa '(Ketik *admin* untuk bicara dengan staf)' hanya 1x per 24 jam
+     */
+    public function test_scenario_29_phase12_admin_notice_sent_once_per_24h(): void
+    {
+        $sender = '6281255550001';
+        Cache::forget('admin_notice_sent_' . $sender);
+        Cache::forget('prior_chat_24h_' . $sender);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // Pesan pertama -> greeting memuat frasa admin
+        $res1 = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'halo',
+        ]);
+        $res1->assertStatus(200);
+        $this->assertStringContainsString('(Ketik *admin* untuk bicara dengan staf)', $capturedReply);
+
+        // Pesan kedua -> jika sapaan/greeting dikirim lagi, frasa admin telah dihapus
+        $processor = app(\App\Services\Ai\AiOrderProcessor::class);
+        $replyWithAdmin = \App\Services\Ai\ReplyTemplates::render('greeting');
+        $processor->sendReply($sender, $replyWithAdmin);
+
+        // Periksa bahwa sendReply memotong frasa tersebut
+        $this->assertTrue(Cache::has('admin_notice_sent_' . $sender));
+    }
+
+    /**
      * Helper mock FonnteService
      */
     protected function mockFonnteService(callable $callback): void

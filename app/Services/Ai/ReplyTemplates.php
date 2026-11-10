@@ -18,6 +18,10 @@ class ReplyTemplates
 
     public const NEED_QTY = "Mau berapa ball? Ukuran 20 / 15 / 10 kg?";
 
+    public const NEED_QTY_ONLY = "Mau berapa ball Kak?";
+
+    public const DELIVERY_COMPLAINT = "Baik Kak, saya teruskan ke admin untuk dicek ya 🙏";
+
     public const NEED_UKURAN = "Ukuran berapa Kak? 20 / 15 / 10 kg?";
 
     public const UNKNOWN_UKURAN = "Ukuran yang tersedia 20 / 15 / 10 kg. Mau yang mana Kak?";
@@ -61,6 +65,8 @@ class ReplyTemplates
             'followup_unchanged' => self::FOLLOWUP_UNCHANGED,
             'ack'                => self::ACK,
             'need_qty'           => self::NEED_QTY,
+            'need_qty_only'      => self::NEED_QTY_ONLY,
+            'delivery_complaint' => self::DELIVERY_COMPLAINT,
             'need_ukuran'        => self::NEED_UKURAN,
             'unknown_ukuran'     => self::UNKNOWN_UKURAN,
             'order_in_existing'        => self::ORDER_IN_EXISTING,

@@ -69,37 +69,10 @@ class AiOrderProcessor
         $isNewCustomer = ($customer === null);
         $customerName = $customer ? $customer->name : 'Kak';
 
-        if (AiOrderDebouncer::isHumanHandoff($combinedMessage)) {
-            Cache::put('human_mode_' . $canonicalSender, true, now()->addMinutes(15));
-            $reply = "Baik Kak, Anda telah terhubung dengan Admin. Silakan sampaikan pesan Anda, tim kami akan segera membalas.";
-            $this->sendReply($canonicalSender, $reply);
-
-            // Notifikasi grup admin
-            $this->adminNotifier->notifyHumanMode($customerName, $canonicalSender, $combinedMessage);
-
-            Log::info("[AiOrderProcessor] Human mode diaktifkan untuk " . PhoneNumberHelper::mask($canonicalSender) . " selama 15 menit.");
-            return ['status' => 'human_mode_activated', 'reply' => $reply];
-        }
-
         // ==============================================================
         // 4. KELOLA DRAFT STATE & ORDER TERAKHIR
         // ==============================================================
         $draft = AiOrderDraft::getOrCreateDraft($canonicalSender);
-
-        // ==============================================================
-        // 4b. DETEKSI PESAN URGENT / SEGERA
-        // ==============================================================
-        if (self::isUrgent($combinedMessage)) {
-            $urgentName = $customerName;
-            if ($urgentName === 'Kak') {
-                if (!empty($draft->data['nama_toko'])) {
-                    $urgentName = $draft->data['nama_toko'];
-                } elseif (preg_match('/(?:toko|cafe|kafe|caffe|kedai|warung|resto|depot|kopi)\s+([^,\n\.\;\|]+)/i', $combinedMessage, $tm)) {
-                    $urgentName = trim($tm[0]);
-                }
-            }
-            $this->adminNotifier->notifyUrgentOrder($urgentName, $canonicalSender);
-        }
 
         // Lazy-expiry pesanan validated > 24 jam
         try {
@@ -112,6 +85,117 @@ class AiOrderProcessor
         $latestOrder = TemporaryOrder::where('sender_phone', $canonicalSender)
             ->latest('id')
             ->first();
+
+        // ==============================================================
+        // 4b. DETEKSI & ROUTING INTENT (Fase 12)
+        // ==============================================================
+        $hasDraftSlots = $draft->hasQty() || $draft->hasUkuran() || !empty($draft->data['nama_toko']);
+        $intent = $this->detectIntent($combinedMessage, $isNewCustomer, $hasDraftSlots);
+        Log::info("[AiOrderProcessor] Detected intent: {$intent}");
+
+        // (a) delivery_status_or_complaint
+        if ($intent === 'delivery_status_or_complaint') {
+            $handoffMinutes = (int) config('ai_order.handoff_minutes', 30);
+            Cache::put('human_mode_' . $canonicalSender, true, now()->addMinutes($handoffMinutes));
+            Cache::put('prior_chat_24h_' . $canonicalSender, true, now()->addHours(24));
+
+            $reply = ReplyTemplates::render('delivery_complaint');
+            $this->sendReply($canonicalSender, $reply);
+
+            try {
+                $this->adminNotifier->notifyDeliveryComplaint($customerName, $canonicalSender, $combinedMessage);
+            } catch (\Throwable $e) {
+                Log::warning("[AiOrderProcessor] Gagal kirim notifikasi komplain: " . $e->getMessage());
+            }
+
+            Log::info("[AiOrderProcessor] delivery_status_or_complaint ditangani: human mode {$handoffMinutes}m aktif untuk " . PhoneNumberHelper::mask($canonicalSender));
+            return ['status' => 'delivery_status_or_complaint', 'reply' => $reply];
+        }
+
+        // (b) other_human_needed
+        if ($intent === 'other_human_needed') {
+            $handoffMinutes = (int) config('ai_order.handoff_minutes', 30);
+            Cache::put('human_mode_' . $canonicalSender, true, now()->addMinutes($handoffMinutes));
+            Cache::put('prior_chat_24h_' . $canonicalSender, true, now()->addHours(24));
+
+            $reply = "Baik Kak, Anda telah terhubung dengan Admin. Silakan sampaikan pesan Anda, tim kami akan segera membalas.";
+            $this->sendReply($canonicalSender, $reply);
+
+            try {
+                $this->adminNotifier->notifyHumanMode($customerName, $canonicalSender, $combinedMessage);
+            } catch (\Throwable $e) {
+                Log::warning("[AiOrderProcessor] Gagal kirim notifikasi human mode: " . $e->getMessage());
+            }
+
+            Log::info("[AiOrderProcessor] Human mode diaktifkan untuk " . PhoneNumberHelper::mask($canonicalSender) . " selama {$handoffMinutes} menit.");
+            return ['status' => 'human_mode_activated', 'reply' => $reply];
+        }
+
+        // (c) ack_smalltalk
+        if ($intent === 'ack_smalltalk') {
+            $hasPriorChat = Cache::has('prior_chat_24h_' . $canonicalSender) ||
+                TemporaryOrder::where('sender_phone', $canonicalSender)->where('created_at', '>=', now()->subHours(24))->exists();
+
+            Cache::put('prior_chat_24h_' . $canonicalSender, true, now()->addHours(24));
+
+            if ($hasPriorChat) {
+                Log::info("[AiOrderProcessor] ack_smalltalk dari pelanggan aktif dalam 24 jam terakhir.");
+                if (config('ai_order.ack_reply', true)) {
+                    $reply = ReplyTemplates::render('ack');
+                    $this->sendReply($canonicalSender, $reply);
+                    return ['status' => 'ack', 'reply' => $reply];
+                }
+                return ['status' => 'ack_silent', 'reply' => null];
+            }
+
+            $reply = ReplyTemplates::render('greeting');
+            if (!$this->shouldSuppressQuestionReply($canonicalSender)) {
+                $this->sendReply($canonicalSender, $reply);
+            }
+            return ['status' => 'greeting', 'reply' => $reply];
+        }
+
+        // Catat interaksi pelanggan dalam 24 jam terakhir
+        Cache::put('prior_chat_24h_' . $canonicalSender, true, now()->addHours(24));
+
+        // (d) repeat_last
+        if ($intent === 'repeat_last') {
+            if ($latestOrder && in_array($latestOrder->status, ['validated', 'processed'], true)) {
+                $extractedUkuran = $this->extractUkuranOnly($combinedMessage);
+                $targetUkuran = $extractedUkuran ?: (string) $latestOrder->ukuran_produk;
+                $targetQty = (float) $latestOrder->jumlah_ball;
+
+                $draft->mergeData([
+                    'jumlah_ball'   => $targetQty,
+                    'ukuran_produk' => $targetUkuran,
+                ]);
+                Log::info("[AiOrderProcessor] repeat_last: menggunakan qty {$targetQty} dan ukuran {$targetUkuran} dari order #{$latestOrder->id}");
+            } else {
+                $extractedUkuran = $this->extractUkuranOnly($combinedMessage);
+                if ($extractedUkuran) {
+                    $draft->mergeData(['ukuran_produk' => $extractedUkuran]);
+                    $draft->setAwaiting('qty');
+                    $reply = ReplyTemplates::render('need_qty_only');
+                    if (!$this->shouldSuppressQuestionReply($canonicalSender)) {
+                        $this->sendReply($canonicalSender, $reply);
+                    }
+                    return ['status' => 'need_qty', 'reply' => $reply];
+                }
+            }
+        }
+
+        // Notifikasi urgent jika mengandung kata-kata mendesak
+        if (self::isUrgent($combinedMessage)) {
+            $urgentName = $customerName;
+            if ($urgentName === 'Kak') {
+                if (!empty($draft->data['nama_toko'])) {
+                    $urgentName = $draft->data['nama_toko'];
+                } elseif (preg_match('/(?:toko|cafe|kafe|caffe|kedai|warung|resto|depot|kopi)\s+([^,\n\.\;\|]+)/i', $combinedMessage, $tm)) {
+                    $urgentName = trim($tm[0]);
+                }
+            }
+            $this->adminNotifier->notifyUrgentOrder($urgentName, $canonicalSender);
+        }
 
         $textLower = strtolower(trim($combinedMessage));
 
@@ -452,7 +536,9 @@ class AiOrderProcessor
         // A. Cek Kuantitas Ball
         if (!$draft->hasQty()) {
             $draft->setAwaiting('qty');
-            $reply = ReplyTemplates::render('need_qty');
+            $reply = $draft->hasUkuran()
+                ? ReplyTemplates::render('need_qty_only')
+                : ReplyTemplates::render('need_qty');
             if (!$this->shouldSuppressQuestionReply($canonicalSender)) {
                 $this->sendReply($canonicalSender, $reply);
             }
@@ -760,10 +846,22 @@ class AiOrderProcessor
      */
     public function sendReply(string $target, string $message): array
     {
+        $canonical = PhoneNumberHelper::normalize($target);
+        $adminNoticeKey = 'admin_notice_sent_' . $canonical;
+        $phrase = '(Ketik *admin* untuk bicara dengan staf)';
+
+        if (str_contains($message, $phrase)) {
+            if (Cache::has($adminNoticeKey)) {
+                $message = trim(str_replace(["\n" . $phrase, $phrase], '', $message));
+            } else {
+                Cache::put($adminNoticeKey, true, now()->addHours(24));
+            }
+        }
+
         $isDryRun = (bool) config('ai_order.dry_run', false);
 
         if ($isDryRun) {
-            Log::info("[AiOrderProcessor - DRY RUN] Kirim WA ke " . PhoneNumberHelper::mask($target) . ":\n{$message}");
+            Log::info("[AiOrderProcessor - DRY RUN] Kirim WA ke " . PhoneNumberHelper::mask($canonical) . ":\n{$message}");
             return ['status' => true, 'dry_run' => true, 'message' => $message];
         }
 
@@ -805,5 +903,98 @@ class AiOrderProcessor
         }
 
         return $customer;
+    }
+
+    /**
+     * Klasifikasi intent pesan pelanggan (Fase 12):
+     * order | repeat_last | delivery_status_or_complaint | ack_smalltalk | other_human_needed
+     */
+    public function detectIntent(string $message, bool $isNewCustomer = false, bool $hasDraft = false): string
+    {
+        $text = strtolower(trim($message));
+
+        // 1. Cek keluhan / status pengiriman / driver
+        // Contoh: "Es batu nya belum sampe", "Dah set 10 ko blm dianter?", "Segera ya kak", "Maap ini driver mobil apa motor ya"
+        $isDeliveryComplaint = preg_match('/\b(?:belum|blm|blum)\s*(?:sampe|sampai|dianter|diantar|datang|nyampe)\b/i', $text)
+            || preg_match('/\bmana\s+(?:es(?:nya)?|pesanan|orderan)\b/i', $text)
+            || preg_match('/\b(?:ko|kok)\s+(?:lama|blm|belum)\b/i', $text)
+            || preg_match('/\b(?:lama\s*(?:amat|banget|bgt))\b/i', $text)
+            || preg_match('/\b(?:driver|supir|sopir|kurir)\b/i', $text)
+            || preg_match('/\b(?:komplain|complain)\b/i', $text)
+            || preg_match('/\b(?:status\s*(?:kirim|pengiriman|pengantaran|pesanan|order))\b/i', $text)
+            || (preg_match('/^(?:tolong\s+)?(?:segera|buruan|cepet|cepat)\s*(?:ya\s*)?(?:kak|min|mas|pak)?[\.!\s]*$/i', $text));
+
+        if ($isDeliveryComplaint) {
+            return 'delivery_status_or_complaint';
+        }
+
+        // 2. Cek permintaan bantuan admin / manusia eksplisit
+        if (AiOrderDebouncer::isHumanHandoff($message)) {
+            return 'other_human_needed';
+        }
+
+        // 3. Cek sapaan / santai / ucapan terima kasih (ack_smalltalk)
+        // Contoh: "Waalaikumsalam,malam", "terima kasih", "makasih", "oke", "siap", "malam", "pagi"
+        // JANGAN cocokkan jika ada indikasi pesan order (misal "pagi kak pesan es 20")
+        $hasOrderIntentWords = preg_match('/\b(?:pesan|pesen|kirim|order|mau|minta|butuh|beli|antar|bawa|drop|toko|cafe|warung)\b/i', $text)
+            || preg_match('/(?:20|19|15|10)\s*(?:kg|rb|k|ribu)?/i', $text)
+            || preg_match('/\d+\s*(?:ball|karung|sak|bal|biji)/i', $text);
+
+        if (!$hasOrderIntentWords) {
+            $smalltalkWords = 'wa\'?alaikum(?:us)?salam|assalamu\'?alaikum|halo|hai|pagi|siang|sore|malam|selamat\s+(?:pagi|siang|sore|malam)|oke|ok|siap|sip|makasih|makasi|terima\s*kasih|terimakasih|thanks|thx|iya|ya';
+            $honorifics = 'kak|pak|min|admin|ya|mas|bang|gan|bos|om|bro|pagi|siang|sore|malam';
+            $smalltalkPattern = "/^(?:(?:{$smalltalkWords})[\s,.\-!]*)+(?:(?:{$honorifics})[\s,.\-!]*)*$/i";
+            if (preg_match($smalltalkPattern, $text)) {
+                return 'ack_smalltalk';
+            }
+        }
+
+        // 4. Cek pesanan berulang (repeat_last)
+        // Contoh: "es 10rb seperti biasanya", "kaya biasa", "seperti biasa ya"
+        $isRepeatLast = preg_match('/\b(?:kaya|kayak|seperti|sama)\s*(?:biasa(?:nya)?|kemarin|kmrn)\b/i', $text)
+            || preg_match('/\b(?:biasa\s*(?:pesan|order|kirim))\b/i', $text)
+            || preg_match('/\b(?:pesan|order|kirim)\s+(?:kaya|kayak|seperti)?\s*biasa(?:nya)?\b/i', $text);
+
+        if ($isRepeatLast) {
+            return 'repeat_last';
+        }
+
+        // 5. Cek Order Intent
+        if ($this->llmService->isPotentialOrder($message, $isNewCustomer) || $hasDraft || $hasOrderIntentWords || preg_match('/^(?:batal|cancel|ubah|ganti)\b/i', $text)) {
+            return 'order';
+        }
+
+        // 6. Gemini fallback jika tidak terklasifikasi via regex
+        Log::info("[AiOrderProcessor] Intent tidak jelas via regex, memanggil Gemini API untuk klasifikasi.");
+        return $this->llmService->classifyIntentWithGemini($message);
+    }
+
+    /**
+     * Ekstraksi ukuran saja dari teks (20kg, 15kg, 10kg).
+     */
+    public function extractUkuranOnly(string $text): ?string
+    {
+        $clean = strtolower($text);
+        if (
+            str_contains($clean, 'yang 20') || str_contains($clean, 'yg 20') ||
+            str_contains($clean, 'yang 19') || str_contains($clean, 'yg 19') ||
+            str_contains($clean, '20kg') || str_contains($clean, '20 kg') ||
+            preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b(?:20|19)(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $clean)
+        ) {
+            return '20kg';
+        } elseif (
+            str_contains($clean, 'yang 15') || str_contains($clean, 'yg 15') ||
+            str_contains($clean, '15kg') || str_contains($clean, '15 kg') ||
+            preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b15(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $clean)
+        ) {
+            return '15kg';
+        } elseif (
+            str_contains($clean, 'yang 10') || str_contains($clean, 'yg 10') ||
+            str_contains($clean, '10kg') || str_contains($clean, '10 kg') ||
+            preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b10(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $clean)
+        ) {
+            return '10kg';
+        }
+        return null;
     }
 }

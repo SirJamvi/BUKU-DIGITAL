@@ -83,6 +83,23 @@ class AdminGroupNotifier
     }
 
     /**
+     * (a2) Komplain / Status Pengiriman
+     * Format: 🔔 [KOMPLAIN / STATUS] Pelanggan {nama/nomor} menanyakan status / komplain pengiriman. Pesan: "{pesan}"
+     */
+    public function notifyDeliveryComplaint(string $customerName, string $sender, string $message): bool
+    {
+        $masked = PhoneNumberHelper::mask($sender);
+        $label = ($customerName !== 'Kak' && !empty($customerName)) ? "{$customerName} ({$masked})" : $masked;
+        $cleanMsg = trim(preg_replace('/\s+/', ' ', $message));
+        if (strlen($cleanMsg) > 100) {
+            $cleanMsg = substr($cleanMsg, 0, 97) . '...';
+        }
+
+        $text = "🔔 [KOMPLAIN / STATUS] Pelanggan {$label} menanyakan status / komplain pengiriman. Pesan: \"{$cleanMsg}\"";
+        return $this->sendToAdminGroup($text, 'complaint_status', $sender);
+    }
+
+    /**
      * (b) Pelanggan Baru Terdaftar & Order Masuk
      * Format: 🆕 [PELANGGAN BARU] {nama_toko} ({alamat}) order {qty} ball {ukuran}. Status: menunggu kasir.
      */

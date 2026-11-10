@@ -35,6 +35,9 @@ return [
     // Jendela waktu pengakuan/terima kasih (menit) setelah order validated
     'ack_minutes' => (int) env('AI_ORDER_ACK_MINUTES', 10),
 
+    // Durasi pengalihan human mode / bantuan staf (menit). Default: 30 menit
+    'handoff_minutes' => (int) env('AI_ORDER_HANDOFF_MINUTES', 30),
+
     // Apakah bot merespons pesan terima kasih/oke ("Siap Kak 👍") atau tetap diam
     'ack_reply' => filter_var(env('AI_ORDER_ACK_REPLY', true), FILTER_VALIDATE_BOOLEAN),
 

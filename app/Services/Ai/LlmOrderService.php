@@ -155,7 +155,7 @@ ATURAN EKSTRAKSI SLOT:
    - Jika AWAITING = "qty", angka tunggal (contoh: "3", "lima", "setengah", "0.5") = jumlah_ball.
    - Jika AWAITING = "ukuran", angka (contoh: "20", "15", "10", "19") = ukuran_produk.
    - Pola "N ball/karung/sak/biji" = jumlah_ball.
-   - PENTING (DEFAULT KUANTITAS): Jika pelanggan menyebutkan kata kunci pesanan (pesan, kirim, order, mau, minta, butuh) dan menyebutkan ukuran (10/15/20) TETAPI tidak menyebutkan jumlah kuantitas angka (misalnya 'kirim es 20kg' atau 'yg 20ribu biasa'), asumsikan jumlah_ball = 1.
+   - PENTING (KUANTITAS): DILARANG mengasumsikan jumlah_ball = 1 jika pelanggan tidak menyebutkan angka atau kata kuantitas ("1", "satu", "sebiji", "setengah", "0.5"). Jika pelanggan hanya menyebut ukuran (contoh: "es 20kg", "yg 19rb", "pesan es 10"), tetapkan "jumlah_ball": null.
    - Pemetaan ukuran resmi:
      * "19", "19rb", "19k", "yang 19", "20kg", "20", "20rb", "20ribu", "yang 20", "yang 20ribu" -> "20kg".
      * "15", "15rb", "15k", "yang 15", "15kg", "15rb", "15ribu" -> "15kg".
@@ -305,15 +305,9 @@ PROMPT;
             $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
         }
 
-        // Default jumlah_ball = 1 jika ukuran terdeteksi & ada indikasi pemesanan / follow-up
-        if ($jumlahBall === null && $ukuran !== null) {
-            $hasOrderVerb = preg_match('/\b(?:pesan|pesen|kirim|order|mau|minta|butuh|beli|antar|bawa|drop)\b/i', $textLower)
-                || str_contains($textLower, 'kaya biasa') || str_contains($textLower, 'seperti biasa') || str_contains($textLower, 'biasa pesan');
-
-            if ($hasOrderVerb || !empty($awaiting) || !empty($namaToko)) {
-                $jumlahBall = 1;
-                Log::info("[LlmOrderService] normalizeParsedSlots: Mengasumsikan jumlah_ball = 1 (default) untuk ukuran {$ukuran}.");
-            }
+        // Default jumlah_ball hanya bila pelanggan menulis jelas "1", "satu", atau "sebiji"
+        if ($jumlahBall === null && preg_match('/\b(?:1|satu|sebiji)\b/i', $textLower)) {
+            $jumlahBall = 1;
         }
 
         // Waktu pengiriman
@@ -420,22 +414,9 @@ PROMPT;
             }
         }
 
-        // DEFAULT JUMLAH BALL: Jika ukuran tertangkap tetapi jumlah belum terisi, paksa jumlah = 1
-        // asalkan ada kata kerja indikasi pemesanan atau ini adalah konteks follow-up.
-        if ($jumlah === null && $ukuran !== null) {
-            $hasOrderVerb = preg_match('/\b(?:pesan|pesen|kirim|order|mau|minta|butuh|beli|antar|bawa|drop)\b/i', $text)
-                || str_contains($text, 'kaya biasa') || str_contains($text, 'seperti biasa') || str_contains($text, 'biasa pesan');
-
-            $isFollowUpContext = !empty($awaiting)
-                || !empty($currentDraft['jumlah_ball'])
-                || !empty($currentDraft['ukuran_produk'])
-                || !empty($currentDraft['nama_toko'])
-                || preg_match('/\b(?:jadi|ubah|ganti|tambah|sekarang)\b/i', $text);
-
-            if ($hasOrderVerb || $isFollowUpContext) {
-                $jumlah = 1;
-                Log::info("[LlmOrderService] Heuristic Default Qty: jumlah_ball diset ke 1 untuk ukuran {$ukuran}.");
-            }
+        // Default jumlah hanya bila pelanggan menulis jelas "1", "satu", atau "sebiji"
+        if ($jumlah === null && preg_match('/\b(?:1|satu|sebiji)\b/i', $text)) {
+            $jumlah = 1;
         }
 
         // 4. Deteksi Waktu Pengiriman
@@ -617,5 +598,43 @@ PROMPT;
         }
 
         return false;
+    }
+
+    /**
+     * Fallback klasifikasi intent menggunakan Gemini API jika regex belum pasti.
+     * Skema intent: order | repeat_last | delivery_status_or_complaint | ack_smalltalk | other_human_needed
+     */
+    public function classifyIntentWithGemini(string $message): string
+    {
+        if (empty($this->apiKey)) {
+            return 'other_human_needed';
+        }
+
+        $systemPrompt = <<<PROMPT
+Klasifikasikan teks chat WhatsApp pelanggan toko es kristal ke salah satu kategori (intent) berikut:
+- "order": Pelanggan memesan es, menanyakan harga/ukuran untuk beli, memberikan nama/alamat toko untuk pesan.
+- "repeat_last": Pelanggan meminta pesanan yang sama seperti biasa/kemarin ("kaya biasa", "seperti biasanya").
+- "delivery_status_or_complaint": Pelanggan menanyakan status kirim, mengeluh es belum sampai, menanyakan driver/pengiriman, atau minta disegerakan.
+- "ack_smalltalk": Sapaan santai, ucapan terima kasih, konfirmasi singkat ("makasih", "siap", "oke", "pagi", "waalaikumsalam").
+- "other_human_needed": Permintaan bantuan manusia, komplain non-pengiriman, atau pertanyaan di luar pemesanan.
+
+SCHEMA OUTPUT (JSON murni):
+{"intent": "order"|"repeat_last"|"delivery_status_or_complaint"|"ack_smalltalk"|"other_human_needed"}
+PROMPT;
+
+        $userPrompt = "Pesan:\n\"{$message}\"";
+
+        try {
+            $rawResponse = $this->callGeminiApi($systemPrompt, $userPrompt);
+            $parsed = $this->cleanAndDecodeJson($rawResponse);
+            $intent = $parsed['intent'] ?? '';
+            if (in_array($intent, ['order', 'repeat_last', 'delivery_status_or_complaint', 'ack_smalltalk', 'other_human_needed'], true)) {
+                return $intent;
+            }
+        } catch (\Throwable $e) {
+            Log::warning("[LlmOrderService] classifyIntentWithGemini gagal: " . $e->getMessage());
+        }
+
+        return 'other_human_needed';
     }
 }
