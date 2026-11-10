@@ -57,43 +57,56 @@ class AiOrderWebhookController extends Controller
             }
         }
 
-        $message = trim((string) ($request->input('message') ?? $request->input('text') ?? ''));
-
-        // ==============================================================
-        // 3. LOG RINGKAS & AMAN (Masking 4 Digit Tengah)
-        // ==============================================================
-        $msgType = !empty($payload['location']) ? 'location' : ($message === 'non-text message' ? 'media' : (empty($message) ? 'empty' : 'text'));
-        $maskedSender = PhoneNumberHelper::mask($senderRaw);
-        Log::info("[AiOrderWebhook] Masuk: sender={$maskedSender}, len=" . strlen($message) . ", type={$msgType}");
-
-        // ==============================================================
-        // 4. ATOMIC CACHE LOCK (ANTI-DUPLIKASI WEBHOOK RETRY FONNTE)
-        // ==============================================================
-        $msgId = $payload['id'] ?? $payload['inboxid'] ?? null;
-        if (empty($msgId)) {
-            $timestamp = $payload['timestamp'] ?? '';
-            $msgId = hash('sha256', $senderRaw . '_' . $timestamp . '_' . $message);
+        $sender = PhoneNumberHelper::normalize($senderRaw);
+        if (empty($sender)) {
+            return response()->json(['status' => 'ignored', 'message' => 'Pengirim kosong'], 200);
         }
 
-        $lockKey = 'lock_msg_' . $msgId;
-        if (!Cache::add($lockKey, true, now()->addMinutes(5))) {
-            Log::info("[AiOrderWebhook] Duplicate webhook request ignored: {$msgId}");
+        $message = trim((string) ($request->input('message') ?? $request->input('text') ?? $payload['message'] ?? $payload['text'] ?? ''));
+        $location = !empty($payload['location']) ? (string) $payload['location'] : '';
+        $timestamp = (string) ($payload['timestamp'] ?? $payload['time'] ?? '');
+        $msgType = !empty($location) ? 'location' : ($message === 'non-text message' ? 'media' : (empty($message) ? 'empty' : 'text'));
+        $maskedSender = PhoneNumberHelper::mask($sender);
+
+        // ==============================================================
+        // 3. ATOMIC CACHE LOCK (ANTI-DUPLIKASI WEBHOOK RETRY FONNTE)
+        // Nilai id/inboxid yang kosong, null, "0", atau 0 dianggap TIDAK ADA.
+        // Kunci = sha256(sender ternormalisasi | timestamp | type | teks pesan | location). TTL 120 detik.
+        // ==============================================================
+        $rawId = $payload['id'] ?? $payload['inboxid'] ?? null;
+        $realId = null;
+        if ($rawId !== null && $rawId !== '' && $rawId !== 0 && $rawId !== '0') {
+            $realId = trim((string) $rawId);
+        }
+
+        if ($realId !== null) {
+            $keyData = $sender . '|' . $realId;
+        } else {
+            $keyData = $sender . '|' . $timestamp . '|' . $msgType . '|' . $message . '|' . $location;
+        }
+
+        $keyHash = hash('sha256', $keyData);
+        $hashShort = substr($keyHash, 0, 8);
+        $lockKey = 'lock_msg_' . $keyHash;
+
+        if (!Cache::add($lockKey, true, now()->addSeconds(120))) {
+            Log::info("[AiOrderWebhook] Duplicate webhook request ignored: sender={$maskedSender}, reason=duplicate_lock, hash={$hashShort}, len=" . strlen($message));
             return response()->json(['status' => 'ignored', 'message' => 'Duplicate webhook request'], 200);
         }
 
-        try {
-            $sender = PhoneNumberHelper::normalize($senderRaw);
-            $location = !empty($payload['location']) ? (string) $payload['location'] : null;
+        // ==============================================================
+        // 4. LOG RINGKAS & AMAN (Masking 4 Digit Tengah, Hash 8 Karakter)
+        // ==============================================================
+        Log::info("[AiOrderWebhook] Masuk: sender={$maskedSender}, len=" . strlen($message) . ", type={$msgType}, hash={$hashShort}");
 
-            if (empty($sender)) {
-                return response()->json(['status' => 'ignored', 'message' => 'Pengirim kosong'], 200);
-            }
+        try {
+            $locationParam = !empty($location) ? $location : null;
 
             // ==============================================================
             // 5. HUMAN HANDOFF ("admin") TIDAK DI-DEBOUNCE (Diproses Langsung)
             // ==============================================================
             if (AiOrderDebouncer::isHumanHandoff($message) || Cache::has('human_mode_' . $sender)) {
-                $result = $this->processor->process($sender, $message, $location, $payload);
+                $result = $this->processor->process($sender, $message, $locationParam, $payload);
                 return response()->json(['status' => 'success', 'data' => $result], 200);
             }
 

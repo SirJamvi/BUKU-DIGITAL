@@ -993,5 +993,96 @@ class AiOrderSystemTest extends TestCase
         $this->assertEquals('20kg', $order->ukuran_produk);
         $this->assertEquals('validated', $order->status);
     }
+
+    /**
+     * Skenario 23: Regresi Fase 12 - Idempotensi payload asli Fonnte (inboxid: 0, tanpa ID unik)
+     */
+    public function test_scenario_23_phase12_idempotency_real_fonnte_payloads(): void
+    {
+        Http::fake([
+            'https://api.fonnte.com/*' => Http::response(['status' => true], 200),
+        ]);
+
+        Config::set('ai_order.after_response', false); // mode synchronous untuk feature test
+
+        // (a) 2 bubble beda dari satu pengirim dalam 1 menit -> keduanya diterima dan masuk buffer debounce
+        $senderA = '6281299991101';
+        $payloadA1 = [
+            'sender'    => $senderA,
+            'message'   => 'pesan es 2 ball',
+            'inboxid'   => 0,
+            'timestamp' => 1731234500,
+        ];
+        $payloadA2 = [
+            'sender'    => $senderA,
+            'message'   => 'yang 20kg',
+            'inboxid'   => 0,
+            'timestamp' => 1731234510,
+        ];
+
+        $resA1 = $this->postJson('/api/v1/webhook/fonnte', $payloadA1);
+        $resA1->assertStatus(200);
+        $this->assertNotEquals('ignored', $resA1->json('status'));
+
+        $resA2 = $this->postJson('/api/v1/webhook/fonnte', $payloadA2);
+        $resA2->assertStatus(200);
+        $this->assertNotEquals('ignored', $resA2->json('status'));
+
+        // (b) 2 pengirim berbeda pada detik yang sama -> keduanya diterima, tidak boleh saling memblokir
+        $senderB = '6281299991102';
+        $senderC = '6281299991103';
+        $timeSame = 1731234550;
+
+        $resB = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'    => $senderB,
+            'message'   => 'pesan es 1 ball',
+            'inboxid'   => 0,
+            'timestamp' => $timeSame,
+        ]);
+        $resB->assertStatus(200);
+        $this->assertNotEquals('ignored', $resB->json('status'));
+
+        $resC = $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'    => $senderC,
+            'message'   => 'pesan es 3 ball',
+            'inboxid'   => 0,
+            'timestamp' => $timeSame,
+        ]);
+        $resC->assertStatus(200);
+        $this->assertNotEquals('ignored', $resC->json('status'));
+
+        // (c) Payload identik (retry Fonnte) dengan inboxid: 0 -> hanya diproses sekali
+        $senderD = '6281299991104';
+        $payloadRetry = [
+            'sender'    => $senderD,
+            'message'   => 'tes retry pesan',
+            'inboxid'   => 0,
+            'timestamp' => 1731234600,
+        ];
+
+        $resD1 = $this->postJson('/api/v1/webhook/fonnte', $payloadRetry);
+        $resD1->assertStatus(200);
+
+        $resD2 = $this->postJson('/api/v1/webhook/fonnte', $payloadRetry);
+        $resD2->assertStatus(200);
+        $resD2->assertJson(['status' => 'ignored', 'message' => 'Duplicate webhook request']);
+
+        // (d) Payload dengan ID nyata
+        $senderE = '6281299991105';
+        $payloadRealId = [
+            'id'        => 'fonnte_msg_real_9999',
+            'sender'    => $senderE,
+            'message'   => 'pesan via real id',
+            'inboxid'   => 8888,
+            'timestamp' => 1731234700,
+        ];
+
+        $resE1 = $this->postJson('/api/v1/webhook/fonnte', $payloadRealId);
+        $resE1->assertStatus(200);
+
+        $resE2 = $this->postJson('/api/v1/webhook/fonnte', $payloadRealId);
+        $resE2->assertStatus(200);
+        $resE2->assertJson(['status' => 'ignored', 'message' => 'Duplicate webhook request']);
+    }
 }
 
