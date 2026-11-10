@@ -64,31 +64,44 @@ class AiOrderDebouncer
     }
 
     /**
-     * Tambahkan pesan ke buffer antrean per pengirim dan perbarui token versi.
+     * Tambahkan pesan ke buffer antrean per pengirim dan perbarui token versi secara atomik.
+     * Menggunakan Cache::lock('ai_buf_{pengirim}', 5)->block(3) untuk mencegah lost update.
      *
-     * @return array [string $token, int $debounceSeconds]
+     * @return array [string $token, int $debounceSeconds, int $bubblesIn]
      */
     public static function bufferMessage(string $sender, string $message, array $payload): array
     {
-        $bufferKey = 'debounce_buffer_' . $sender;
-        $tokenKey  = 'debounce_token_' . $sender;
+        $bufferKey  = 'debounce_buffer_' . $sender;
+        $tokenKey   = 'debounce_token_' . $sender;
+        $counterKey = 'debounce_counter_' . $sender;
+        $lockKey    = 'ai_buf_' . $sender;
 
-        $token = microtime(true) . '_' . Str::random(8);
-        $debounceSeconds = self::getDebounceSeconds($message);
+        $lock = Cache::lock($lockKey, 5);
+        $lock->block(3);
 
-        // Ambil buffer yang ada dan tambahkan item baru
-        $buffer = Cache::get($bufferKey, []);
-        $buffer[] = [
-            'message'   => $message,
-            'payload'   => $payload,
-            'timestamp' => microtime(true),
-        ];
+        try {
+            $token = microtime(true) . '_' . Str::random(8);
+            $debounceSeconds = self::getDebounceSeconds($message);
 
-        // Simpan buffer (berlaku 2 menit)
-        Cache::put($bufferKey, $buffer, now()->addMinutes(2));
-        Cache::put($tokenKey, $token, now()->addMinutes(2));
+            // Ambil buffer yang ada dan tambahkan item baru secara atomik
+            $buffer = Cache::get($bufferKey, []);
+            $buffer[] = [
+                'message'   => $message,
+                'payload'   => $payload,
+                'timestamp' => microtime(true),
+            ];
 
-        return [$token, $debounceSeconds];
+            $inCount = (int) Cache::get($counterKey, 0) + 1;
+
+            // Simpan buffer, token versi terbaru, dan hitungan masuk secara atomik
+            Cache::put($bufferKey, $buffer, now()->addMinutes(2));
+            Cache::put($tokenKey, $token, now()->addMinutes(2));
+            Cache::put($counterKey, $inCount, now()->addMinutes(2));
+
+            return [$token, $debounceSeconds, $inCount];
+        } finally {
+            optional($lock)->release();
+        }
     }
 
     /**
@@ -111,19 +124,36 @@ class AiOrderDebouncer
     }
 
     /**
-     * Ambil seluruh isi buffer dan kosongkan dari cache.
+     * Ambil seluruh isi buffer dan kosongkan dari cache dalam satu atomic lock.
      *
-     * @return array
+     * @return array ['items' => array, 'bubbles_in' => int, 'bubbles_processed' => int]
      */
     public static function flushBuffer(string $sender): array
     {
-        $bufferKey = 'debounce_buffer_' . $sender;
-        $buffer = Cache::get($bufferKey, []);
+        $bufferKey  = 'debounce_buffer_' . $sender;
+        $tokenKey   = 'debounce_token_' . $sender;
+        $counterKey = 'debounce_counter_' . $sender;
+        $lockKey    = 'ai_buf_' . $sender;
 
-        Cache::forget($bufferKey);
-        Cache::forget('debounce_token_' . $sender);
+        $lock = Cache::lock($lockKey, 5);
+        $lock->block(3);
 
-        return $buffer;
+        try {
+            $buffer = Cache::get($bufferKey, []);
+            $totalIn = (int) Cache::get($counterKey, count($buffer));
+
+            Cache::forget($bufferKey);
+            Cache::forget($tokenKey);
+            Cache::forget($counterKey);
+
+            return [
+                'items'             => $buffer,
+                'bubbles_in'        => $totalIn,
+                'bubbles_processed' => count($buffer),
+            ];
+        } finally {
+            optional($lock)->release();
+        }
     }
 
     /**

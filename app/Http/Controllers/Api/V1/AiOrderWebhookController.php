@@ -196,7 +196,17 @@ class AiOrderWebhookController extends Controller
                 return ['status' => 'superseded'];
             }
 
-            $bufferItems = AiOrderDebouncer::flushBuffer($sender);
+            $flushResult = AiOrderDebouncer::flushBuffer($sender);
+            $bufferItems = $flushResult['items'];
+            $bubblesIn = $flushResult['bubbles_in'];
+            $bubblesProcessed = $flushResult['bubbles_processed'];
+
+            if ($bubblesIn !== $bubblesProcessed) {
+                Log::warning("[AiOrderWebhook] Wave mismatch: bubbles_in={$bubblesIn}, bubbles_processed={$bubblesProcessed} untuk " . PhoneNumberHelper::mask($sender));
+            } else {
+                Log::info("[AiOrderWebhook] Wave match: bubbles_in={$bubblesIn}, bubbles_processed={$bubblesProcessed} untuk " . PhoneNumberHelper::mask($sender));
+            }
+
             if (empty($bufferItems)) {
                 return ['status' => 'empty_buffer'];
             }
