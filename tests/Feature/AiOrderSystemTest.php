@@ -427,6 +427,54 @@ class AiOrderSystemTest extends TestCase
     }
 
     /**
+     * Skenario 7b: Hotfix Array to string conversion - Payload Fonnte dengan field array
+     */
+    public function test_scenario_7b_webhook_payload_with_array_fields_no_crash(): void
+    {
+        Http::fake([
+            'https://api.fonnte.com/*' => Http::response(['status' => true], 200),
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => json_encode([
+                    'nama_toko' => null,
+                    'alamat' => null,
+                    'jumlah_ball' => 1,
+                    'ukuran_produk' => '20kg',
+                    'waktu_pengiriman' => null,
+                    'is_registration' => false,
+                    'unknown_ukuran' => false,
+                ])]]]]]
+            ], 200),
+        ]);
+
+        // Uji case 1: id berupa array [191184359] seperti kiriman Fonnte
+        $payload1 = [
+            'id'        => [191184359],
+            'sender'    => '628199997788',
+            'message'   => 'pesan 1 ball 20kg',
+            'timestamp' => [1731000000],
+        ];
+
+        $res1 = $this->postJson('/api/v1/webhook/fonnte', $payload1);
+        $res1->assertStatus(200);
+
+        // Uji retry dengan id array yang sama
+        $res2 = $this->postJson('/api/v1/webhook/fonnte', $payload1);
+        $res2->assertStatus(200);
+        $res2->assertJson(['status' => 'ignored', 'message' => 'Duplicate webhook request']);
+
+        // Uji case 2: id kosong, timestamp berupa array, message berupa array
+        $payload2 = [
+            'sender'    => ['628199997799'],
+            'message'   => ['pesan 1 ball 20kg'],
+            'timestamp' => [1731000005],
+            'location'  => ['-6.200000', '106.816666'],
+        ];
+
+        $res3 = $this->postJson('/api/v1/webhook/fonnte', $payload2);
+        $res3->assertStatus(200);
+    }
+
+    /**
      * Skenario 8: Share location mengisi alamat; lokasi tanpa order -> location_only
      */
     public function test_scenario_8_share_location(): void
@@ -994,10 +1042,91 @@ class AiOrderSystemTest extends TestCase
         $this->assertEquals('validated', $order->status);
     }
 
-    /**
-     * Skenario 23: Regresi Fase 12 - Idempotensi payload asli Fonnte (inboxid: 0, tanpa ID unik)
+
+     * Skenario 23: Ekstraksi "setengah ball" ("setengah", "1/2", "separuh") menghasilkan jumlah_ball 0.5
      */
-    public function test_scenario_23_phase12_idempotency_real_fonnte_payloads(): void
+    public function test_scenario_23_setengah_ball_extraction(): void
+    {
+        $sender = '6281211110023';
+        $customer = Customer::create([
+            'business_id' => 1,
+            'name'        => 'Warung Setengah',
+            'phone'       => $sender,
+            'address'     => 'Jl Veteran',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // 1. Ekstraksi langsung via processor
+        $processor = app(\App\Services\Ai\AiOrderProcessor::class);
+        $result = $processor->process($sender, 'kirim setengah ball yang 20kg ya');
+
+        $this->assertEquals('order_validated', $result['status']);
+        $this->assertStringContainsString('0.5 ball 20kg', $capturedReply);
+
+        $order = TemporaryOrder::where('sender_phone', $sender)->latest('id')->first();
+        $this->assertNotNull($order);
+        $this->assertEquals(0.5, (float) $order->jumlah_ball);
+        $this->assertEquals('20kg', $order->ukuran_produk);
+
+        // 2. Ekstraksi via variasi '1/2' pada LlmOrderService
+        $llmService = app(\App\Services\Ai\LlmOrderService::class);
+        $parsed = $llmService->heuristicFallbackParser('pesan 1/2 ball 15kg');
+        $this->assertEquals(0.5, (float) $parsed['jumlah_ball']);
+        $this->assertEquals('15kg', $parsed['ukuran_produk']);
+
+        // 3. Ekstraksi via variasi 'separuh'
+        $parsed2 = $llmService->heuristicFallbackParser('minta separuh karung yang 10kg');
+        $this->assertEquals(0.5, (float) $parsed2['jumlah_ball']);
+        $this->assertEquals('10kg', $parsed2['ukuran_produk']);
+    }
+
+    /**
+     * Skenario 24: Deteksi kata kunci urgent/darurat memicu alert ke grup admin WhatsApp
+     */
+    public function test_scenario_24_urgent_keyword_triggers_admin_alert(): void
+    {
+        $sender = '6281211110024';
+        Customer::create([
+            'business_id' => 1,
+            'name'        => 'Cafe Cepat',
+            'phone'       => $sender,
+            'address'     => 'Jl Cepat',
+            'join_date'   => now(),
+            'status'      => 'active',
+        ]);
+
+        $capturedMessages = [];
+        $this->mockFonnteService(function ($target, $message) use (&$capturedMessages) {
+            $capturedMessages[] = ['target' => $target, 'message' => $message];
+            return ['status' => true];
+        });
+
+        Config::set('ai_order.dry_run', false);
+
+        $processor = app(\App\Services\Ai\AiOrderProcessor::class);
+        $processor->process($sender, 'pesan 2 ball 20kg urgent buruan cepet ya mau habis');
+
+        // Verifikasi bahwa ada pesan yang dikirim ke admin group
+        $adminMsg = collect($capturedMessages)->first(function ($m) {
+            return str_contains($m['message'], '[URGENT]');
+        });
+
+        $this->assertNotNull($adminMsg);
+        $this->assertEquals(config('ai_order.admin_group_id'), $adminMsg['target']);
+        $this->assertStringContainsString('🚨 [URGENT] Pelanggan Cafe Cepat meminta pesanan disegerakan!', $adminMsg['message']);
+    }
+
+    /**
+     * Skenario 25: Regresi Fase 12 - Idempotensi payload asli Fonnte (inboxid: 0, tanpa ID unik)
+     */
+    public function test_scenario_25_phase12_idempotency_real_fonnte_payloads(): void
     {
         Http::fake([
             'https://api.fonnte.com/*' => Http::response(['status' => true], 200),
@@ -1083,6 +1212,17 @@ class AiOrderSystemTest extends TestCase
         $resE2 = $this->postJson('/api/v1/webhook/fonnte', $payloadRealId);
         $resE2->assertStatus(200);
         $resE2->assertJson(['status' => 'ignored', 'message' => 'Duplicate webhook request']);
+    }
+
+    /**
+     * Helper mock FonnteService
+     */
+    protected function mockFonnteService(callable $callback): void
+    {
+        $mock = \Mockery::mock(\App\Services\Whatsapp\FonnteService::class);
+        $mock->shouldReceive('sendMessage')
+            ->andReturnUsing($callback);
+        $this->app->instance(\App\Services\Whatsapp\FonnteService::class, $mock);
     }
 }
 

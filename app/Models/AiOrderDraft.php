@@ -144,7 +144,7 @@ class AiOrderDraft extends Model
      */
     public function hasQty(): bool
     {
-        return !empty($this->data['jumlah_ball']) && (int) $this->data['jumlah_ball'] >= 1;
+        return !empty($this->data['jumlah_ball']) && (float) $this->data['jumlah_ball'] > 0;
     }
 
     /**

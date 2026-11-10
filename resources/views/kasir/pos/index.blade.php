@@ -1171,7 +1171,7 @@
                 const customerId = orderData?.customer_id || e.dataTransfer.getData('customer-id') || '';
                 const customerName = orderData?.customer_name || '';
                 const rawUkuran = (orderData?.ukuran_produk || e.dataTransfer.getData('ukuran-produk') || '20kg').toString().toLowerCase().trim();
-                const jumlahBall = parseInt(orderData?.jumlah_ball || e.dataTransfer.getData('jumlah-ball') || 1, 10);
+                const jumlahBall = parseFloat(orderData?.jumlah_ball || e.dataTransfer.getData('jumlah-ball') || 1);
 
                 // Cegah drag ganda jika pesanan AI sudah pernah dimasukkan ke keranjang
                 if (orderId && window.aiOrdersInCart && window.aiOrdersInCart.has(parseInt(orderId, 10))) {

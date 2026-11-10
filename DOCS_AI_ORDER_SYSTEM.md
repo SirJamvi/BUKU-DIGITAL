@@ -189,13 +189,27 @@ Prompt AI dirampingkan secara drastis: AI **dilarang menghasilkan teks sapaan/ba
 {
   "nama_toko": "string|null",
   "alamat": "string|null",
-  "jumlah_ball": "integer|null",
+  "jumlah_ball": "number|null",
   "ukuran_produk": "20kg|15kg|10kg|null",
   "waktu_pengiriman": "YYYY-MM-DD HH:MM:SS|null",
   "is_registration": "boolean",
   "unknown_ukuran": "boolean"
 }
 ```
+
+### Dukungan Khusus: Setengah Ball (0.5 Ball)
+Jika pelanggan menyebutkan kuantitas pecahan seperti `"setengah"`, `"1/2"`, `"separuh"`, atau `"0.5"`:
+- **LLM System Prompt**: Diberi aturan tegas untuk memetakan kata-kata tersebut ke nilai `0.5` (tipe `float`).
+- **Regex Fallback Parser**: Dilengkapi ekspresi reguler `(?:setengah|separuh|1\/2|0[,.]5)` yang otomatis menghasilkan `0.5`.
+- **Database Schema**: Kolom `temporary_orders.jumlah_ball` diubah dari integer ke `DECIMAL(8, 2)` melalui migration `2026_11_07_193000_change_jumlah_ball_to_decimal_in_temporary_orders_table.php`, dan Model di-cast ke `float`.
+- **Formatting Tampilan & POS Kasir**: Tampilan teks otomatis menampilkan `"0.5"` (bukan dibulatkan menjadi `0` atau `1`), dan antarmuka POS kasir membaca nilai dengan `parseFloat(...)` agar akurat saat ditarik ke keranjang belanja.
+
+### Deteksi Pesanan Darurat (Urgent) & Notifikasi Grup Admin
+Jika pesan pelanggan mengandung kata kunci urgensi (`urgent`, `segera`, `cepet`, `cepat`, `buruan`, `darurat`):
+- Sistem secara otomatis memicu metode `AdminGroupNotifier::notifyUrgentOrder`.
+- Notifikasi terkirim seketika ke grup WhatsApp kasir/admin dengan format resmi:
+  > `🚨 [URGENT] Pelanggan {nama} meminta pesanan disegerakan!`
+- Eksekusi pesanan normal tetap berjalan simultan tanpa hambatan.
 
 ### Penegakan Ukuran Produk Resmi (Hanya 20kg, 15kg, 10kg)
 Sistem Adin Crystal **HANYA** mendukung 3 varian ukuran es kristal:

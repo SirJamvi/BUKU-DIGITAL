@@ -33,7 +33,13 @@ database/
 └── migrations/
     ├── 2026_11_06_100000_create_ai_order_drafts_table.php
     ├── 2026_11_06_110000_update_status_enum_in_temporary_orders_table.php
-    └── 2026_11_06_120000_add_is_new_customer_to_temporary_orders_table.php
+    ├── 2026_11_06_120000_add_is_new_customer_to_temporary_orders_table.php
+    └── 2026_11_07_193000_change_jumlah_ball_to_decimal_in_temporary_orders_table.php
+resources/
+└── views/
+    └── kasir/
+        └── pos/
+            └── index.blade.php
 tests/
 └── Feature/
     └── AiOrderSystemTest.php

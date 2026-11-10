@@ -34,7 +34,10 @@ class AiOrderWebhookController extends Controller
         // ==============================================================
         // 1. FILTRASI PESAN GRUP WHATSAPP (sebelum lock, DB, atau log berat)
         // ==============================================================
-        $senderRaw = (string) ($payload['sender'] ?? $payload['from'] ?? $payload['phone'] ?? '');
+        $rawSender = $payload['sender'] ?? $payload['from'] ?? $payload['phone'] ?? $request->input('sender') ?? $request->input('from') ?? $request->input('phone') ?? '';
+        $senderRaw = is_array($rawSender) ? (string) ($rawSender[0] ?? '') : (string) $rawSender;
+        $senderRaw = trim($senderRaw);
+
         $isGroup = (isset($payload['isgroup']) && ($payload['isgroup'] === true || $payload['isgroup'] === 'true' || $payload['isgroup'] == 1))
             || (isset($payload['isGroup']) && ($payload['isGroup'] === true || $payload['isGroup'] === 'true' || $payload['isGroup'] == 1))
             || str_ends_with(strtolower($senderRaw), '@g.us');
@@ -62,9 +65,20 @@ class AiOrderWebhookController extends Controller
             return response()->json(['status' => 'ignored', 'message' => 'Pengirim kosong'], 200);
         }
 
-        $message = trim((string) ($request->input('message') ?? $request->input('text') ?? $payload['message'] ?? $payload['text'] ?? ''));
-        $location = !empty($payload['location']) ? (string) $payload['location'] : '';
-        $timestamp = (string) ($payload['timestamp'] ?? $payload['time'] ?? '');
+        $rawMessage = $request->input('message') ?? $request->input('text') ?? $payload['message'] ?? $payload['text'] ?? '';
+        if (is_array($rawMessage)) {
+            $message = !empty($rawMessage) && is_scalar($rawMessage[0]) ? (string) $rawMessage[0] : (empty($rawMessage) ? '' : json_encode($rawMessage));
+        } else {
+            $message = (string) $rawMessage;
+        }
+        $message = trim($message);
+
+        $rawLocation = $payload['location'] ?? $request->input('location') ?? '';
+        $location = is_array($rawLocation) ? implode(',', $rawLocation) : (string) $rawLocation;
+
+        $rawTimestamp = $payload['timestamp'] ?? $payload['time'] ?? $request->input('timestamp') ?? '';
+        $timestamp = is_array($rawTimestamp) ? (string) ($rawTimestamp[0] ?? '') : (string) $rawTimestamp;
+
         $msgType = !empty($location) ? 'location' : ($message === 'non-text message' ? 'media' : (empty($message) ? 'empty' : 'text'));
         $maskedSender = PhoneNumberHelper::mask($sender);
 
@@ -73,7 +87,11 @@ class AiOrderWebhookController extends Controller
         // Nilai id/inboxid yang kosong, null, "0", atau 0 dianggap TIDAK ADA.
         // Kunci = sha256(sender ternormalisasi | timestamp | type | teks pesan | location). TTL 120 detik.
         // ==============================================================
-        $rawId = $payload['id'] ?? $payload['inboxid'] ?? null;
+        $rawId = $payload['id'] ?? $payload['inboxid'] ?? $request->input('id') ?? $request->input('inboxid') ?? null;
+        if (is_array($rawId)) {
+            $rawId = !empty($rawId) && is_scalar($rawId[0]) ? $rawId[0] : null;
+        }
+
         $realId = null;
         if ($rawId !== null && $rawId !== '' && $rawId !== 0 && $rawId !== '0') {
             $realId = trim((string) $rawId);
@@ -245,7 +263,7 @@ class AiOrderWebhookController extends Controller
                     'customer_name'           => $customerName,
                     'sender_phone'            => $order->sender_phone,
                     'customer_address'        => $address,
-                    'jumlah_ball'             => (int) $order->jumlah_ball,
+                    'jumlah_ball'             => (fmod((float) $order->jumlah_ball, 1.0) === 0.0) ? (int) $order->jumlah_ball : (float) $order->jumlah_ball,
                     'ukuran_produk'           => $order->ukuran_produk,
                     'delivery_time'           => $order->delivery_time ? $order->delivery_time->format('Y-m-d H:i:s') : null,
                     'delivery_time_formatted' => $order->delivery_time 

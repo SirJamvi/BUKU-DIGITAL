@@ -86,6 +86,21 @@ class AiOrderProcessor
         // ==============================================================
         $draft = AiOrderDraft::getOrCreateDraft($canonicalSender);
 
+        // ==============================================================
+        // 4b. DETEKSI PESAN URGENT / SEGERA
+        // ==============================================================
+        if (self::isUrgent($combinedMessage)) {
+            $urgentName = $customerName;
+            if ($urgentName === 'Kak') {
+                if (!empty($draft->data['nama_toko'])) {
+                    $urgentName = $draft->data['nama_toko'];
+                } elseif (preg_match('/(?:toko|cafe|kafe|caffe|kedai|warung|resto|depot|kopi)\s+([^,\n\.\;\|]+)/i', $combinedMessage, $tm)) {
+                    $urgentName = trim($tm[0]);
+                }
+            }
+            $this->adminNotifier->notifyUrgentOrder($urgentName, $canonicalSender);
+        }
+
         // Lazy-expiry pesanan validated > 24 jam
         try {
             TemporaryOrder::lazyExpireOldOrders();
@@ -262,7 +277,7 @@ class AiOrderProcessor
             }
 
             // PERUBAHAN ORDER (Update order terakhir)
-            $followup = $this->extractFollowupIntent($combinedMessage, (int) $latestOrder->jumlah_ball, (string) $latestOrder->ukuran_produk);
+            $followup = $this->extractFollowupIntent($combinedMessage, (float) $latestOrder->jumlah_ball, (string) $latestOrder->ukuran_produk);
 
             if ($followup !== null) {
                 // Jika order sudah diproses kasir, tidak bisa diubah lewat chat
@@ -281,9 +296,11 @@ class AiOrderProcessor
                     return ['status' => 'unknown_ukuran', 'order_id' => $latestOrder->id, 'reply' => $reply];
                 }
 
-                $targetQty = (int) $followup['qty'];
+                $tVal = (float) $followup['qty'];
+                $targetQty = (fmod($tVal, 1.0) === 0.0) ? (int) $tVal : round($tVal, 2);
                 $targetUkuran = (string) $followup['ukuran'];
-                $oldQty = (int) $latestOrder->jumlah_ball;
+                $oVal = (float) $latestOrder->jumlah_ball;
+                $oldQty = (fmod($oVal, 1.0) === 0.0) ? (int) $oVal : round($oVal, 2);
                 $oldUkuran = (string) $latestOrder->ukuran_produk;
 
                 // Kasus A: Nilai persis sama dengan order berjalan (penegasan)
@@ -442,7 +459,8 @@ class AiOrderProcessor
             return ['status' => 'need_qty', 'reply' => $reply];
         }
 
-        $qty = (int) $draft->data['jumlah_ball'];
+        $qVal = (float) $draft->data['jumlah_ball'];
+        $qty = (fmod($qVal, 1.0) === 0.0) ? (int) $qVal : round($qVal, 2);
 
         // B. Cek Ukuran Produk (Default adalah 20kg jika tidak disebut)
         if (!$draft->hasUkuran()) {
@@ -607,6 +625,23 @@ class AiOrderProcessor
     }
 
     /**
+     * Cek apakah pesan pelanggan mengandung kata kunci urgensi/mendesak.
+     */
+    public static function isUrgent(string $message): bool
+    {
+        $keywords = ['urgent', 'segera', 'buruan', 'cepet', 'cepat', 'darurat'];
+        $clean = strtolower($message);
+
+        foreach ($keywords as $kw) {
+            if (str_contains($clean, $kw)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Cek apakah balasan bertipe pertanyaan harus ditahan karena ada bubble baru yang masuk.
      */
     protected function shouldSuppressQuestionReply(string $sender): bool
@@ -641,7 +676,7 @@ class AiOrderProcessor
     /**
      * Ekstraksi intensi ukuran dan/atau kuantitas pada pesan susulan.
      */
-    protected function extractFollowupIntent(string $message, int $currentQty, string $currentUkuran): ?array
+    protected function extractFollowupIntent(string $message, float|int $currentQty, string $currentUkuran): ?array
     {
         $clean = strtolower(trim($message));
 
@@ -660,20 +695,28 @@ class AiOrderProcessor
         $newQty = $currentQty;
         $newUkuran = $currentUkuran;
 
+        // Cek setengah ball di follow-up ("jadi setengah", "ganti 1/2", "setengah ball")
+        if (preg_match('/(?:^|\b)(?:jadi|jadinya|ganti)?\s*(?:setengah|separuh|1\/2|0[,.]5)\s*(?:ball|bal|sak|karung|biji|bungkus)?(?:\b|$)/i', $clean)) {
+            $newQty = 0.5;
+            $hasQty = true;
+        }
         // 1. Cek Penambahan Relatif ("tambah 1", "nambah 2", "+1")
-        if (preg_match('/(?:tambah|nambah|plus|\+)\s*(\d+)/i', $clean, $m)) {
-            $newQty = $currentQty + (int) $m[1];
+        elseif (preg_match('/(?:tambah|nambah|plus|\+)\s*(\d+(?:[.,]\d+)?)/i', $clean, $m)) {
+            $add = (float) str_replace(',', '.', $m[1]);
+            $sum = $currentQty + $add;
+            $newQty = (fmod($sum, 1.0) === 0.0) ? (int) $sum : round($sum, 2);
             $hasQty = true;
         }
         // 2. Cek Qty Absolut ("jadi 2 ball", "jadinya 2", "ganti 2", "2 ball", "1 ball", atau hanya angka tunggal)
-        elseif (preg_match('/(?:jadi|jadinya|ganti)?\s*(\d+)\s*(?:ball|bal|sak|karung|biji|bungkus)\b/i', $clean, $m)) {
-            $newQty = (int) $m[1];
+        elseif (preg_match('/(?:jadi|jadinya|ganti)?\s*(\d+(?:[.,]\d+)?)\s*(?:ball|bal|sak|karung|biji|bungkus)\b/i', $clean, $m)) {
+            $val = (float) str_replace(',', '.', $m[1]);
+            $newQty = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
             $hasQty = true;
-        } elseif (preg_match('/^(?:jadi|jadinya)?\s*(\d+)\s*$/i', $clean, $m)) {
-            $candidate = (int) $m[1];
+        } elseif (preg_match('/^(?:jadi|jadinya)?\s*(\d+(?:[.,]\d+)?)\s*$/i', $clean, $m)) {
+            $candidate = (float) str_replace(',', '.', $m[1]);
             // Jika angka tunggal bukan 10, 15, 19, 20 (karena 10/15/20 biasanya ukuran es)
             if (!in_array($candidate, [10, 15, 19, 20])) {
-                $newQty = $candidate;
+                $newQty = (fmod($candidate, 1.0) === 0.0) ? (int) $candidate : round($candidate, 2);
                 $hasQty = true;
             }
         }

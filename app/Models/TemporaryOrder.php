@@ -27,7 +27,7 @@ class TemporaryOrder extends Model
     ];
 
     protected $casts = [
-        'jumlah_ball'     => 'integer',
+        'jumlah_ball'     => 'float',
         'is_new_customer' => 'boolean',
         'delivery_time'   => 'datetime',
         'harga_asumsi'    => 'decimal:2',
