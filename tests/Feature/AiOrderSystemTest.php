@@ -1389,6 +1389,244 @@ class AiOrderSystemTest extends TestCase
     }
 
     /**
+     * Skenario 30: Fase 13 - Cancel vs Change ("gajadi" + nilai baru = ubah, pure cancel = batal dengan ringkasan)
+     */
+    public function test_scenario_30_phase13_cancel_vs_change(): void
+    {
+        $sender = '6281255550030';
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // 1. Pesanan awal: 1 ball 20kg
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'pesan es kristal 1 ball 20kg',
+        ])->assertStatus(200);
+
+        $order = TemporaryOrder::where('sender_phone', $sender)->latest('id')->first();
+        $this->assertNotNull($order);
+        $this->assertEquals(1, $order->quantity);
+        $this->assertEquals('validated', $order->status);
+
+        // 2. Pesan susulan dengan kata gajadi + qty baru -> UBAH (bukan batal)
+        $capturedReply = '';
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'gajadi deh, jadi 2 ball aja',
+        ])->assertStatus(200);
+
+        $order->refresh();
+        $this->assertEquals(2, $order->quantity);
+        $this->assertEquals('validated', $order->status);
+        $this->assertStringContainsString('diubah menjadi 2 ball', $capturedReply);
+
+        // 3. Pure cancel -> BATAL dengan ringkasan pesanan
+        $capturedReply = '';
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'batalin aja ya kak',
+        ])->assertStatus(200);
+
+        $order->refresh();
+        $this->assertEquals('cancelled', $order->status);
+        $this->assertStringContainsString('dibatalkan', $capturedReply);
+        $this->assertStringContainsString('#' . $order->id, $capturedReply);
+    }
+
+    /**
+     * Skenario 31: Fase 13 - Perubahan di luar 5 menit meminta konfirmasi YA
+     */
+    public function test_scenario_31_phase13_change_outside_window_requires_confirmation(): void
+    {
+        $sender = '6281255550031';
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // 1. Pesanan awal
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'pesan es 20kg 1 ball',
+        ])->assertStatus(200);
+
+        $order = TemporaryOrder::where('sender_phone', $sender)->latest('id')->first();
+
+        // Manipulasi waktu pesanan menjadi 7 menit lalu (> 5 menit)
+        $order->update(['created_at' => Carbon::now()->subMinutes(7)]);
+        Cache::put('last_order_time_' . $sender, Carbon::now()->subMinutes(7)->timestamp);
+
+        // 2. Pelanggan minta ubah di luar jendela
+        $capturedReply = '';
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'jadi 5 ball',
+        ])->assertStatus(200);
+
+        // Tidak langsung berubah, tapi tanya konfirmasi
+        $order->refresh();
+        $this->assertEquals(1, $order->quantity);
+        $this->assertStringContainsString('Mau ubah pesanan #' . $order->id, $capturedReply);
+        $this->assertStringContainsString('Balas *YA*', $capturedReply);
+        $this->assertTrue(Cache::has('pending_change_' . $sender));
+
+        // 3. Balas YA -> perubahan dieksekusi
+        $capturedReply = '';
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'YA',
+        ])->assertStatus(200);
+
+        $order->refresh();
+        $this->assertEquals(5, $order->quantity);
+        $this->assertStringContainsString('diubah menjadi 5 ball', $capturedReply);
+    }
+
+    /**
+     * Skenario 32: Fase 13 - Bot silent pada kata penutup/salam jika belum pernah chat 24 jam terakhir
+     */
+    public function test_scenario_32_phase13_bot_silent_on_closing_without_prior_chat(): void
+    {
+        $sender = '6281255550032';
+        Cache::forget('bot_sent_to_' . $sender);
+
+        $callCount = 0;
+        $this->mockFonnteService(function ($target, $message) use (&$callCount) {
+            $callCount++;
+            return ['status' => true];
+        });
+
+        // Pesan penutup/sapaan tanpa riwayat chat bot 24 jam
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'waalaikumsalam',
+        ])->assertStatus(200);
+
+        $this->assertEquals(0, $callCount, 'Bot wajib hening pada waalaikumsalam tanpa riwayat interaksi.');
+
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'terima kasih',
+        ])->assertStatus(200);
+
+        $this->assertEquals(0, $callCount, 'Bot wajib hening pada terima kasih tanpa riwayat interaksi.');
+    }
+
+    /**
+     * Skenario 33: Fase 13 - Tanya driver netral diarahkan ke admin tanpa label komplain
+     */
+    public function test_scenario_33_phase13_neutral_driver_inquiry(): void
+    {
+        $sender = '6281255550033';
+        $capturedMessages = [];
+        $this->mockFonnteService(function ($target, $message) use (&$capturedMessages) {
+            $capturedMessages[] = ['target' => $target, 'message' => $message];
+            return ['status' => true];
+        });
+
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'driver siapa ya mas yang kirim?',
+        ])->assertStatus(200);
+
+        // Pelanggan mendapat konfirmasi diteruskan ke staf
+        $customerMsg = collect($capturedMessages)->firstWhere('target', $sender);
+        $this->assertNotNull($customerMsg);
+        $this->assertStringContainsString('diteruskan ke tim/driver', $customerMsg['message']);
+
+        // Admin group menerima notifikasi [INFO DRIVER] bukan [KOMPLAIN PELANGGAN]
+        $adminMsg = collect($capturedMessages)->firstWhere('target', Config::get('ai_order.admin_group_id'));
+        $this->assertNotNull($adminMsg);
+        $this->assertStringContainsString('[INFO DRIVER]', $adminMsg['message']);
+        $this->assertStringNotContainsString('[KOMPLAIN PELANGGAN]', $adminMsg['message']);
+    }
+
+    /**
+     * Skenario 34: Fase 13 - Safeguard pertanyaan berulang (2x stuck memicu handoff admin)
+     */
+    public function test_scenario_34_phase13_repetitive_question_safeguard(): void
+    {
+        $sender = '6281255550034';
+        $capturedMessages = [];
+        $this->mockFonnteService(function ($target, $message) use (&$capturedMessages) {
+            $capturedMessages[] = ['target' => $target, 'message' => $message];
+            return ['status' => true];
+        });
+
+        // 1. Pesan tidak lengkap pertama -> bot tanya
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'mau pesen',
+        ])->assertStatus(200);
+
+        // 2. Pesan membingungkan kedua tanpa slot baru
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'anu yang tadi siang',
+        ])->assertStatus(200);
+
+        // 3. Pesan membingungkan ketiga -> bot buntu, serahkan ke admin
+        $capturedMessages = [];
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $sender,
+            'message' => 'gimana ya mas',
+        ])->assertStatus(200);
+
+        $customerMsg = collect($capturedMessages)->firstWhere('target', $sender);
+        $this->assertNotNull($customerMsg);
+        $this->assertStringContainsString('Biar cepat, saya sambungkan ke admin ya Kak', $customerMsg['message']);
+
+        $adminMsg = collect($capturedMessages)->firstWhere('target', Config::get('ai_order.admin_group_id'));
+        $this->assertNotNull($adminMsg);
+        $this->assertStringContainsString('[BOT BUNTU]', $adminMsg['message']);
+    }
+
+    /**
+     * Skenario 35: Fase 13 - Perintah staf di grup admin (ambil & lepas)
+     */
+    public function test_scenario_35_phase13_staff_takeover_commands(): void
+    {
+        $adminGroup = '120363028123456789@g.us';
+        $staffSender = '6281111111111';
+        $customerTarget = '081299998888';
+        $canonicalTarget = '6281299998888';
+
+        Config::set('ai_order.admin_group_id', $adminGroup);
+        Config::set('ai_order.admin_members', [$staffSender]);
+
+        $capturedReply = '';
+        $this->mockFonnteService(function ($target, $message) use (&$capturedReply) {
+            $capturedReply = $message;
+            return ['status' => true];
+        });
+
+        // 1. Staf mengirim 'ambil 081299998888' di grup
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $staffSender,
+            'from'    => $adminGroup,
+            'message' => "ambil $customerTarget",
+        ])->assertStatus(200);
+
+        $this->assertTrue(Cache::has('human_mode_' . $canonicalTarget));
+        $this->assertStringContainsString('diambil alih', $capturedReply);
+
+        // 2. Staf mengirim 'lepas 081299998888' di grup
+        $capturedReply = '';
+        $this->postJson('/api/v1/webhook/fonnte', [
+            'sender'  => $staffSender,
+            'from'    => $adminGroup,
+            'message' => "lepas $customerTarget",
+        ])->assertStatus(200);
+
+        $this->assertFalse(Cache::has('human_mode_' . $canonicalTarget));
+        $this->assertStringContainsString('Bot aktif kembali', $capturedReply);
+    }
+
+    /**
      * Helper mock FonnteService
      */
     protected function mockFonnteService(callable $callback): void

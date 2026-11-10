@@ -43,6 +43,47 @@ class AiOrderWebhookController extends Controller
             || str_ends_with(strtolower($senderRaw), '@g.us');
 
         if ($isGroup) {
+            // Perintah staf di grup admin (ambil <nomor> / lepas <nomor>)
+            $adminGroupId = trim((string) config('ai_order.admin_group_id', ''));
+            $adminMembers = config('ai_order.admin_members', []);
+
+            if (!empty($adminGroupId) && !empty($adminMembers)) {
+                $cleanGroupSender = str_replace('@g.us', '', $senderRaw);
+                $cleanAdminGroup  = str_replace('@g.us', '', $adminGroupId);
+
+                if ($cleanGroupSender === $cleanAdminGroup) {
+                    $rawMember = $payload['member'] ?? $request->input('member') ?? '';
+                    $member = PhoneNumberHelper::normalize((string) $rawMember);
+
+                    $normalizedMembers = array_map([PhoneNumberHelper::class, 'normalize'], (array) $adminMembers);
+                    if (!empty($member) && in_array($member, $normalizedMembers, true)) {
+                        $rawMessage = $request->input('message') ?? $request->input('text') ?? $payload['message'] ?? $payload['text'] ?? '';
+                        $msgText = trim((string) $rawMessage);
+
+                        // 1. Perintah: ambil <nomor>
+                        if (preg_match('/^ambil\s+(\+?\d[\d\s\-]+)/i', $msgText, $m)) {
+                            $targetPhone = PhoneNumberHelper::normalize($m[1]);
+                            $takeoverMins = (int) config('ai_order.staff_takeover_minutes', 30);
+                            Cache::put('human_mode_' . $targetPhone, true, now()->addMinutes($takeoverMins));
+                            $reply = "✅ Bot diheningkan untuk {$targetPhone} selama {$takeoverMins} menit.";
+                            app(\App\Services\Whatsapp\FonnteService::class)->sendMessage($senderRaw, $reply);
+                            Log::info("[AiOrderWebhook] Staf {$member} mengambil alih percakapan {$targetPhone} selama {$takeoverMins}m");
+                            return response()->json(['status' => 'success', 'command' => 'ambil', 'target' => $targetPhone], 200);
+                        }
+
+                        // 2. Perintah: lepas <nomor>
+                        if (preg_match('/^lepas\s+(\+?\d[\d\s\-]+)/i', $msgText, $m)) {
+                            $targetPhone = PhoneNumberHelper::normalize($m[1]);
+                            Cache::forget('human_mode_' . $targetPhone);
+                            $reply = "✅ Bot diaktifkan kembali untuk {$targetPhone}.";
+                            app(\App\Services\Whatsapp\FonnteService::class)->sendMessage($senderRaw, $reply);
+                            Log::info("[AiOrderWebhook] Staf {$member} melepaskan pengambilalihan {$targetPhone}");
+                            return response()->json(['status' => 'success', 'command' => 'lepas', 'target' => $targetPhone], 200);
+                        }
+                    }
+                }
+            }
+
             \App\Services\Ai\AdminGroupNotifier::logDiscoveredGroupOnce($senderRaw);
             return response()->json(['status' => 'ignored', 'reason' => 'group'], 200);
         }

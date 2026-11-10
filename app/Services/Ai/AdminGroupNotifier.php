@@ -17,9 +17,40 @@ class AdminGroupNotifier
     }
 
     /**
-     * Kirim pesan ke grup admin dengan pengaman try-catch, anti-spam, dan dry-run.
+     * Format standar pesan notifikasi grup admin (Maks 5 baris, body maks 200 karakter).
+     * Nomor telepon ditampilkan penuh format kanonik (digit saja) dan link wa.me.
+     * Jika pengirim LID tanpa nomor, nama profil ditampilkan tanpa link dan tidak error.
      */
-    public function sendToAdminGroup(string $message, string $eventType, ?string $sender = null): bool
+    public function formatAdminMessage(string $title, string $displayName, ?string $sender, ?string $body = null, ?int $silenceMinutes = null): string
+    {
+        $cleanPhone = $sender ? preg_replace('/[^0-9]/', '', $sender) : '';
+        $hasValidPhone = !empty($cleanPhone) && strlen($cleanPhone) >= 9 && !str_starts_with((string) $sender, 'lid_');
+
+        $lines = [];
+        $lines[] = "🔔 [{$title}] {$displayName}";
+        if ($hasValidPhone) {
+            $lines[] = "📱 +{$cleanPhone}";
+        }
+        if (!empty($body)) {
+            $cleanBody = trim(preg_replace('/\s+/', ' ', $body));
+            $truncated = mb_strimwidth($cleanBody, 0, 200, '...');
+            $lines[] = "💬 \"{$truncated}\"";
+        }
+        if ($hasValidPhone) {
+            $lines[] = "👉 https://wa.me/{$cleanPhone}";
+        }
+        if ($silenceMinutes !== null && $silenceMinutes > 0) {
+            $lines[] = "🤖 Bot hening {$silenceMinutes} menit";
+        }
+
+        return implode("\n", array_slice($lines, 0, 5));
+    }
+
+    /**
+     * Kirim pesan ke grup admin dengan pengaman try-catch, anti-spam, dan dry-run.
+     * PENTING: Kunci dedupe TIDAK BOLEH ditulis saat dry-run aktif!
+     */
+    public function sendToAdminGroup(string $message, string $eventType, ?string $sender = null, int $dedupeMinutes = 15): bool
     {
         $enabled = config('ai_order.admin_notify', true);
         $groupId = trim(config('ai_order.admin_group_id', ''));
@@ -34,20 +65,20 @@ class AdminGroupNotifier
             $groupId .= '@g.us';
         }
 
-        // Anti-spam deduplikasi per tipe per pengirim (15 menit)
-        if ($sender) {
-            $dedupKey = 'admin_notif_' . $eventType . '_' . PhoneNumberHelper::normalize($sender);
-            if (!Cache::add($dedupKey, true, now()->addMinutes(15))) {
-                Log::info("[AdminGroupNotifier] Notifikasi diduplikasi diabaikan: {$dedupKey}");
-                return false;
-            }
-        }
-
-        // Dry-run check
+        // Dry-run check (PENTING: Jangan tulis kunci dedupe ke cache saat dry-run!)
         $isDryRun = config('ai_order.dry_run', false);
         if ($isDryRun) {
             Log::info("[AdminGroupNotifier - DRY RUN] Kirim ke grup {$groupId}:\n{$message}");
             return true;
+        }
+
+        // Anti-spam deduplikasi per tipe per pengirim (hanya dijalankan saat LIVE)
+        if ($sender) {
+            $dedupKey = 'admin_notif_' . $eventType . '_' . PhoneNumberHelper::normalize($sender);
+            if (!Cache::add($dedupKey, true, now()->addMinutes($dedupeMinutes))) {
+                Log::info("[AdminGroupNotifier] Notifikasi diduplikasi diabaikan: {$dedupKey}");
+                return false;
+            }
         }
 
         try {
@@ -66,80 +97,89 @@ class AdminGroupNotifier
     }
 
     /**
-     * (a) Human Mode
-     * Format: 🔔 [HUMAN MODE] Pelanggan {nama/nomor} meminta bantuan admin. Pesan: "{pesan}"
+     * (a) Human Mode (Staf Diminta Bantuan)
      */
     public function notifyHumanMode(string $customerName, string $sender, string $message): bool
     {
-        $masked = PhoneNumberHelper::mask($sender);
-        $label = ($customerName !== 'Kak' && !empty($customerName)) ? "{$customerName} ({$masked})" : $masked;
-        $cleanMsg = trim(preg_replace('/\s+/', ' ', $message));
-        if (strlen($cleanMsg) > 100) {
-            $cleanMsg = substr($cleanMsg, 0, 97) . '...';
-        }
-
-        $text = "🔔 [HUMAN MODE] Pelanggan {$label} meminta bantuan admin. Pesan: \"{$cleanMsg}\"";
+        $silence = (int) config('ai_order.handoff_minutes', 15);
+        $text = $this->formatAdminMessage('HUMAN MODE', $customerName, $sender, $message, $silence);
         return $this->sendToAdminGroup($text, 'human_mode', $sender);
     }
 
     /**
      * (a2) Komplain / Status Pengiriman
-     * Format: 🔔 [KOMPLAIN / STATUS] Pelanggan {nama/nomor} menanyakan status / komplain pengiriman. Pesan: "{pesan}"
      */
     public function notifyDeliveryComplaint(string $customerName, string $sender, string $message): bool
     {
-        $masked = PhoneNumberHelper::mask($sender);
-        $label = ($customerName !== 'Kak' && !empty($customerName)) ? "{$customerName} ({$masked})" : $masked;
-        $cleanMsg = trim(preg_replace('/\s+/', ' ', $message));
-        if (strlen($cleanMsg) > 100) {
-            $cleanMsg = substr($cleanMsg, 0, 97) . '...';
-        }
-
-        $text = "🔔 [KOMPLAIN / STATUS] Pelanggan {$label} menanyakan status / komplain pengiriman. Pesan: \"{$cleanMsg}\"";
+        $silence = (int) config('ai_order.handoff_minutes', 15);
+        $text = $this->formatAdminMessage('KOMPLAIN / STATUS', $customerName, $sender, $message, $silence);
         return $this->sendToAdminGroup($text, 'complaint_status', $sender);
     }
 
     /**
+     * (a3) Pertanyaan Netral tentang Driver / Pengiriman
+     */
+    public function notifyDriverInquiry(string $customerName, string $sender, string $message): bool
+    {
+        $silence = (int) config('ai_order.handoff_minutes', 15);
+        $text = $this->formatAdminMessage('PERTANYAAN / DRIVER', $customerName, $sender, $message, $silence);
+        return $this->sendToAdminGroup($text, 'driver_inquiry', $sender);
+    }
+
+    /**
      * (b) Pelanggan Baru Terdaftar & Order Masuk
-     * Format: 🆕 [PELANGGAN BARU] {nama_toko} ({alamat}) order {qty} ball {ukuran}. Status: menunggu kasir.
      */
     public function notifyNewCustomerOrder(string $namaToko, string $alamat, float|int $qty, string $ukuran, string $sender): bool
     {
         $qtyStr = (fmod((float) $qty, 1.0) === 0.0) ? (string) (int) $qty : (string) $qty;
-        $text = "🆕 [PELANGGAN BARU] {$namaToko} ({$alamat}) order {$qtyStr} ball {$ukuran}. Status: menunggu kasir.";
+        $body = "{$alamat}. Order: {$qtyStr} ball {$ukuran}. Status: menunggu kasir.";
+        $text = $this->formatAdminMessage('PELANGGAN BARU', $namaToko, $sender, $body, null);
         return $this->sendToAdminGroup($text, 'new_customer_order', $sender);
     }
 
     /**
      * (c) Stok Tidak Cukup (Dilarang sebutkan angka stok riil)
-     * Format: ⚠️ [STOK KURANG] Permintaan {qty} ball {ukuran} dari {nama/nomor} melebihi sisa stok.
      */
     public function notifyStockInsufficient(string $customerName, string $sender, float|int $qty, string $ukuran): bool
     {
-        $masked = PhoneNumberHelper::mask($sender);
-        $label = ($customerName !== 'Kak' && !empty($customerName)) ? "{$customerName} ({$masked})" : $masked;
         $qtyStr = (fmod((float) $qty, 1.0) === 0.0) ? (string) (int) $qty : (string) $qty;
-
-        $text = "⚠️ [STOK KURANG] Permintaan {$qtyStr} ball {$ukuran} dari {$label} melebihi sisa stok.";
+        $body = "Permintaan {$qtyStr} ball {$ukuran} melebihi sisa stok.";
+        $text = $this->formatAdminMessage('STOK KURANG', $customerName, $sender, $body, null);
         return $this->sendToAdminGroup($text, 'stock_insufficient', $sender);
     }
 
     /**
      * (d) Pesanan Mendesak / Urgent
-     * Format: 🚨 [URGENT] Pelanggan {nama} meminta pesanan disegerakan!
      */
     public function notifyUrgentOrder(string $customerName, string $sender): bool
     {
-        $masked = PhoneNumberHelper::mask($sender);
-        $displayName = ($customerName !== 'Kak' && !empty($customerName)) ? $customerName : "Kak ({$masked})";
-
-        $text = "🚨 [URGENT] Pelanggan {$displayName} meminta pesanan disegerakan!";
+        $body = "Pelanggan meminta pesanan disegerakan!";
+        $text = $this->formatAdminMessage('URGENT', $customerName, $sender, $body, null);
         return $this->sendToAdminGroup($text, 'urgent_order', $sender);
     }
 
     /**
-     * (e) Gemini Error & Fallback Aktif (Max 1x per 10 menit global)
-     * Format: ⚠️ [SISTEM] Gemini API mengalami kendala, sistem beralih ke regex parser.
+     * (e) Chat Pelanggan Diteruskan Selama Human Mode (Maks 1x per 2 menit)
+     */
+    public function notifyForwardCustomerChat(string $customerName, string $sender, string $message): bool
+    {
+        $text = $this->formatAdminMessage('CHAT DITERUSKAN', $customerName, $sender, $message, null);
+        return $this->sendToAdminGroup($text, 'forward_chat', $sender, 2);
+    }
+
+    /**
+     * (f) Bot Buntu (Kendala Memahami Setelah 2 Pertanyaan Berulang)
+     */
+    public function notifyBotStuck(string $customerName, string $sender, string $message): bool
+    {
+        $silence = (int) config('ai_order.handoff_minutes', 15);
+        $body = "Bot mengalami kendala memahami percakapan berulang. Chat terakhir: {$message}";
+        $text = $this->formatAdminMessage('BOT BUNTU', $customerName, $sender, $body, $silence);
+        return $this->sendToAdminGroup($text, 'bot_stuck', $sender, 15);
+    }
+
+    /**
+     * (g) Gemini Error & Fallback Aktif (Max 1x per 10 menit global)
      */
     public function notifyGeminiFailure(string $errorMessage = ''): bool
     {

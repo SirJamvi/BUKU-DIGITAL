@@ -35,14 +35,20 @@ return [
     // Jendela waktu pengakuan/terima kasih (menit) setelah order validated
     'ack_minutes' => (int) env('AI_ORDER_ACK_MINUTES', 10),
 
-    // Durasi pengalihan human mode / bantuan staf (menit). Default: 30 menit
-    'handoff_minutes' => (int) env('AI_ORDER_HANDOFF_MINUTES', 30),
+    // Durasi pengalihan human mode / bantuan staf (menit). Default: 15 menit
+    'handoff_minutes' => (int) env('AI_ORDER_HANDOFF_MINUTES', 15),
 
     // Apakah bot merespons pesan terima kasih/oke ("Siap Kak 👍") atau tetap diam
     'ack_reply' => filter_var(env('AI_ORDER_ACK_REPLY', true), FILTER_VALIDATE_BOOLEAN),
 
     // ID Grup WhatsApp Admin (format ...@g.us) untuk notifikasi internal
     'admin_group_id' => env('AI_ORDER_ADMIN_GROUP_ID', ''),
+
+    // Anggota staf admin WhatsApp yang berwenang mengambil alih percakapan (nomor dipisah koma)
+    'admin_members' => array_filter(array_map('trim', explode(',', env('AI_ORDER_ADMIN_MEMBERS', '')))),
+
+    // Durasi pengambilalihan staf (menit) saat perintah 'ambil <nomor>'. Default: 30 menit
+    'staff_takeover_minutes' => (int) env('AI_ORDER_STAFF_TAKEOVER_MINUTES', 30),
 
     // Aktifkan pengiriman notifikasi grup admin
     'admin_notify' => filter_var(env('AI_ORDER_ADMIN_NOTIFY', true), FILTER_VALIDATE_BOOLEAN),

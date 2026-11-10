@@ -26,13 +26,13 @@ class ReplyTemplates
 
     public const UNKNOWN_UKURAN = "Ukuran yang tersedia 20 / 15 / 10 kg. Mau yang mana Kak?";
 
-    public const ORDER_IN_EXISTING = "✅ Pesanan masuk: {qty} ball {ukuran} -> {nama_toko}{jam}.\nSalah? Balas *BATAL* atau *UBAH*.";
+    public const ORDER_IN_EXISTING = "✅ Pesanan #{id} masuk: {qty} ball {ukuran} -> {nama_toko}{jam}.\nSalah? Balas *BATAL* atau *UBAH*.";
 
-    public const ORDER_IN_NEW = "✅ Terdaftar & pesanan masuk: {qty} ball {ukuran} -> {nama_toko}, {alamat}.\nSalah? Balas *BATAL* atau *UBAH*.";
+    public const ORDER_IN_NEW = "✅ Terdaftar & pesanan #{id} masuk: {qty} ball {ukuran} -> {nama_toko}, {alamat}.\nSalah? Balas *BATAL* atau *UBAH*.";
 
-    public const ORDER_IN_MULTIPLE = "✅ Pesanan ke-{index} masuk: {qty} ball {ukuran}{jam} (pesanan sebelumnya tetap ada).\nSalah? Balas *BATAL* atau *UBAH*.";
+    public const ORDER_IN_MULTIPLE = "✅ Pesanan baru #{id} masuk: {qty} ball {ukuran}{jam}. (Pesanan #{id_sebelumnya} tetap ada.)\nSalah? Balas *BATAL* atau *UBAH*.";
 
-    public const ORDER_UPDATED = "✅ Diubah: {old_qty} ball -> {new_qty} ball {ukuran}.\nSalah? Balas *BATAL* atau *UBAH*.";
+    public const ORDER_UPDATED = "✅ Pesanan #{id} diubah: {old_qty} ball -> {new_qty} ball {ukuran}.\nSalah? Balas *BATAL* atau *UBAH*.";
 
     public const LOCATION_NEED_NAME = "Lokasi diterima 📍 Nama tokonya apa Kak?";
 
@@ -42,7 +42,9 @@ class ReplyTemplates
 
     public const OUT_OF_STOCK = "Maaf Kak, stok ukuran itu belum cukup untuk jumlah segitu. Kurangi jumlahnya atau ketik *admin*.";
 
-    public const CANCELLED = "Pesanan dibatalkan. Mau pesan lagi? Langsung ketik aja.";
+    public const CANCELLED = "Pesanan #{id} ({qty} ball {ukuran}) dibatalkan. Mau pesan lagi? Langsung ketik aja.";
+
+    public const CANCELLED_NO_ORDER = "Tidak ada pesanan aktif yang dapat dibatalkan. Mau pesan lagi? Langsung ketik aja.";
 
     public const ALREADY_PROCESSED = "Pesanan sudah diproses kasir. Ketik *admin* untuk perubahan.";
 
@@ -78,6 +80,7 @@ class ReplyTemplates
             'order_in_kasbon'          => self::ORDER_IN_KASBON,
             'out_of_stock'       => self::OUT_OF_STOCK,
             'cancelled'          => self::CANCELLED,
+            'cancelled_no_order' => self::CANCELLED_NO_ORDER,
             'already_processed'  => self::ALREADY_PROCESSED,
             'location_only'      => self::LOCATION_ONLY,
             'unsupported_media'  => self::UNSUPPORTED_MEDIA,
@@ -85,9 +88,10 @@ class ReplyTemplates
             default              => self::GREETING,
         };
 
-        // Format khusus jam pengiriman untuk template order_in_existing
+        // Format khusus jam pengiriman untuk template (mencegah "jam jam 17:00")
         if (isset($params['jam']) && !empty($params['jam'])) {
-            $params['jam'] = ', jam ' . trim((string) $params['jam']);
+            $cleanJam = trim(preg_replace('/^(?:,?\s*jam\s*)+/i', '', (string) $params['jam']));
+            $params['jam'] = !empty($cleanJam) ? ', jam ' . $cleanJam : '';
         } else {
             $params['jam'] = '';
         }
@@ -141,16 +145,19 @@ class ReplyTemplates
         string $namaToko,
         ?string $alamat = null,
         ?string $jam = null,
-        float $kasbon = 0
+        float $kasbon = 0,
+        int|string $orderId = ''
     ): string {
         $base = $isNewCustomer
             ? self::render('order_in_new', [
+                'id'        => $orderId,
                 'qty'       => $qty,
                 'ukuran'    => $ukuran,
                 'nama_toko' => $namaToko,
                 'alamat'    => $alamat ?? 'Lokasi Terdaftar',
             ])
             : self::render('order_in_existing', [
+                'id'        => $orderId,
                 'qty'       => $qty,
                 'ukuran'    => $ukuran,
                 'nama_toko' => $namaToko,
@@ -168,18 +175,22 @@ class ReplyTemplates
     /**
      * Helper untuk balasan pembaruan pesanan (UBAH).
      */
-    public static function renderOrderUpdated(int $oldQty, int $newQty, string $ukuran, ?string $oldUkuran = null): string
+    public static function renderOrderUpdated(int|string $orderId, float|int $oldQty, float|int $newQty, string $ukuran, ?string $oldUkuran = null): string
     {
+        $oldQtyStr = (fmod((float) $oldQty, 1.0) === 0.0) ? (string) (int) $oldQty : (string) $oldQty;
+        $newQtyStr = (fmod((float) $newQty, 1.0) === 0.0) ? (string) (int) $newQty : (string) $newQty;
+
         if ($oldUkuran && $oldUkuran !== $ukuran) {
-            $template = "✅ Diubah: {old_qty} ball {old_ukuran} -> {new_qty} ball {ukuran}.\nSalah? Balas *BATAL* atau *UBAH*.";
+            $template = "✅ Pesanan #{id} diubah: {old_qty} ball {old_ukuran} -> {new_qty} ball {ukuran}.\nSalah? Balas *BATAL* atau *UBAH*.";
             return str_replace(
-                ['{old_qty}', '{old_ukuran}', '{new_qty}', '{ukuran}'],
-                [(string) $oldQty, $oldUkuran, (string) $newQty, $ukuran],
+                ['{id}', '{old_qty}', '{old_ukuran}', '{new_qty}', '{ukuran}'],
+                [(string) $orderId, $oldQtyStr, $oldUkuran, $newQtyStr, $ukuran],
                 $template
             );
         }
 
         return self::render('order_updated', [
+            'id'      => $orderId,
             'old_qty' => $oldQty,
             'new_qty' => $newQty,
             'ukuran'  => $ukuran,
@@ -189,13 +200,14 @@ class ReplyTemplates
     /**
      * Helper untuk balasan pesanan ke-2 dan seterusnya hari ini (pesanan terpisah).
      */
-    public static function renderOrderInMultiple(int $index, int $qty, string $ukuran, ?string $jam = null): string
+    public static function renderOrderInMultiple(int|string $newOrderId, int|string $prevOrderId, float|int $qty, string $ukuran, ?string $jam = null): string
     {
         return self::render('order_in_multiple', [
-            'index'  => $index,
-            'qty'    => $qty,
-            'ukuran' => $ukuran,
-            'jam'    => $jam,
+            'id'            => $newOrderId,
+            'id_sebelumnya' => $prevOrderId,
+            'qty'           => $qty,
+            'ukuran'        => $ukuran,
+            'jam'           => $jam,
         ]);
     }
 }
