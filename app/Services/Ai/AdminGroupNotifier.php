@@ -55,22 +55,25 @@ class AdminGroupNotifier
         $enabled = config('ai_order.admin_notify', true);
         $groupId = trim(config('ai_order.admin_group_id', ''));
 
-        if (!$enabled || empty($groupId)) {
-            Log::info("[AdminGroupNotifier] Notifikasi admin dilewati: enabled=" . ($enabled ? 'true' : 'false') . ", group=" . ($groupId ?: 'KOSONG'));
+        if (!$enabled) {
+            Log::info("[AdminGroupNotifier] Notifikasi admin dilewati: enabled=false");
             return false;
-        }
-
-        // Pastikan akhiran @g.us ada jika format berupa numeric WhatsApp Group JID
-        if (!str_contains($groupId, '@g.us') && (str_starts_with($groupId, '120') || strlen($groupId) > 15)) {
-            $groupId .= '@g.us';
         }
 
         // Dry-run check (PENTING: Jangan tulis kunci dedupe ke cache saat dry-run!)
         $isDryRun = config('ai_order.dry_run', false);
         if ($isDryRun) {
-            Log::info("[AdminGroupNotifier - DRY RUN] Kirim ke grup {$groupId}:\n{$message}");
+            $targetGroup = $groupId ?: 'DRY-RUN-GROUP';
+            Log::info("[AdminGroupNotifier - DRY RUN] Kirim ke grup {$targetGroup}:\n{$message}");
             return true;
         }
+
+        if (empty($groupId)) {
+            Log::info("[AdminGroupNotifier] Notifikasi admin dilewati: group=KOSONG");
+            return false;
+        }
+
+        // Pastikan akhiran @g.us ada jika format berupa numeric WhatsApp Group JID
 
         // Anti-spam deduplikasi per tipe per pengirim (hanya dijalankan saat LIVE)
         if ($sender) {

@@ -38,9 +38,11 @@ class AiOrderWebhookController extends Controller
         $senderRaw = is_array($rawSender) ? (string) ($rawSender[0] ?? '') : (string) $rawSender;
         $senderRaw = trim($senderRaw);
 
+        $fromRaw = (string) ($payload['from'] ?? $request->input('from') ?? '');
         $isGroup = (isset($payload['isgroup']) && ($payload['isgroup'] === true || $payload['isgroup'] === 'true' || $payload['isgroup'] == 1))
             || (isset($payload['isGroup']) && ($payload['isGroup'] === true || $payload['isGroup'] === 'true' || $payload['isGroup'] == 1))
-            || str_ends_with(strtolower($senderRaw), '@g.us');
+            || str_ends_with(strtolower($senderRaw), '@g.us')
+            || str_ends_with(strtolower($fromRaw), '@g.us');
 
         if ($isGroup) {
             // Perintah staf di grup admin (ambil <nomor> / lepas <nomor>)
@@ -48,11 +50,12 @@ class AiOrderWebhookController extends Controller
             $adminMembers = config('ai_order.admin_members', []);
 
             if (!empty($adminGroupId) && !empty($adminMembers)) {
-                $cleanGroupSender = str_replace('@g.us', '', $senderRaw);
+                $groupJid = str_ends_with(strtolower($senderRaw), '@g.us') ? $senderRaw : (str_ends_with(strtolower($fromRaw), '@g.us') ? $fromRaw : '');
+                $cleanGroup = str_replace('@g.us', '', $groupJid);
                 $cleanAdminGroup  = str_replace('@g.us', '', $adminGroupId);
 
-                if ($cleanGroupSender === $cleanAdminGroup) {
-                    $rawMember = $payload['member'] ?? $request->input('member') ?? '';
+                if (!empty($cleanGroup) && $cleanGroup === $cleanAdminGroup) {
+                    $rawMember = $payload['member'] ?? $request->input('member') ?? (!str_ends_with(strtolower($senderRaw), '@g.us') ? $senderRaw : '');
                     $member = PhoneNumberHelper::normalize((string) $rawMember);
 
                     $normalizedMembers = array_map([PhoneNumberHelper::class, 'normalize'], (array) $adminMembers);
@@ -66,7 +69,7 @@ class AiOrderWebhookController extends Controller
                             $takeoverMins = (int) config('ai_order.staff_takeover_minutes', 30);
                             Cache::put('human_mode_' . $targetPhone, true, now()->addMinutes($takeoverMins));
                             $reply = "✅ Bot diheningkan untuk {$targetPhone} selama {$takeoverMins} menit.";
-                            app(\App\Services\Whatsapp\FonnteService::class)->sendMessage($senderRaw, $reply);
+                            app(\App\Services\Whatsapp\FonnteService::class)->sendMessage($groupJid, $reply);
                             Log::info("[AiOrderWebhook] Staf {$member} mengambil alih percakapan {$targetPhone} selama {$takeoverMins}m");
                             return response()->json(['status' => 'success', 'command' => 'ambil', 'target' => $targetPhone], 200);
                         }
@@ -75,9 +78,9 @@ class AiOrderWebhookController extends Controller
                         if (preg_match('/^lepas\s+(\+?\d[\d\s\-]+)/i', $msgText, $m)) {
                             $targetPhone = PhoneNumberHelper::normalize($m[1]);
                             Cache::forget('human_mode_' . $targetPhone);
-                            $reply = "✅ Bot diaktifkan kembali untuk {$targetPhone}.";
-                            app(\App\Services\Whatsapp\FonnteService::class)->sendMessage($senderRaw, $reply);
-                            Log::info("[AiOrderWebhook] Staf {$member} melepaskan pengambilalihan {$targetPhone}");
+                            $reply = "✅ Bot aktif kembali untuk {$targetPhone}.";
+                            app(\App\Services\Whatsapp\FonnteService::class)->sendMessage($groupJid, $reply);
+                            Log::info("[AiOrderWebhook] Staf {$member} melepas percakapan {$targetPhone}");
                             return response()->json(['status' => 'success', 'command' => 'lepas', 'target' => $targetPhone], 200);
                         }
                     }
