@@ -7,6 +7,8 @@ use App\Models\Product;
 use App\Models\Customer;
 use App\Models\PaymentMethod;
 use App\Models\CashFlow;
+use App\Models\Inventory;
+use App\Models\StockMovement;
 use App\Services\Kasir\PosService;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
@@ -20,7 +22,7 @@ class TransactionService
     public function getTransactionsByKasir(int $kasirId, int $perPage = 15): LengthAwarePaginator
     {
         return Transaction::where('created_by', $kasirId)
-            ->with('customer')
+            ->with(['customer', 'branch'])
             ->latest('transaction_date')
             ->paginate($perPage);
     }
@@ -30,7 +32,7 @@ class TransactionService
      */
     public function getTransactionDetails(Transaction $transaction): array
     {
-        $transaction->load('customer', 'createdBy', 'details.product');
+        $transaction->load('customer', 'createdBy', 'details.product', 'branch');
 
         return [
             'transaction' => $transaction,
@@ -77,10 +79,32 @@ class TransactionService
                 $oldSnapshotsByProduct[$oldDetail->product_id][] = (float) ($oldDetail->cost_price ?? 0);
             }
 
-            // 1. Kembalikan stok dari item-item lama ke inventaris
+            $branchId = $transaction->branch_id;
+            $businessId = $transaction->business_id;
+
+            // 1. Kembalikan stok dari item-item lama ke inventaris cabang transaksi
             foreach ($transaction->details as $oldDetail) {
-                if ($oldDetail->product && $oldDetail->product->inventory) {
-                    $oldDetail->product->inventory->increment('current_stock', $oldDetail->quantity);
+                if ($oldDetail->product_id) {
+                    $oldInv = Inventory::withoutGlobalScope('branch')
+                        ->where('business_id', $businessId)
+                        ->where('branch_id', $branchId)
+                        ->where('product_id', $oldDetail->product_id)
+                        ->first();
+                    if ($oldInv) {
+                        $oldInv->increment('current_stock', $oldDetail->quantity);
+                        StockMovement::create([
+                            'business_id'    => $businessId,
+                            'branch_id'      => $branchId,
+                            'product_id'     => $oldDetail->product_id,
+                            'type'           => 'adjustment',
+                            'quantity'       => $oldDetail->quantity,
+                            'unit_cost'      => (float) ($oldDetail->cost_price ?? 0),
+                            'reference_type' => Transaction::class,
+                            'reference_id'   => (string) $transaction->id,
+                            'notes'          => "Koreksi Edit Transaksi #{$transaction->id} (Restorasi Stok)",
+                            'created_by'     => Auth::id(),
+                        ]);
+                    }
                 }
             }
             // Hapus detail transaksi yang lama
@@ -90,28 +114,47 @@ class TransactionService
             foreach ($data['items'] as $item) {
                 $product = Product::findOrFail($item['product_id']);
 
+                $inventory = Inventory::withoutGlobalScope('branch')
+                    ->where('business_id', $businessId)
+                    ->where('branch_id', $branchId)
+                    ->where('product_id', $product->id)
+                    ->first();
+
                 // Pastikan stok cukup untuk item baru
-                if ($product->inventory->current_stock < $item['quantity']) {
-                    throw new \Exception("Stok untuk produk '{$product->name}' tidak mencukupi.");
+                if (!$inventory || (float) $inventory->current_stock < (float) $item['quantity']) {
+                    throw new \Exception("Stok untuk produk '{$product->name}' di cabang transaksi tidak mencukupi.");
                 }
 
-                // Kurangi stok inventaris
-                $product->inventory->decrement('current_stock', $item['quantity']);
+                // Kurangi stok inventaris cabang transaksi
+                $inventory->decrement('current_stock', $item['quantity']);
 
                 // Snapshot cost_price:
                 // - Produk jasa = 0
                 // - Antrian snapshot lama jika ada untuk product_id ini
-                // - Item baru memakai master berjalan
+                // - Item baru memakai HPP cabang transaksi, fallback ke master produk
                 if ($product->isService()) {
                     $snapshotCost = 0.0;
                 } elseif (!empty($oldSnapshotsByProduct[$product->id])) {
                     $snapshotCost = array_shift($oldSnapshotsByProduct[$product->id]);
                 } else {
-                    $snapshotCost = (float) ($product->cost_price ?? 0);
+                    $snapshotCost = (float) ($inventory->cost_price > 0 ? $inventory->cost_price : ($product->cost_price ?? 0));
                 }
 
                 $item['cost_price'] = $snapshotCost;
                 $transaction->details()->create($item);
+
+                StockMovement::create([
+                    'business_id'    => $businessId,
+                    'branch_id'      => $branchId,
+                    'product_id'     => $product->id,
+                    'type'           => 'sale',
+                    'quantity'       => $item['quantity'],
+                    'unit_cost'      => $snapshotCost,
+                    'reference_type' => Transaction::class,
+                    'reference_id'   => (string) $transaction->id,
+                    'notes'          => "Koreksi Edit Transaksi #{$transaction->id}",
+                    'created_by'     => Auth::id(),
+                ]);
             }
 
             // 3. Perbarui data transaksi utama

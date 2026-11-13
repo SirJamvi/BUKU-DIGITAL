@@ -374,7 +374,7 @@
             async fetchOrders(isManual = false) {
                 if (isManual) this.loading = true;
                 try {
-                    const response = await fetch('/api/v1/kasir/ai-orders', {
+                    const response = await fetch('/kasir/ai-orders', {
                         headers: {
                             'Accept': 'application/json',
                             'X-Requested-With': 'XMLHttpRequest'
@@ -469,7 +469,7 @@
                 // 2. Panggil API ke backend untuk update status ke 'cancelled' / processed
                 try {
                     const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
-                    const response = await fetch(`/api/v1/kasir/ai-orders/${numId}/processed`, {
+                    const response = await fetch(`/kasir/ai-orders/${numId}/processed`, {
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': token,

@@ -20,12 +20,16 @@ class DashboardService
         try {
             $today = Carbon::today('Asia/Jakarta');
             $businessId = Auth::user()->business_id;
+            $branchId = app(\App\Support\BranchContext::class)->getBranchId();
 
             // Modal Awal Laci (Kas Kemarin)
-            $openingRecord = CashierOpeningBalance::where('business_id', $businessId)
+            $openingQuery = CashierOpeningBalance::where('business_id', $businessId)
                 ->where('user_id', $kasirId)
-                ->whereDate('date', $today)
-                ->first();
+                ->whereDate('date', $today);
+            if ($branchId) {
+                $openingQuery->where('branch_id', $branchId);
+            }
+            $openingRecord = $openingQuery->first();
             $myOpeningCash = $openingRecord ? (float) $openingRecord->amount : 0.0;
             $myOpeningNotes = $openingRecord ? $openingRecord->notes : '';
 
@@ -33,7 +37,7 @@ class DashboardService
             // [SINKRONISASI] 1. Hitung Saldo Kas Fisik Laci (100% SAMA DENGAN ADMIN)
             // ==========================================================
             // A. Penjualan Tunai Meja Langsung Lunas Hari Ini (dikecualikan transaksi yang ber-pelunasan)
-            $cashTransactions = Transaction::where('business_id', $businessId)
+            $cashTxQuery = Transaction::where('business_id', $businessId)
                 ->where('created_by', $kasirId)
                 ->where('type', 'sale')
                 ->where('payment_status', 'paid')
@@ -44,24 +48,32 @@ class DashboardService
                         ->from('cash_flow')
                         ->whereColumn('cash_flow.reference_id', 'transactions.id')
                         ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
-                })
-                ->get();
+                });
+
+            if ($branchId) {
+                $cashTxQuery->where('branch_id', $branchId);
+            }
+            $cashTransactions = $cashTxQuery->get();
 
             $cashSalesAmount = (float) $cashTransactions->sum('total_amount');
 
             // B. Pelunasan Kasbon & Setoran Driver Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
-            $pelunasanCashAmount = (float) CashFlow::where('business_id', $businessId)
+            $pelunasanCashQuery = CashFlow::where('business_id', $businessId)
                 ->where('created_by', $kasirId)
                 ->where('type', 'income')
                 ->where('payment_method', 'cash')
                 ->whereDate('date', $today)
-                ->where('description', 'LIKE', '%Pelunasan%')
-                ->sum('amount');
+                ->where('description', 'LIKE', '%Pelunasan%');
+
+            if ($branchId) {
+                $pelunasanCashQuery->where('branch_id', $branchId);
+            }
+            $pelunasanCashAmount = (float) $pelunasanCashQuery->sum('amount');
 
             $totalCashInToday = $cashSalesAmount + $pelunasanCashAmount;
 
             // C. Kas Keluar Tunai Fisik dari Laci Kasir (affects_drawer = 1 & cash)
-            $drawerCashExpensesAmount = (float) CashFlow::where('business_id', $businessId)
+            $drawerCashExpensesQuery = CashFlow::where('business_id', $businessId)
                 ->where('created_by', $kasirId)
                 ->where('type', 'expense')
                 ->where(function ($q) {
@@ -72,17 +84,25 @@ class DashboardService
                     $q->where('payment_method', 'cash')
                       ->orWhereNull('payment_method');
                 })
-                ->whereDate('date', $today)
-                ->sum('amount');
+                ->whereDate('date', $today);
+
+            if ($branchId) {
+                $drawerCashExpensesQuery->where('branch_id', $branchId);
+            }
+            $drawerCashExpensesAmount = (float) $drawerCashExpensesQuery->sum('amount');
 
             // D. Saldo Kas Fisik di Laci Real-Time (100% SAMA PERSIS dengan Admin)
             $myNetCashToday = $myOpeningCash + $totalCashInToday - $drawerCashExpensesAmount;
 
             // E. Penerimaan Non-Tunai Hari Ini (Transfer & DANA - Masuk Rekening Owner)
-            $allCashFlowsToday = CashFlow::where('created_by', $kasirId)
+            $allCashFlowsQuery = CashFlow::where('created_by', $kasirId)
                 ->whereIn('type', ['income', 'expense'])
-                ->whereDate('date', $today)
-                ->get();
+                ->whereDate('date', $today);
+
+            if ($branchId) {
+                $allCashFlowsQuery->where('branch_id', $branchId);
+            }
+            $allCashFlowsToday = $allCashFlowsQuery->get();
 
             $incomesToday = $allCashFlowsToday->where('type', 'income');
             $expensesToday = $allCashFlowsToday->where('type', 'expense');
@@ -113,14 +133,22 @@ class DashboardService
             }
 
             // Notifikasi item dengan stok rendah
-            $lowStockItems = Inventory::whereColumn('current_stock', '<=', 'min_stock')->count();
+            $lowStockQuery = Inventory::whereColumn('current_stock', '<=', 'min_stock');
+            if ($branchId) {
+                $lowStockQuery->where('branch_id', $branchId);
+            }
+            $lowStockItems = $lowStockQuery->count();
 
             // 2. Hitung jumlah fisik produk es kristal yang keluar hari ini
-            $productsSoldToday = DB::table('transactions')
+            $soldQuery = DB::table('transactions')
                 ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
                 ->join('products', 'transaction_details.product_id', '=', 'products.id')
                 ->where('transactions.created_by', $kasirId)
-                ->whereDate('transactions.transaction_date', $today)
+                ->whereDate('transactions.transaction_date', $today);
+
+            app(\App\Support\BranchContext::class)->applyTo($soldQuery, 'transactions', 'branch_id');
+
+            $productsSoldToday = $soldQuery
                 ->select('products.name', DB::raw('SUM(transaction_details.quantity) as total_quantity_sold'))
                 ->groupBy('products.name')
                 ->orderByDesc('total_quantity_sold')
@@ -128,15 +156,19 @@ class DashboardService
                 ->get();
 
             // 3. [BARU] Ambil Pengiriman Berjalan (Driver Delivery Trips yang sedang aktif)
-            $activeDeliveriesRaw = Transaction::with(['customer', 'driver', 'details.product'])
+            $activeDeliveriesQuery = Transaction::with(['customer', 'driver', 'details.product'])
                 ->where('business_id', $businessId)
                 ->where('type', 'sale')
                 ->where(function ($q) {
                     $q->where('order_status', 'delivering')
                       ->orWhere('delivery_status', 'delivering');
                 })
-                ->orderBy('transaction_date', 'desc')
-                ->get();
+                ->orderBy('transaction_date', 'desc');
+
+            if ($branchId) {
+                $activeDeliveriesQuery->where('branch_id', $branchId);
+            }
+            $activeDeliveriesRaw = $activeDeliveriesQuery->get();
 
             $activeTrips = $activeDeliveriesRaw->groupBy(function ($item) {
                 return $item->delivery_trip_code ?: ('TRIP-' . ($item->driver_id ?: $item->claimed_by_driver_id) . '-' . $item->transaction_date->format('ymdHi'));
@@ -149,7 +181,7 @@ class DashboardService
                 ->get();
 
             // 5. Ambil Kasbon yang Belum Lunas & Grouping Berdasarkan Pelanggan (Kecualikan yang sedang dibawa driver)
-            $pendingKasbonRaw = Transaction::with(['customer', 'createdBy', 'driver', 'details.product'])
+            $pendingKasbonQuery = Transaction::with(['customer', 'createdBy', 'driver', 'details.product'])
                 ->where('business_id', $businessId)
                 ->where('type', 'sale')
                 ->where('payment_status', 'pending')
@@ -161,8 +193,12 @@ class DashboardService
                     $q->whereNull('delivery_status')
                       ->orWhere('delivery_status', '!=', 'delivering');
                 })
-                ->orderBy('transaction_date', 'asc')
-                ->get();
+                ->orderBy('transaction_date', 'asc');
+
+            if ($branchId) {
+                $pendingKasbonQuery->where('branch_id', $branchId);
+            }
+            $pendingKasbonRaw = $pendingKasbonQuery->get();
 
             $kasbonByCustomer = $pendingKasbonRaw->groupBy(function ($item) {
                 return $item->customer_id ? 'cust_' . $item->customer_id : 'umum';

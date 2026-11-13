@@ -15,8 +15,13 @@ class ReportService
     public function getSalesReport(int $kasirId, array $filters): array
     {
         // Query dasar untuk transaksi
+        $branchId = app(\App\Support\BranchContext::class)->getBranchId();
         $baseQuery = Transaction::where('transactions.created_by', $kasirId) // <-- [FIX] Ditambahkan prefix 'transactions.'
-                                ->where('type', 'sale');
+                                ->where('transactions.type', 'sale');
+
+        if ($branchId) {
+            $baseQuery->where('transactions.branch_id', $branchId);
+        }
         
         // Terapkan filter tanggal pada query dasar
         $this->applyDateFilters($baseQuery, $filters);

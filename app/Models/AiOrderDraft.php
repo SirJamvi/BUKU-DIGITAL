@@ -4,15 +4,19 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToBusiness;
+use App\Traits\BelongsToBranch;
 use Carbon\Carbon;
 
 class AiOrderDraft extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToBusiness, BelongsToBranch;
 
     protected $table = 'ai_order_drafts';
 
     protected $fillable = [
+        'business_id',
+        'branch_id',
         'sender_phone',
         'data',
         'awaiting',

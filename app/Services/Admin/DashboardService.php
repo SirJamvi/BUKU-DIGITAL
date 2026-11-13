@@ -5,6 +5,7 @@ namespace App\Services\Admin;
 use App\Models\Transaction;
 use App\Models\TransactionDetail;
 use App\Models\Inventory;
+use App\Models\Branch;
 use App\Models\User;
 use App\Models\UserActivityLog;
 use App\Models\FundAllocationSetting;
@@ -13,6 +14,8 @@ use App\Models\CashierOpeningBalance;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use App\Services\Admin\FinancialService;
+use App\Support\BranchCache;
+use App\Support\BranchContext;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Services\Accounting\CogsCalculator;
@@ -47,13 +50,13 @@ class DashboardService
         // 1. Metrik Utama (Penjualan Hari Ini)
         $salesToday = $this->getSalesForDate($businessId, $today);
 
-        // 2. Perhitungan Laba Bersih (Dengan Cache agar TTFB secepat kilat)
+        // 2. Perhitungan Laba Bersih (Dengan BranchCache terisolasi cabang & tenant)
         // Bulan Ini (Cache 60 detik)
         $thisMonthFilters = [
             'start_date' => $startOfMonth->toDateString(), 
             'end_date' => $endOfMonth->toDateString()
         ];
-        $netProfitThisMonth = Cache::remember("dashboard_profit_this_month_{$businessId}", 60, function () use ($thisMonthFilters) {
+        $netProfitThisMonth = BranchCache::remember('dashboard_profit_this_month', 60, function () use ($thisMonthFilters) {
             return $this->financialService->getNetProfitOnly($thisMonthFilters);
         });
 
@@ -62,14 +65,14 @@ class DashboardService
             'start_date' => $startOfLastMonth->toDateString(), 
             'end_date' => $endOfLastMonth->toDateString()
         ];
-        $netProfitLastMonth = Cache::remember("dashboard_profit_last_month_{$businessId}", 3600, function () use ($lastMonthFilters) {
+        $netProfitLastMonth = BranchCache::remember('dashboard_profit_last_month', 3600, function () use ($lastMonthFilters) {
             return $this->financialService->getNetProfitOnly($lastMonthFilters);
         });
 
         // 3. Perbandingan & Persentase (Penjualan kemarin di-cache 1 jam)
-        $salesYesterday = Cache::remember("sales_yesterday_{$businessId}_" . $yesterday->toDateString(), 3600, function () use ($businessId, $yesterday) {
+        $salesYesterday = BranchCache::remember('sales_yesterday', 3600, function () use ($businessId, $yesterday) {
             return $this->getSalesForDate($businessId, $yesterday);
-        });
+        }, $yesterday->toDateString());
         $salesChangePercentage = $this->calculatePercentageChange($salesToday, $salesYesterday);
         $profitChangePercentage = $this->calculatePercentageChange($netProfitThisMonth, $netProfitLastMonth);
 
@@ -303,7 +306,7 @@ class DashboardService
      */
     private function getMonthlyPerformanceData(int $businessId, int $months): array
     {
-        return Cache::remember("dashboard_monthly_perf_{$businessId}_{$months}", 600, function () use ($businessId, $months) {
+        return BranchCache::remember('dashboard_monthly_perf', 600, function () use ($businessId, $months) {
             $labels = [];
             $salesData = [];
             $profitData = [];
@@ -332,7 +335,7 @@ class DashboardService
                 'sales' => $salesData,
                 'profits' => $profitData,
             ];
-        });
+        }, $months);
     }
 
     /**
@@ -340,7 +343,7 @@ class DashboardService
      */
     private function getWeeklyPerformanceData(int $businessId): array
     {
-        return Cache::remember("dashboard_weekly_perf_{$businessId}", 600, function () use ($businessId) {
+        return BranchCache::remember('dashboard_weekly_perf', 600, function () use ($businessId) {
             $labels = [];
             $salesData = [];
             $profitData = [];
@@ -476,7 +479,25 @@ class DashboardService
                     $pName = optional($product)->name ?? 'Produk';
                     $qty = (float) $detail->quantity;
                     $rawCost = $detail->cost_price;
-                    $costPrice = ($rawCost === null) ? ($strict ? 0.0 : (float) (optional($product)->cost_price ?? 0)) : (float) $rawCost;
+                    if ($rawCost === null) {
+                        $branchCost = null;
+                        $branchId = $trx->branch_id;
+                        $productId = $detail->product_id;
+                        if ($branchId && $productId) {
+                            $inv = Inventory::withoutGlobalScope('branch')
+                                ->where('branch_id', $branchId)
+                                ->where('product_id', $productId)
+                                ->first();
+                            if ($inv && (float) $inv->cost_price > 0) {
+                                $branchCost = (float) $inv->cost_price;
+                            }
+                        }
+                        $costPrice = ($branchCost !== null)
+                            ? $branchCost
+                            : ($strict ? 0.0 : (float) (optional($product)->cost_price ?? 0));
+                    } else {
+                        $costPrice = (float) $rawCost;
+                    }
                     $subCogs = $costPrice * $qty;
 
                     if (!isset($itemsSoldBreakdown[$pName])) {
@@ -670,5 +691,92 @@ class DashboardService
             ->whereDate('created_at', $filterDate)
             ->orderBy('created_at', 'desc')
             ->get();
+    }
+
+    /**
+     * Mengambil data perbandingan performa harian seluruh cabang aktif (Mode Konsolidasi).
+     * Menggunakan query agregasi GROUP BY branch_id tunggal untuk omzet, kas, dan stok kritis.
+     */
+    public function getBranchComparisonData(int $businessId, Carbon $date): array
+    {
+        $branches = Branch::where('business_id', $businessId)
+            ->where('is_active', true)
+            ->orderByDesc('is_main')
+            ->orderBy('name')
+            ->get();
+
+        $dateStr = $date->toDateString();
+
+        // 1. Omzet Penjualan Hari Ini per Cabang
+        $omzetByBranch = DB::table('transactions')
+            ->select('branch_id', DB::raw('SUM(total_amount) as total_omzet'))
+            ->where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', '!=', 'cancelled')
+            ->whereDate('transaction_date', $dateStr)
+            ->whereNotNull('branch_id')
+            ->groupBy('branch_id')
+            ->pluck('total_omzet', 'branch_id')
+            ->all();
+
+        // 2. Kas Masuk Tunai Hari Ini per Cabang
+        $cashInByBranch = DB::table('cash_flow')
+            ->select('branch_id', DB::raw('SUM(amount) as total_cash_in'))
+            ->where('business_id', $businessId)
+            ->where('type', 'income')
+            ->where('payment_method', 'cash')
+            ->whereDate('date', $dateStr)
+            ->whereNotNull('branch_id')
+            ->groupBy('branch_id')
+            ->pluck('total_cash_in', 'branch_id')
+            ->all();
+
+        // 3. Kas Keluar Tunai Hari Ini per Cabang
+        $cashOutByBranch = DB::table('cash_flow')
+            ->select('branch_id', DB::raw('SUM(amount) as total_cash_out'))
+            ->where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->where('payment_method', 'cash')
+            ->whereDate('date', $dateStr)
+            ->whereNotNull('branch_id')
+            ->groupBy('branch_id')
+            ->pluck('total_cash_out', 'branch_id')
+            ->all();
+
+        // 4. Jumlah Produk Stok Kritis per Cabang (current_stock <= min_stock)
+        $criticalStockByBranch = DB::table('inventory')
+            ->join('products', 'inventory.product_id', '=', 'products.id')
+            ->select('inventory.branch_id', DB::raw('COUNT(inventory.id) as critical_count'))
+            ->where('inventory.business_id', $businessId)
+            ->where('products.is_active', true)
+            ->where('products.name', 'NOT LIKE', '%ongkos kirim%')
+            ->where('products.name', 'NOT LIKE', '%ongkir%')
+            ->whereRaw('inventory.current_stock <= inventory.min_stock')
+            ->whereNotNull('inventory.branch_id')
+            ->groupBy('inventory.branch_id')
+            ->pluck('critical_count', 'branch_id')
+            ->all();
+
+        $result = [];
+        foreach ($branches as $branch) {
+            $bId = $branch->id;
+            $omzet = (float) ($omzetByBranch[$bId] ?? 0);
+            $cashIn = (float) ($cashInByBranch[$bId] ?? 0);
+            $cashOut = (float) ($cashOutByBranch[$bId] ?? 0);
+            $netCash = $cashIn - $cashOut;
+            $criticalCount = (int) ($criticalStockByBranch[$bId] ?? 0);
+
+            $result[] = [
+                'branch_id'            => $branch->id,
+                'branch_name'          => $branch->name,
+                'branch_code'          => $branch->code,
+                'is_main'              => (bool) $branch->is_main,
+                'omzet_today'          => $omzet,
+                'cash_today'           => $netCash,
+                'critical_stock_count' => $criticalCount,
+            ];
+        }
+
+        return $result;
     }
 }

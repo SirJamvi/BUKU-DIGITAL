@@ -41,6 +41,7 @@ class TransactionController extends Controller
         $today = Carbon::today('Asia/Jakarta');
         $todayStart = Carbon::today('Asia/Jakarta')->startOfDay();
         $todayEnd = Carbon::today('Asia/Jakarta')->endOfDay();
+        $branchId = app(\App\Support\BranchContext::class)->getBranchId();
 
         $todayTransactionsQuery = Transaction::where('business_id', $businessId)
             ->where('created_by', $kasirId)
@@ -49,6 +50,10 @@ class TransactionController extends Controller
                 $q->whereBetween('transaction_date', [$todayStart, $todayEnd])
                   ->orWhereDate('transaction_date', $today->toDateString());
             });
+
+        if ($branchId) {
+            $todayTransactionsQuery->where('branch_id', $branchId);
+        }
 
         $todaySales = (float) $todayTransactionsQuery->sum('total_amount');
         $todayTransactionsCount = $todayTransactionsQuery->count();
@@ -78,6 +83,11 @@ class TransactionController extends Controller
         // ==========================================================
         if ($transaction->business_id !== Auth::user()->business_id) {
             abort(403, 'Anda tidak memiliki akses ke transaksi ini.');
+        }
+
+        $activeBranchId = app(\App\Support\BranchContext::class)->requireBranchId();
+        if ((int) $transaction->branch_id !== (int) $activeBranchId) {
+            abort(404, 'Transaksi ini bukan milik cabang aktif Anda.');
         }
 
         $isCash = strtolower($request->payment_method ?? '') === 'cash';
@@ -145,6 +155,7 @@ class TransactionController extends Controller
 
             \App\Models\CashFlow::create([
                 'business_id'    => $transaction->business_id,
+                'branch_id'      => $activeBranchId,
                 'type'           => 'income',
                 'category_id'    => 1,
                 'payment_method' => $request->payment_method,
@@ -156,6 +167,8 @@ class TransactionController extends Controller
                 'reference_id'   => $transaction->id,
                 'created_by'     => $creatorId,
             ]);
+
+            \App\Support\BranchCache::flush($transaction->business_id);
 
             return back()->with('success', 'Transaksi berhasil divalidasi dan dicatat sebagai Lunas.');
         } catch (\Exception $e) {
@@ -185,6 +198,7 @@ class TransactionController extends Controller
 
         try {
             $this->transactionService->updateTransaction($transaction, $request->validated());
+            \App\Support\BranchCache::flush($transaction->business_id);
             return redirect()
                 ->route('kasir.transactions.show', $transaction->id)
                 ->with('success', 'Transaksi berhasil diperbarui.');
@@ -212,17 +226,19 @@ class TransactionController extends Controller
             'payment_proof.required'   => 'Bukti pembayaran / transfer WhatsApp wajib diunggah untuk pelunasan non-tunai (' . strtoupper($request->payment_method ?? '') . ').',
         ]);
 
+        $activeBranchId = app(\App\Support\BranchContext::class)->requireBranchId();
         $businessId = Auth::user()->business_id;
         $transactionIds = $request->transaction_ids;
 
-        // Pastikan transaksi yang diubah benar-benar milik toko ini dan statusnya masih pending
+        // Pastikan transaksi yang diubah benar-benar milik toko dan cabang aktif ini dan statusnya masih pending
         $transactions = Transaction::whereIn('id', $transactionIds)
             ->where('business_id', $businessId)
+            ->where('branch_id', $activeBranchId)
             ->where('payment_status', 'pending')
             ->get();
 
-        if ($transactions->isEmpty()) {
-            return back()->with('error', 'Tidak ada transaksi valid yang dapat diproses.');
+        if ($transactions->count() !== count($transactionIds)) {
+            abort(404, 'Satu atau lebih transaksi bukan milik cabang aktif Anda atau sudah lunas.');
         }
 
         try {
@@ -268,6 +284,7 @@ class TransactionController extends Controller
 
                 \App\Models\CashFlow::create([
                     'business_id'    => $transaction->business_id,
+                    'branch_id'      => $activeBranchId,
                     'type'           => 'income',
                     'category_id'    => 1,
                     'payment_method' => $request->payment_method,
@@ -280,6 +297,8 @@ class TransactionController extends Controller
             }
 
             DB::commit();
+
+            \App\Support\BranchCache::flush($businessId);
 
             return back()->with('success', count($transactions) . ' Transaksi berhasil dilunasi secara bersamaan.');
         } catch (\Exception $e) {
@@ -357,6 +376,7 @@ class TransactionController extends Controller
                     // Catat ke CashFlow secara dinamis dengan metode pembayaran riil & alokasi tanggal
                     \App\Models\CashFlow::create([
                         'business_id'    => $transaction->business_id,
+                        'branch_id'      => $transaction->branch_id,
                         'type'           => 'income',
                         'category_id'    => 1,
                         'payment_method' => $methodSlug,
@@ -380,6 +400,8 @@ class TransactionController extends Controller
             }
 
             DB::commit();
+
+            \App\Support\BranchCache::flush($businessId);
 
             $msg = "Pengiriman #{$tripCode} berhasil diselesaikan! ";
             if ($paidCount > 0) {

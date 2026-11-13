@@ -34,14 +34,25 @@ class LoginApiController extends Controller
         }
 
         // Buat Token Sanctum (Akan aktif selamanya sampai user klik Logout)
+        $branches = $this->getAccessibleBranchesForUser($user);
+
+        if (!$user->isAdmin() && empty($branches)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Semua cabang penugasan Anda nonaktif atau Anda belum ditugaskan. Hubungi Admin.',
+            ], 403);
+        }
+
         $token = $user->createToken('MobileAppToken')->plainTextToken;
 
         return response()->json([
             'status' => 'success',
             'message' => 'Login berhasil.',
             'data' => [
-                'user' => $user,
-                'token' => $token,
+                'user'             => $user,
+                'token'            => $token,
+                'branches'         => $branches,
+                'active_branch_id' => $user->getActiveBranchId(),
             ]
         ]);
     }
@@ -65,13 +76,19 @@ class LoginApiController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (!$user) {
-            // Jika belum ada, Anda bisa menolaknya atau otomatis mendaftarkan (Register).
-            // Di sini kita asumsikan Kasir harus didaftarkan manual oleh Admin dulu, 
-            // jadi kita tolak jika email belum terdaftar di sistem.
             return response()->json([
                 'status' => 'error',
                 'message' => 'Akun Google ini tidak terdaftar sebagai karyawan.'
             ], 401);
+        }
+
+        $branches = $this->getAccessibleBranchesForUser($user);
+
+        if (!$user->isAdmin() && empty($branches)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Semua cabang penugasan Anda nonaktif atau Anda belum ditugaskan. Hubungi Admin.',
+            ], 403);
         }
 
         // Jika user ada, langsung buatkan Token Sanctum
@@ -81,10 +98,31 @@ class LoginApiController extends Controller
             'status' => 'success',
             'message' => 'Login Google berhasil.',
             'data' => [
-                'user' => $user,
-                'token' => $token,
+                'user'             => $user,
+                'token'            => $token,
+                'branches'         => $branches,
+                'active_branch_id' => $user->getActiveBranchId(),
             ]
         ]);
+    }
+
+    /**
+     * Ambil daftar cabang yang dapat diakses user untuk aplikasi mobile.
+     */
+    protected function getAccessibleBranchesForUser(User $user): array
+    {
+        return $user->activeAccessibleBranches()->map(function ($b) use ($user) {
+            $isDefault = $user->isAdmin()
+                ? (bool) ($b->is_main ?? false)
+                : (bool) ($b->pivot->is_default ?? false);
+
+            return [
+                'id'         => $b->id,
+                'name'       => $b->name,
+                'code'       => $b->code,
+                'is_default' => $isDefault,
+            ];
+        })->values()->all();
     }
 
     /**

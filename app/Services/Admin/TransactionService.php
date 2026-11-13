@@ -91,9 +91,12 @@ class TransactionService
         return DB::transaction(function () use ($transaction) {
             // 1. Rollback Stok (Kembalikan stok ke inventori)
             foreach ($transaction->details as $detail) {
-                $inventory = Inventory::where('product_id', $detail->product_id)
-                    ->where('business_id', $transaction->business_id)
-                    ->first();
+                $inventoryQuery = Inventory::where('product_id', $detail->product_id)
+                    ->where('business_id', $transaction->business_id);
+                if ($transaction->branch_id) {
+                    $inventoryQuery->where('branch_id', $transaction->branch_id);
+                }
+                $inventory = $inventoryQuery->first();
 
                 if ($inventory) {
                     $qtyModifier = ($transaction->type === 'sale') ? $detail->quantity : -$detail->quantity;
@@ -104,6 +107,7 @@ class TransactionService
                     // Perbaikan: Gunakan Auth::id() menggantikan auth()->id()
                     StockMovement::create([
                         'business_id'  => $transaction->business_id,
+                        'branch_id'    => $transaction->branch_id,
                         'product_id'   => $detail->product_id,
                         'type'         => 'adjustment',
                         'quantity'     => $qtyModifier,

@@ -38,19 +38,22 @@ class ProcessTransaction implements ShouldQueue
      */
     public function handle(NotificationService $notificationService): void
     {
-        try {
-            // Contoh: Kirim notifikasi ke admin tentang transaksi baru
-            $notificationService->sendNewTransactionNotification($this->transaction);
+        // TODO-FASE-2: Execute transaction processing under transaction branch context
+        app(\App\Support\BranchContext::class)->runUnscoped(function () use ($notificationService) {
+            try {
+                // Contoh: Kirim notifikasi ke admin tentang transaksi baru
+                $notificationService->sendNewTransactionNotification($this->transaction);
 
-            // Contoh: Kirim struk ke pelanggan jika email ada
-            if ($this->transaction->customer && $this->transaction->customer->email) {
-                $notificationService->sendTransactionReceipt($this->transaction);
+                // Contoh: Kirim struk ke pelanggan jika email ada
+                if ($this->transaction->customer && $this->transaction->customer->email) {
+                    $notificationService->sendTransactionReceipt($this->transaction);
+                }
+
+            } catch (Exception $e) {
+                logger()->error("Gagal memproses job ProcessTransaction untuk ID: {$this->transaction->id}. Error: " . $e->getMessage());
+                // Anda bisa melempar kembali exception agar job diulang jika perlu
+                // $this->fail($e);
             }
-
-        } catch (Exception $e) {
-            logger()->error("Gagal memproses job ProcessTransaction untuk ID: {$this->transaction->id}. Error: " . $e->getMessage());
-            // Anda bisa melempar kembali exception agar job diulang jika perlu
-            // $this->fail($e);
-        }
+        });
     }
 }

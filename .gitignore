@@ -43,3 +43,12 @@ name
 # PHPUnit
 .phpunit.cache
 .phpunit.result.cache
+
+# Dokumentasi & File MD (Batas agar tidak ter-push ke branch)
+/Dokumentasi/
+/dokumentasi/
+/docs/*.md
+/scratch/
+DEPLOY.md
+DOCS_*.md
+DOKUMENTASI_*.md

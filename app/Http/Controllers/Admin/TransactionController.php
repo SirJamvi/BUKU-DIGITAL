@@ -48,6 +48,7 @@ class TransactionController extends Controller
     {
         try {
             app(KasirTransactionService::class)->updateTransaction($transaction, $request->validated());
+            \App\Support\BranchCache::flush($transaction->business_id);
             return redirect()
                 ->route('admin.transactions.show', $transaction->id)
                 ->with('success', 'Transaksi berhasil diperbarui oleh Admin.');
@@ -120,6 +121,7 @@ class TransactionController extends Controller
 
             CashFlow::create([
                 'business_id'    => $transaction->business_id,
+                'branch_id'      => $transaction->branch_id,
                 'type'           => 'income',
                 'category_id'    => 1,
                 'payment_method' => $request->payment_method,
@@ -131,6 +133,8 @@ class TransactionController extends Controller
                 'reference_id'   => $transaction->id,
                 'created_by'     => $creatorId,
             ]);
+
+            \App\Support\BranchCache::flush($transaction->business_id);
 
             return back()->with('success', "Transaksi #{$transaction->id} berhasil dilunasi oleh Admin.");
         } catch (\Exception $e) {
@@ -146,8 +150,10 @@ class TransactionController extends Controller
         try {
             // Ambil ID dan tanggal untuk pesan sukses sebelum data hilang
             $txId = $transaction->id;
+            $bizId = $transaction->business_id;
 
             $this->transactionService->deleteTransaction($transaction);
+            \App\Support\BranchCache::flush($bizId);
 
             return redirect()
                 ->route('admin.transactions.index')

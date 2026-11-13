@@ -37,11 +37,32 @@ class ProductService
         return DB::transaction(function () use ($data) {
             $product = Product::create($data);
 
-            $product->inventory()->create([
-                'current_stock' => $data['initial_stock'] ?? 0,
-                'min_stock'     => $data['min_stock'] ?? 10,
-                'business_id'   => $data['business_id'],
-            ]);
+            $branchContext = app(\App\Support\BranchContext::class);
+            $minStock = isset($data['min_stock']) ? (int) $data['min_stock'] : 10;
+            $initialStock = isset($data['initial_stock']) ? (int) $data['initial_stock'] : 0;
+
+            // Terapkan min_stock ke SEMUA baris inventory cabang aktif hasil sync
+            $branchContext->runUnscoped(function () use ($product, $minStock) {
+                \App\Models\Inventory::where('product_id', $product->id)
+                    ->where('business_id', $product->business_id)
+                    ->update(['min_stock' => $minStock]);
+            });
+
+            // Terapkan initial_stock sesuai mode
+            if ($branchContext->isBranch()) {
+                $activeBranchId = $branchContext->getBranchId();
+                if ($activeBranchId && $initialStock > 0) {
+                    $branchContext->runUnscoped(function () use ($product, $activeBranchId, $initialStock) {
+                        \App\Models\Inventory::where('product_id', $product->id)
+                            ->where('branch_id', $activeBranchId)
+                            ->update(['current_stock' => $initialStock]);
+                    });
+                }
+            } else {
+                if ($initialStock > 0) {
+                    session()->flash('info', 'Stok awal diisi lewat Terima Stok Supplier di cabang.');
+                }
+            }
 
             return $product;
         });

@@ -18,18 +18,24 @@ use App\Http\Controllers\Admin\ProofAuditController;
 
 // Dashboard
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+Route::get('/dashboard/branch-comparison', [DashboardController::class, 'branchComparisonJson'])->name('dashboard.branch-comparison');
 Route::get('/', [DashboardController::class, 'index'])->name('index');
 
 // Master Data & Manajemen
-Route::resource('categories', CategoryController::class);
+Route::resource('categories', CategoryController::class)->except(['show']);
 Route::resource('products', ProductController::class);
+
+// Manajemen Cabang
+Route::patch('branches/{branch}/toggle-active', [\App\Http\Controllers\Admin\BranchController::class, 'toggleActive'])
+    ->name('branches.toggle-active');
+Route::resource('branches', \App\Http\Controllers\Admin\BranchController::class)->except(['destroy']);
 
 // --- Update Bagian User ---
 // PENTING: Taruh rute kustom (toggle-status) SEBELUM Route::resource
 Route::patch('users/{user}/toggle-status', [UserController::class, 'toggleStatus'])
     ->name('users.toggle-status');
 
-Route::resource('users', UserController::class);
+Route::resource('users', UserController::class)->except(['show']);
 // ---------------------------
 
 Route::resource('suppliers', SupplierController::class)->except(['show']);
@@ -46,7 +52,7 @@ Route::resource('customers', CustomerController::class)
     ->except(['create', 'store', 'destroy']);
 // ------------------------------
 
-Route::resource('expense-categories', \App\Http\Controllers\Admin\ExpenseCategoryController::class);
+Route::resource('expense-categories', \App\Http\Controllers\Admin\ExpenseCategoryController::class)->only(['store']);
 
 // Financial & Expenses - DIJADIKAN SATU
 Route::prefix('financial')->name('financial.')->group(function () {
@@ -55,6 +61,7 @@ Route::prefix('financial')->name('financial.')->group(function () {
     Route::post('/closing', [FinancialController::class, 'processClosing'])->name('closing.process');
 
     Route::get('/', [FinancialController::class, 'index'])->name('index');
+    Route::get('/branch-closings', [FinancialController::class, 'branchClosings'])->name('branch-closings');
     Route::get('/cash-flow', [FinancialController::class, 'cashFlow'])->name('cash-flow');
     Route::get('/expenses', [FinancialController::class, 'expenses'])->name('expenses');
     Route::get('/roi-analysis', [FinancialController::class, 'roiAnalysis'])->name('roi-analysis');

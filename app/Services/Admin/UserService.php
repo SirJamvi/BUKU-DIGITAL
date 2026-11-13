@@ -35,7 +35,27 @@ class UserService
             $data['role'] = 'kasir';
         }
 
-        return User::create($data);
+        $branchIdsSubmitted = !empty($data['branch_ids_submitted']);
+        $branchIds = $data['branch_ids'] ?? (!empty($data['branch_id']) ? [$data['branch_id']] : []);
+        $defaultBranchId = $data['default_branch_id'] ?? (!empty($data['branch_id']) ? (int) $data['branch_id'] : null);
+        unset($data['branch_ids'], $data['default_branch_id'], $data['branch_ids_submitted']);
+
+        if ($data['role'] === 'admin') {
+            $data['branch_id'] = null;
+        }
+
+        $user = User::create($data);
+
+        if ($user->role !== 'admin') {
+            if ($branchIdsSubmitted || !empty($branchIds)) {
+                if (empty($branchIds) && ($activeBranchId = Auth::user()->getActiveBranchId())) {
+                    $branchIds = [$activeBranchId];
+                }
+                $user->syncBranches($branchIds, $defaultBranchId);
+            }
+        }
+
+        return $user;
     }
 
     /**
@@ -47,13 +67,30 @@ class UserService
             abort(403, 'AKSES DITOLAK.');
         }
 
+        $branchIdsSubmitted = !empty($data['branch_ids_submitted']);
+        $branchIds = $data['branch_ids'] ?? [];
+        $defaultBranchId = $data['default_branch_id'] ?? (!empty($data['branch_id']) ? (int) $data['branch_id'] : null);
+        unset($data['branch_ids'], $data['default_branch_id'], $data['branch_ids_submitted']);
+
         if (!empty($data['password'])) {
             $data['password'] = Hash::make($data['password']);
         } else {
             unset($data['password']);
         }
 
+        $targetRole = $data['role'] ?? $user->role;
+        if ($targetRole === 'admin') {
+            $data['branch_id'] = null;
+        }
+
         $user->update($data);
+
+        if ($user->role === 'admin') {
+            $user->syncBranches([]);
+        } elseif ($branchIdsSubmitted) {
+            $user->syncBranches($branchIds, $defaultBranchId);
+        }
+
         return $user;
     }
 

@@ -676,7 +676,9 @@
         }
     </style>
 
+    @if(file_exists(public_path('css/admin/app.css')))
     <link rel="stylesheet" href="{{ asset('css/admin/app.css') }}">
+    @endif
     
     @stack('styles')
 </head>
@@ -861,7 +863,9 @@
         }
     </script>
 
+    @if(file_exists(public_path('js/admin/app.js')))
     <script src="{{ asset('js/admin/app.js') }}"></script>
+    @endif
     
     @stack('scripts')
 </body>

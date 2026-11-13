@@ -327,7 +327,7 @@
             <table>
                 <tr>
                     <td>No. Struk</td>
-                    <td>: #{{ str_pad($transaction->id, 6, '0', STR_PAD_LEFT) }}</td>
+                    <td>: {{ $transaction->receiptNumber() }}</td>
                 </tr>
                 <tr>
                     <td>Tanggal</td>

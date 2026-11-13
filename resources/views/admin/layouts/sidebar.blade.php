@@ -77,9 +77,13 @@
             @endpermission
 
             @permission('financial.view_all')
-            <a href="{{ route('admin.financial.index') }}" class="sidebar-item {{ request()->routeIs('admin.financial.*') ? 'active' : '' }}">
+            <a href="{{ route('admin.financial.index') }}" class="sidebar-item {{ (request()->routeIs('admin.financial.*') && !request()->routeIs('admin.financial.expenses*') && !request()->routeIs('admin.financial.branch-closings')) ? 'active' : '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
                 <span>Finansial</span>
+            </a>
+            <a href="{{ route('admin.financial.branch-closings') }}" class="sidebar-item {{ request()->routeIs('admin.financial.branch-closings') ? 'active' : '' }}">
+                <i class="fas fa-calendar-check"></i>
+                <span>Tutup Buku Cabang</span>
             </a>
             @endpermission
 
@@ -120,6 +124,10 @@
             <a href="{{ route('admin.users.index') }}" class="sidebar-item {{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
                 <i class="fas fa-user-cog"></i>
                 <span>Manajemen User</span>
+            </a>
+            <a href="{{ route('admin.branches.index') }}" class="sidebar-item {{ request()->routeIs('admin.branches.*') ? 'active' : '' }}">
+                <i class="fas fa-store"></i>
+                <span>Manajemen Cabang</span>
             </a>
             @endpermission
 

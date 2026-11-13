@@ -212,6 +212,14 @@ class DashboardController extends Controller
             // --- LOG AKTIVITAS PELUNASAN KASBON & PENGIRIMAN HARI INI ---
             $dashboardData['settlementLogs'] = $this->dashboardService->getSettlementAuditLogs($businessId, $filterDate);
 
+            // --- LIVE MONITORING PERBANDINGAN ANTAR CABANG (MODE KONSOLIDASI PUSAT) ---
+            $context = app(\App\Support\BranchContext::class);
+            if ($context->isConsolidated() || session('active_branch_id') === 'all') {
+                $dashboardData['branchComparison'] = $this->dashboardService->getBranchComparisonData($businessId, $filterDate);
+            } else {
+                $dashboardData['branchComparison'] = [];
+            }
+
             return view('admin.dashboard.index', $dashboardData);
         } catch (\Exception $e) {
             logger()->error('Error fetching dashboard data: ' . $e->getMessage());
@@ -219,5 +227,23 @@ class DashboardController extends Controller
                 'error' => 'Tidak dapat memuat data dashboard. Silakan coba lagi nanti.'
             ]);
         }
+    }
+
+    /**
+     * Endpoint JSON untuk Live Polling (60s) Perbandingan Antar Cabang.
+     */
+    public function branchComparisonJson(Request $request)
+    {
+        $businessId = Auth::user()->business_id;
+        $dateInput = $request->input('date');
+        $date = $dateInput ? Carbon::parse($dateInput) : Carbon::today('Asia/Jakarta');
+
+        $data = $this->dashboardService->getBranchComparisonData($businessId, $date);
+
+        return response()->json([
+            'status' => 'success',
+            'date'   => $date->toDateString(),
+            'data'   => $data,
+        ]);
     }
 }

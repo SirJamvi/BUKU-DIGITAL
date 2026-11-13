@@ -9,6 +9,7 @@
 @endsection
 
 @section('content')
+    @include('components.alert')
     <x-card title="Formulir Tambah Produk">
         <form action="{{ route('admin.products.store') }}" method="POST">
             @csrf
@@ -28,6 +29,7 @@
                      <div class="row">
                         <div class="col-md-6">
                             <x-input type="number" name="initial_stock" label="Stok Awal" placeholder="Jumlah stok saat produk dibuat" value="0" />
+                            <small class="text-muted d-block mt-1">Hanya berlaku jika memilih cabang tertentu. Pada mode Pusat, stok awal dibuat 0 dan diisi lewat Terima Stok.</small>
                         </div>
                         <div class="col-md-6">
                            <x-input type="number" name="min_stock" label="Stok Minimum" placeholder="Batas stok untuk notifikasi" value="10" />

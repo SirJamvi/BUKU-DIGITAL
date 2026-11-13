@@ -28,13 +28,25 @@ class ProductService
     {
         // Secara otomatis tambahkan business_id saat membuat produk
         $data['business_id'] = Auth::user()->business_id;
-        return DB::transaction(function () use ($data) {
+        $branchId = app(\App\Support\BranchContext::class)->getBranchId();
+
+        return DB::transaction(function () use ($data, $branchId) {
             $product = Product::create($data);
-            $product->inventory()->create([
-                'current_stock' => $data['initial_stock'] ?? 0,
-                'min_stock' => $data['min_stock'] ?? 10,
-                'business_id' => $data['business_id']
-            ]);
+
+            if ($branchId) {
+                $inv = \App\Models\Inventory::withoutGlobalScopes()
+                    ->where('product_id', $product->id)
+                    ->where('branch_id', $branchId)
+                    ->first();
+
+                if ($inv) {
+                    $inv->update([
+                        'current_stock' => $data['initial_stock'] ?? 0,
+                        'min_stock'     => $data['min_stock'] ?? 10,
+                    ]);
+                }
+            }
+
             return $product;
         });
     }

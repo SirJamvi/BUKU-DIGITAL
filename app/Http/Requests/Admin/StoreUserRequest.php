@@ -34,6 +34,10 @@ class StoreUserRequest extends FormRequest
             'address' => ['nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
             'transaction_limit' => ['nullable', 'numeric', 'min:0'],
+            'branch_ids' => ['nullable', 'array'],
+            'branch_ids.*' => ['integer', 'exists:branches,id'],
+            'default_branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+            'branch_ids_submitted' => ['nullable'],
         ];
     }
 }

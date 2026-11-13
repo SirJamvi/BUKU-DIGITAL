@@ -23,6 +23,7 @@ class CogsCalculator
         $totalGrossProfit = 0.0;
         $missingCogsCount = 0;
         $missingCogsRevenue = 0.0;
+        $inventoryCostCache = [];
 
         foreach ($transactions as $transaction) {
             $transactionCogs = 0.0;
@@ -40,7 +41,31 @@ class CogsCalculator
                     if ($rawCost === null) {
                         $missingCogsCount++;
                         $missingCogsRevenue += (float) ($detail->total_price ?? 0);
-                        $costPrice = $strict ? 0.0 : (float) (optional($product)->cost_price ?? 0);
+
+                        // Fallback chain: 1. inventory.cost_price cabang transaksi -> 2. products.cost_price
+                        $branchCost = null;
+                        $branchId = $transaction->branch_id;
+                        $productId = $detail->product_id;
+
+                        if ($branchId && $productId) {
+                            $cacheKey = "{$branchId}_{$productId}";
+                            if (!array_key_exists($cacheKey, $inventoryCostCache)) {
+                                $inv = \App\Models\Inventory::withoutGlobalScope('branch')
+                                    ->where('branch_id', $branchId)
+                                    ->where('product_id', $productId)
+                                    ->first();
+                                $inventoryCostCache[$cacheKey] = ($inv && (float) $inv->cost_price > 0)
+                                    ? (float) $inv->cost_price
+                                    : null;
+                            }
+                            $branchCost = $inventoryCostCache[$cacheKey];
+                        }
+
+                        if ($branchCost !== null) {
+                            $costPrice = $branchCost;
+                        } else {
+                            $costPrice = $strict ? 0.0 : (float) (optional($product)->cost_price ?? 0);
+                        }
                     } else {
                         // Jika terisi (termasuk 0), gunakan nilai snapshot apa adanya
                         $costPrice = (float) $rawCost;

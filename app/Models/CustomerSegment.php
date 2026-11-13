@@ -4,16 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\BelongsToBusiness; 
 
 class CustomerSegment extends Model
 {
-    use HasFactory, BelongsToBusiness;
+    use HasFactory;
 
     protected $table = 'customer_segments';
 
     protected $fillable = [
-        'business_id',
         'name',
         'criteria',
         'description',

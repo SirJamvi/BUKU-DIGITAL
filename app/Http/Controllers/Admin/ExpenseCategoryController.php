@@ -33,6 +33,6 @@ class ExpenseCategoryController extends Controller
     {
         $request->validate(['name' => 'required|string|max:191', 'type' => 'required|string']);
         $this->expenseCategoryService->createCategory($request->all());
-        return redirect()->route('admin.expense_categories.index')->with('success', 'Kategori pengeluaran berhasil dibuat.');
+        return back()->with('success', 'Kategori pengeluaran berhasil dibuat.');
     }
 }

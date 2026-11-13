@@ -162,9 +162,12 @@ class FinancialController extends Controller
         
         // Ambil semua data yang cocok (tanpa paginasi)
         $expenses = $query->latest('date')->get();
+        $startDate = $request->input('start_date');
+        $endDate = $request->input('end_date');
+        $totalExpense = (float) $expenses->sum('amount');
         
         // Load view PDF dengan data
-        $pdf = Pdf::loadView('admin.financial.expenses_pdf', compact('expenses'));
+        $pdf = Pdf::loadView('admin.financial.expenses_pdf', compact('expenses', 'startDate', 'endDate', 'totalExpense'));
         
         $fileName = 'laporan-pengeluaran-' . now()->format('d-m-Y') . '.pdf';
         return $pdf->download($fileName);
@@ -220,9 +223,21 @@ class FinancialController extends Controller
             } else {
                 $period = $request->input('period');
             }
+
+            $date = \Carbon\Carbon::createFromFormat('Y-m', $period);
+            $month = $date->month;
+            $year = $date->year;
+            $businessId = Auth::user()->business_id;
+            $branchContext = app(\App\Support\BranchContext::class);
+
+            if (!$branchContext->isConsolidated()) {
+                $branchId = $branchContext->requireBranchId();
+                $this->financialService->computeBranchClosing($businessId, $branchId, $month, $year, Auth::id(), null, false);
+                return redirect()->route('admin.financial.branch-closings')->with('success', 'Tutup buku cabang berhasil diproses.');
+            }
             
-            $this->financialService->processMonthlyClosing($period);
-            return redirect()->route('admin.fund-allocation.index')->with('success', 'Proses tutup buku berhasil. Laba bersih siap dialokasikan.');
+            $this->financialService->processMonthlyClosing($period, $businessId, Auth::id());
+            return redirect()->route('admin.fund-allocation.index')->with('success', 'Proses tutup buku konsolidasi berhasil. Laba bersih siap dialokasikan.');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal memproses tutup buku: ' . $e->getMessage());
         }
@@ -246,29 +261,93 @@ class FinancialController extends Controller
             // Jika ada parameter month dan year terpisah
             if ($request->has('month') && $request->has('year')) {
                 $period = $request->input('year') . '-' . $request->input('month');
-                $this->financialService->processMonthlyClosing($period);
-            }
-            // Jika ada parameter period, gunakan processMonthlyClosing
-            elseif ($request->has('period')) {
-                $this->financialService->processMonthlyClosing($request->input('period'));
-            } 
-            // Jika ada closing_date, konversi ke format Y-m
-            elseif ($request->has('closing_date')) {
+            } elseif ($request->has('period')) {
+                $period = $request->input('period');
+            } elseif ($request->has('closing_date')) {
                 $closingDate = \Carbon\Carbon::parse($request->input('closing_date'));
                 $period = $closingDate->format('Y-m');
-                $this->financialService->processMonthlyClosing($period);
+            } else {
+                $period = now()->format('Y-m');
             }
-            // Jika tidak ada parameter, gunakan bulan saat ini
-            else {
-                $currentPeriod = now()->format('Y-m');
-                $this->financialService->processMonthlyClosing($currentPeriod);
+
+            $date = \Carbon\Carbon::createFromFormat('Y-m', $period);
+            $month = $date->month;
+            $year = $date->year;
+            $businessId = Auth::user()->business_id;
+            $branchContext = app(\App\Support\BranchContext::class);
+            $mode = $branchContext->getMode();
+
+            \Illuminate\Support\Facades\Log::info("ProcessClosing initiated", [
+                'mode'        => $mode,
+                'period'      => $period,
+                'business_id' => $businessId,
+                'user_id'     => Auth::id(),
+                'branch_id'   => $branchContext->getBranchId(),
+            ]);
+
+            if (!$branchContext->isConsolidated()) {
+                $branchId = $branchContext->requireBranchId();
+                $result = $this->financialService->computeBranchClosing($businessId, $branchId, $month, $year, Auth::id(), null, false);
+                \Illuminate\Support\Facades\Log::info("ProcessClosing completed (Branch)", [
+                    'branch_id' => $branchId,
+                    'result'    => is_array($result) ? $result : ['id' => $result->id ?? null, 'net_profit' => $result->net_profit ?? null],
+                ]);
+                return redirect()->route('admin.financial.branch-closings')->with('success', 'Tutup buku cabang berhasil diproses.');
             }
-            
-            return redirect()->route('admin.fund-allocation.index')
-                ->with('success', 'Proses tutup buku berhasil. Laba bersih siap dialokasikan.');
+
+            $result = $this->financialService->processMonthlyClosing($period, $businessId, Auth::id());
+            \Illuminate\Support\Facades\Log::info("ProcessClosing completed (Consolidated)", [
+                'result' => is_array($result) ? $result : ['id' => $result->id ?? null, 'net_profit' => $result->net_profit ?? null],
+            ]);
+
+            return redirect()->route('admin.fund-allocation.index')->with('success', 'Tutup buku konsolidasi berhasil diproses.');
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("ProcessClosing failed: " . $e->getMessage(), [
+                'period' => $period ?? null,
+                'error'  => $e->getMessage(),
+            ]);
             return back()->with('error', 'Gagal memproses tutup buku: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Menampilkan riwayat rekonsiliasi tutup buku bulanan per cabang.
+     */
+    public function branchClosings(Request $request): View
+    {
+        $businessId = Auth::user()->business_id;
+        $context = app(\App\Support\BranchContext::class);
+
+        $query = \App\Models\BranchMonthlyClosing::where('business_id', $businessId)
+            ->with(['branch', 'closedBy']);
+
+        if ($context->isBranch() && $context->getBranchId() !== null) {
+            $query->where('branch_id', $context->getBranchId());
+        } elseif ($request->filled('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
+        }
+
+        if ($request->filled('year')) {
+            $query->where('period_year', $request->year);
+        }
+        if ($request->filled('month')) {
+            $query->where('period_month', $request->month);
+        }
+
+        $closings = $query->orderByDesc('period_year')
+            ->orderByDesc('period_month')
+            ->orderBy('branch_id')
+            ->paginate(15);
+
+        $branches = \App\Models\Branch::where('business_id', $businessId)
+            ->where('is_active', true)
+            ->orderByDesc('is_main')
+            ->orderBy('name')
+            ->get();
+
+        $availablePeriods = $this->financialService->getAvailablePeriodsForClosing();
+
+        return view('admin.financial.branch_closings', compact('closings', 'branches', 'availablePeriods'));
     }
 
     /**

@@ -14,6 +14,14 @@ class ExpenseSyncController extends Controller
 {
     public function storeFromAttendance(Request $request)
     {
+        // TODO-FASE-5: Enhance salary sync with branch mapping from attendance payload
+        return app(\App\Support\BranchContext::class)->runUnscoped(function () use ($request) {
+            return $this->storeFromAttendanceInternal($request);
+        });
+    }
+
+    protected function storeFromAttendanceInternal(Request $request)
+    {
         // Ambil kunci dari CONFIG
         $serverKey = config('services.sync.secret'); 
 
@@ -41,6 +49,11 @@ class ExpenseSyncController extends Controller
             }
 
             $businessId = (int) $user->business_id;
+
+            // Tentukan branch_id staf atau fallback ke cabang pusat
+            $branchId = $user->branch_id 
+                ?? $user->branches()->first()?->id 
+                ?? \App\Models\Branch::where('business_id', $businessId)->where('is_main', true)->value('id');
 
             // 4. Cari Kategori Gaji dinamis berdasarkan business_id
             $category = ExpenseCategory::where('business_id', $businessId)
@@ -71,6 +84,7 @@ class ExpenseSyncController extends Controller
             // 6. Siapkan Payload Insert
             $insertData = [
                 'business_id'  => $businessId,
+                'branch_id'    => $branchId,
                 'type'         => 'expense',
                 'category_id'  => $categoryId,
                 'amount'       => $request->amount,
@@ -89,13 +103,14 @@ class ExpenseSyncController extends Controller
 
             $id = DB::table('cash_flow')->insertGetId($insertData);
 
-            Log::info("✅ Sukses Insert Gaji ke Buku Digital | ID: {$id} | User: {$request->user_id} | Business: {$businessId} | Amount: {$request->amount} | Ref: {$referenceId}");
+            Log::info("✅ Sukses Insert Gaji ke Buku Digital | ID: {$id} | User: {$request->user_id} | Business: {$businessId} | Branch: {$branchId} | Amount: {$request->amount} | Ref: {$referenceId}");
 
             return response()->json([
                 'message'     => 'Sukses sync gaji',
                 'id'          => $id,
                 'user_id'     => $request->user_id,
                 'business_id' => $businessId,
+                'branch_id'   => $branchId,
                 'amount'      => $request->amount,
             ], 200);
 

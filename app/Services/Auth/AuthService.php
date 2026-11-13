@@ -33,7 +33,9 @@ class AuthService
 
             // Catat sesi login
             $user->sessions()->create([
+                'business_id' => $user->business_id,
                 'role' => $user->role,
+                'branch_id' => $user->getActiveBranchId(),
                 'ip_address' => request()->ip(),
                 'login_time' => now(),
                 'last_activity' => now(),
@@ -53,61 +55,76 @@ class AuthService
      */
     public function createUserAndBusiness(array $data): User
     {
-        return DB::transaction(function () use ($data) {
-            // 1. Buat user baru sebagai owner
-            $user = User::create([
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'password' => Hash::make($data['password']),
-                'role' => 'admin',
-                'is_active' => true,
-            ]);
-            
-            // 2. Buat bisnis baru dengan user ini sebagai pemiliknya
-            $business = Business::create([
-                'name' => $data['business_name'],
-                'owner_id' => $user->id,
-            ]);
-            
-            // 3. Update user agar terikat dengan bisnis barunya
-            $user->business_id = $business->id;
-            $user->save();
-            
-            // 4. Buat pengaturan alokasi default untuk bisnis baru
-            $fundAllocationService = app(FundAllocationService::class);
-            $fundAllocationService->createDefaultAllocationSettingsForNewBusiness($business->id, $user->id);
-            
-            // ==========================================================
-            // KODE BARU: 5. Buat metode pembayaran default untuk bisnis
-            // ==========================================================
-            DB::table('payment_methods')->insert([
-                [
+        return app(\App\Support\BranchContext::class)->runUnscoped(function () use ($data) {
+            return DB::transaction(function () use ($data) {
+                // 1. Buat user baru sebagai owner
+                $user = User::create([
+                    'name' => $data['name'],
+                    'email' => $data['email'],
+                    'password' => Hash::make($data['password']),
+                    'role' => 'admin',
+                    'is_active' => true,
+                ]);
+                
+                // 2. Buat bisnis baru dengan user ini sebagai pemiliknya
+                $business = Business::create([
+                    'name' => $data['business_name'],
+                    'owner_id' => $user->id,
+                ]);
+                
+                // 3. Update user agar terikat dengan bisnis barunya
+                $user->business_id = $business->id;
+                $user->save();
+
+                // 3b. Buat Cabang Pusat default untuk bisnis baru
+                $defaultBranch = \App\Models\Branch::create([
                     'business_id' => $business->id,
-                    'name' => 'Cash',
-                    'slug' => 'cash',
-                    'is_active' => 1,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ],
-                [
-                    'business_id' => $business->id,
-                    'name' => 'Dana',
-                    'slug' => 'dana',
-                    'is_active' => 1,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ],
-                [
-                    'business_id' => $business->id,
-                    'name' => 'Transfer Bank',
-                    'slug' => 'transfer bank',
-                    'is_active' => 1,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]
-            ]);
-            
-            return $user;
+                    'name'        => $business->name,
+                    'code'        => 'PUSAT',
+                    'is_main'     => true,
+                    'manager_id'  => $user->id,
+                    'is_active'   => true,
+                ]);
+                // Admin/Owner tidak terikat ke cabang (branch_id = null, tidak ada di pivot branch_user)
+                $user->branch_id = null;
+                $user->save();
+                
+                // 4. Buat pengaturan alokasi default untuk bisnis baru
+                $fundAllocationService = app(FundAllocationService::class);
+                $fundAllocationService->createDefaultAllocationSettingsForNewBusiness($business->id, $user->id);
+                
+                // ==========================================================
+                // KODE BARU: 5. Buat metode pembayaran default untuk bisnis
+                // ==========================================================
+                DB::table('payment_methods')->insert([
+                    [
+                        'business_id' => $business->id,
+                        'name' => 'Cash',
+                        'slug' => 'cash',
+                        'is_active' => 1,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                    [
+                        'business_id' => $business->id,
+                        'name' => 'Dana',
+                        'slug' => 'dana',
+                        'is_active' => 1,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                    [
+                        'business_id' => $business->id,
+                        'name' => 'Transfer Bank',
+                        'slug' => 'transfer bank',
+                        'is_active' => 1,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                ]);
+                
+                return $user;
+            });
         });
     }
 

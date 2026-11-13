@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Kasir;
 
 use App\Http\Controllers\Controller;
 use App\Services\Admin\InventoryService;
+use App\Services\Inventory\InventoryCostService;
+use App\Support\BranchContext;
 use App\Models\Product;
 use App\Models\Inventory;
 use App\Models\StockMovement;
@@ -60,6 +62,7 @@ class InventoryController extends Controller
         try {
             $businessId = Auth::user()->business_id;
             $userId = Auth::id();
+            $branchId = app(BranchContext::class)->requireBranchId();
 
             // 1. Dapatkan relasi produk & supplier untuk mengecek harga pivot
             $supplier = Supplier::where('id', $request->supplier_id)
@@ -81,7 +84,12 @@ class InventoryController extends Controller
             $product = Product::where('id', $request->product_id)
                 ->where('business_id', $businessId)
                 ->firstOrFail();
-            $currentCogs = (float) ($product->cost_price ?? 0);
+
+            $existingInv = Inventory::firstOrCreate(
+                ['product_id' => $request->product_id, 'branch_id' => $branchId, 'business_id' => $businessId],
+                ['current_stock' => 0, 'cost_price' => (float) ($product->cost_price ?? 0)]
+            );
+            $currentCogs = (float) ($existingInv->cost_price > 0 ? $existingInv->cost_price : ($product->cost_price ?? 0));
             $lastSupplierPrice = (float) ($productPivot->pivot->price ?? 0);
 
             // 3. Evaluasi Peringatan Deviasi >40% & Stok <= 0 Sebelum Transaksi (A4)
@@ -94,8 +102,7 @@ class InventoryController extends Controller
                 $warnings[] = "Harga beli menyimpang >40% dari harga kontrak master supplier (Rp " . number_format($lastSupplierPrice, 0, ',', '.') . ").";
             }
 
-            $existingInv = Inventory::where('product_id', $request->product_id)->where('business_id', $businessId)->first();
-            $preStock = $existingInv ? (float) $existingInv->current_stock : 0;
+            $preStock = (float) $existingInv->current_stock;
             if ($preStock <= 0) {
                 $warnings[] = "Stok sebelum restock berada pada posisi 0 atau minus ({$preStock}). HPP baru akan langsung mereset ke harga beli baru.";
             }
@@ -110,49 +117,31 @@ class InventoryController extends Controller
 
             // 4. Jalankan Transaksi Database Tunggal (Satu Pola Closure DB::transaction)
             return DB::transaction(function () use (
-                $request, $businessId, $userId, $product, $supplier, 
+                $request, $businessId, $userId, $branchId, $product, $supplier, 
                 $purchasePricePerUnit, $addedQty, $grandTotalExpense, 
-                $currentCogs, $warnings
+                $currentCogs, $existingInv
             ) {
-                // A2: Pastikan baris inventory ada dulu, baru lockForUpdate pada baris inventory
-                $inventory = Inventory::firstOrCreate(
-                    ['product_id' => $request->product_id, 'business_id' => $businessId],
-                    ['current_stock' => 0]
-                );
-                $inventory = Inventory::where('id', $inventory->id)->lockForUpdate()->first();
-                $currentStock = (float) $inventory->current_stock;
-
-                // Hitung Moving Average HPP
-                if ($currentStock <= 0) {
-                    $newCogs = $purchasePricePerUnit;
-                } else {
-                    $newCogs = (($currentStock * $currentCogs) + ($addedQty * $purchasePricePerUnit)) / ($currentStock + $addedQty);
-                }
-                $newCogs = round($newCogs, 2);
-                $product->update(['cost_price' => $newCogs]);
-
-                // Update stok inventaris & catat notes terstruktur (A3)
-                $stockBefore = $currentStock;
-                $inventory->increment('current_stock', $request->quantity);
+                $stockBefore = (float) $existingInv->current_stock;
                 $stockAfter = $stockBefore + $addedQty;
-
                 $isConfirmed = $request->boolean('confirm');
+
                 $auditNote = "Restock {$supplier->name} | Beli " . number_format($purchasePricePerUnit, 2, '.', '') .
-                    " | HPP {$currentCogs} -> {$newCogs} | Stok {$stockBefore} -> {$stockAfter}" .
+                    " | Stok {$stockBefore} -> {$stockAfter}" .
                     ($isConfirmed ? " [KONFIRMASI DITERIMA]" : "") .
                     ($request->notes ? " | " . $request->notes : "");
 
-                StockMovement::create([
-                    'business_id'  => $businessId,
-                    'product_id'   => $request->product_id,
-                    'type'         => 'in',
-                    'quantity'     => $request->quantity,
-                    'reference_id' => 'supplier:' . $supplier->id,
-                    'notes'        => $auditNote,
-                    'created_by'   => $userId,
-                ]);
+                $costService = app(InventoryCostService::class);
+                $updatedInv = $costService->receive(
+                    $existingInv,
+                    $addedQty,
+                    $purchasePricePerUnit,
+                    'in',
+                    $supplier,
+                    $auditNote
+                );
+                $newCogs = (float) $updatedInv->cost_price;
 
-                $message = 'Stok berhasil ditambahkan dan HPP disesuaikan menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ' (Tanpa mencatat pengeluaran).';
+                $message = 'Stok berhasil ditambahkan dan HPP cabang disesuaikan menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ' (Tanpa mencatat pengeluaran).';
 
                 // Catat ke Cash Flow jika dicentang
                 if ($request->has('record_expense') && $request->record_expense == 1) {
@@ -170,6 +159,7 @@ class InventoryController extends Controller
 
                     CashFlow::create([
                         'business_id'    => $businessId,
+                        'branch_id'      => $branchId,
                         'type'           => 'expense',
                         'category_id'    => $expenseCategory->id, 
                         'amount'         => $grandTotalExpense,
@@ -183,6 +173,8 @@ class InventoryController extends Controller
 
                     $message = 'Stok berhasil ditambahkan, HPP diperbarui menjadi Rp ' . number_format($newCogs, 0, ',', '.') . ', dan biaya otomatis tercatat di Pengeluaran (' . ($affectsDrawer ? 'Memotong Saldo Laci' : 'Dana Bos/Luar Laci - Tidak Memotong Laci') . ').';
                 }
+
+                \App\Support\BranchCache::flush($businessId);
 
                 return redirect()->back()->with('success', $message);
             });
@@ -227,6 +219,7 @@ class InventoryController extends Controller
         try {
             $businessId = Auth::user()->business_id;
             $userId = Auth::id();
+            $branchId = app(BranchContext::class)->requireBranchId();
 
             // 1. Ambil data stok & master produk asal
             $sourceProduct = Product::where('id', $request->source_product_id)
@@ -234,20 +227,21 @@ class InventoryController extends Controller
                 ->firstOrFail();
 
             $sourceInventory = Inventory::where('product_id', $request->source_product_id)
+                ->where('branch_id', $branchId)
                 ->where('business_id', $businessId)
                 ->first();
 
             if (!$sourceInventory) {
-                throw new \Exception("Data inventaris untuk produk ini belum ada di sistem.");
+                throw new \Exception("Data inventaris untuk produk ini belum ada di cabang aktif.");
             }
 
             $currentStock = (float) ($sourceInventory->current_stock ?? 0);
             if ($currentStock < $request->source_qty) {
-                throw new \Exception("Stok produk asal tidak mencukupi. Sisa stok saat ini: " . $currentStock . ". Anda mencoba memecah: " . $request->source_qty);
+                throw new \Exception("Stok produk asal tidak mencukupi di cabang ini. Sisa stok saat ini: " . $currentStock . ". Anda mencoba memecah: " . $request->source_qty);
             }
 
             // 2. Hitung Modal Induk yang Dipecah & Alokasikan ke Hasil Pecahan
-            $sourceCostPrice = (float) ($sourceProduct->cost_price ?? 0);
+            $sourceCostPrice = (float) ($sourceInventory->cost_price > 0 ? $sourceInventory->cost_price : ($sourceProduct->cost_price ?? 0));
             $totalSourceCost = (float) $request->source_qty * $sourceCostPrice;
 
             $extractWeight = function ($productName) {
@@ -303,9 +297,9 @@ class InventoryController extends Controller
                     $modalUnit = ($yieldQty > 0) ? (($totalSourceCost * $proportion) / $yieldQty) : 0;
                 }
 
-                $tInv = Inventory::where('product_id', $tId)->where('business_id', $businessId)->first();
+                $tInv = Inventory::where('product_id', $tId)->where('branch_id', $branchId)->where('business_id', $businessId)->first();
                 $cStock = $tInv ? (float) $tInv->current_stock : 0;
-                $cCost = (float) ($targetProduct->cost_price ?? 0);
+                $cCost = (float) ($tInv && $tInv->cost_price > 0 ? $tInv->cost_price : ($targetProduct->cost_price ?? 0));
                 $predCogs = ($cStock > 0 && $cCost > 0)
                     ? (($cStock * $cCost) + ($yieldQty * $modalUnit)) / ($cStock + $yieldQty)
                     : $modalUnit;
@@ -323,26 +317,21 @@ class InventoryController extends Controller
             }
 
             // Jalankan transaksi
-            return DB::transaction(function () use ($request, $businessId, $userId, $sourceProduct, $totalSourceCost, $targetProducts, $totalRelativeShare, $allHaveWeight) {
-                // Kunci inventory sumber
-                $sourceInventory = Inventory::where('product_id', $request->source_product_id)
-                    ->where('business_id', $businessId)
-                    ->lockForUpdate()
-                    ->firstOrFail();
+            return DB::transaction(function () use ($request, $businessId, $userId, $branchId, $sourceProduct, $sourceInventory, $totalSourceCost, $targetProducts, $totalRelativeShare, $allHaveWeight) {
+                $costService = app(InventoryCostService::class);
 
+                // 1. Kurangi stok karung asal via InventoryCostService::issue
                 $sourceStockBefore = (float) $sourceInventory->current_stock;
-                $sourceInventory->decrement('current_stock', $request->source_qty);
                 $sourceStockAfter = $sourceStockBefore - (float) $request->source_qty;
+                $issueNote = "Pecah Ball: {$sourceProduct->name} | Qty: {$request->source_qty} | Stok: {$sourceStockBefore} -> {$sourceStockAfter}";
 
-                // Catat mutasi keluar terstruktur (1.4)
-                StockMovement::create([
-                    'business_id' => $businessId,
-                    'product_id'  => $request->source_product_id,
-                    'type'        => 'out',
-                    'quantity'    => $request->source_qty,
-                    'notes'       => "Pecah Ball: {$sourceProduct->name} | Qty: {$request->source_qty} | Stok: {$sourceStockBefore} -> {$sourceStockAfter}",
-                    'created_by'  => $userId,
-                ]);
+                $costService->issue(
+                    $sourceInventory,
+                    $request->source_qty,
+                    'out',
+                    $sourceProduct,
+                    $issueNote
+                );
 
                 $totalHasilPecahan = 0;
                 foreach ($request->targets as $target) {
@@ -367,42 +356,29 @@ class InventoryController extends Controller
                     }
 
                     $targetInventory = Inventory::firstOrCreate(
-                        ['product_id' => $tId, 'business_id' => $businessId],
-                        ['current_stock' => 0]
+                        ['product_id' => $tId, 'branch_id' => $branchId, 'business_id' => $businessId],
+                        ['current_stock' => 0, 'cost_price' => $modalPerUnitPecahanBaru]
                     );
-                    $targetInventory = Inventory::where('id', $targetInventory->id)->lockForUpdate()->first();
 
-                    $currentChildStock = (float) $targetInventory->current_stock;
-                    $currentChildCostPrice = (float) ($targetProduct->cost_price ?? 0);
-
-                    if ($currentChildStock > 0 && $currentChildCostPrice > 0) {
-                        $newChildCostPrice = (($currentChildStock * $currentChildCostPrice) + ($yieldQty * $modalPerUnitPecahanBaru)) / ($currentChildStock + $yieldQty);
-                    } else {
-                        $newChildCostPrice = $modalPerUnitPecahanBaru;
-                    }
-
-                    $newChildCostPrice = round($newChildCostPrice, 2);
-                    $targetProduct->update(['cost_price' => $newChildCostPrice]);
-
-                    $targetStockBefore = $currentChildStock;
-                    $targetInventory->increment('current_stock', $target['qty']);
-                    $targetStockAfter = $targetStockBefore + (float) $target['qty'];
-
+                    $targetStockBefore = (float) $targetInventory->current_stock;
+                    $targetStockAfter = $targetStockBefore + $yieldQty;
                     $isConfirmed = $request->boolean('confirm');
-                    $childNote = "Hasil Pecahan dari {$sourceProduct->name} ke {$targetProduct->name} | Qty: {$yieldQty} | HPP: {$currentChildCostPrice} -> {$newChildCostPrice} | Stok: {$targetStockBefore} -> {$targetStockAfter}" .
+                    $childNote = "Hasil Pecahan dari {$sourceProduct->name} ke {$targetProduct->name} | Qty: {$yieldQty} | Stok: {$targetStockBefore} -> {$targetStockAfter}" .
                         ($isConfirmed ? " [KONFIRMASI DITERIMA]" : "");
 
-                    StockMovement::create([
-                        'business_id' => $businessId,
-                        'product_id'  => $tId,
-                        'type'        => 'in',
-                        'quantity'    => $target['qty'],
-                        'notes'       => $childNote,
-                        'created_by'  => $userId,
-                    ]);
+                    $costService->receive(
+                        $targetInventory,
+                        $yieldQty,
+                        $modalPerUnitPecahanBaru,
+                        'in',
+                        $sourceProduct,
+                        $childNote
+                    );
 
                     $totalHasilPecahan += $target['qty'];
                 }
+
+                \App\Support\BranchCache::flush($businessId);
 
                 return redirect()->back()->with('success', "Berhasil memecah {$request->source_qty} unit menjadi total {$totalHasilPecahan} kemasan baru.");
             });

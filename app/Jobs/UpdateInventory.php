@@ -8,9 +8,14 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Product;
+use App\Models\Inventory;
 use App\Models\StockMovement;
+use App\Support\BranchContext;
 use Exception;
 
+/**
+ * @deprecated Fase 2: Gunakan InventoryCostService atau PosService secara transaksional per cabang.
+ */
 class UpdateInventory implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -35,7 +40,10 @@ class UpdateInventory implements ShouldQueue
      * @var int|null
      */
     protected $userId;
-
+    /**
+     * @var int|null
+     */
+    protected $branchId;
 
     /**
      * Buat instance job baru.
@@ -45,14 +53,22 @@ class UpdateInventory implements ShouldQueue
      * @param string $movementType ('in', 'out', 'adjustment')
      * @param string|null $notes
      * @param int|null $userId
+     * @param int|null $branchId
      */
-    public function __construct(int $productId, int $quantityChange, string $movementType, ?string $notes = null, ?int $userId = null)
-    {
+    public function __construct(
+        int $productId,
+        int $quantityChange,
+        string $movementType,
+        ?string $notes = null,
+        ?int $userId = null,
+        ?int $branchId = null
+    ) {
         $this->productId = $productId;
         $this->quantityChange = $quantityChange;
         $this->movementType = $movementType;
         $this->notes = $notes;
         $this->userId = $userId;
+        $this->branchId = $branchId;
     }
 
     /**
@@ -62,23 +78,38 @@ class UpdateInventory implements ShouldQueue
      */
     public function handle(): void
     {
-        try {
-            $product = Product::with('inventory')->findOrFail($this->productId);
-            
-            // Perbarui stok
-            $product->inventory->increment('current_stock', $this->quantityChange);
+        $context = app(BranchContext::class);
+        $runner = function () {
+            try {
+                $product = Product::findOrFail($this->productId);
+                $inventoryQuery = Inventory::where('product_id', $this->productId);
+                if ($this->branchId) {
+                    $inventoryQuery->where('branch_id', $this->branchId);
+                }
+                $inventory = $inventoryQuery->first();
+                if ($inventory) {
+                    $inventory->increment('current_stock', $this->quantityChange);
+                }
 
-            // Catat pergerakan stok
-            StockMovement::create([
-                'product_id' => $this->productId,
-                'type' => $this->movementType,
-                'quantity' => $this->quantityChange,
-                'notes' => $this->notes ?? 'Pembaruan stok via job.',
-                'created_by' => $this->userId,
-            ]);
+                StockMovement::create([
+                    'business_id' => $inventory ? $inventory->business_id : $product->business_id,
+                    'branch_id'   => $this->branchId ?? ($inventory ? $inventory->branch_id : null),
+                    'product_id'  => $this->productId,
+                    'type'        => $this->movementType,
+                    'quantity'    => $this->quantityChange,
+                    'notes'       => $this->notes ?? 'Pembaruan stok via job (deprecated).',
+                    'created_by'  => $this->userId,
+                ]);
 
-        } catch (Exception $e) {
-            logger()->error("Gagal menjalankan job UpdateInventory untuk produk ID: {$this->productId}. Error: " . $e->getMessage());
+            } catch (Exception $e) {
+                logger()->error("Gagal menjalankan job UpdateInventory untuk produk ID: {$this->productId}. Error: " . $e->getMessage());
+            }
+        };
+
+        if ($this->branchId) {
+            $context->runAs($this->branchId, $runner);
+        } else {
+            $context->runUnscoped($runner);
         }
     }
 }

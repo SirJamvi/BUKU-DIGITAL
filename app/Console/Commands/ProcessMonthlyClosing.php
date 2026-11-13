@@ -13,14 +13,14 @@ use Illuminate\Support\Facades\Auth;
 class ProcessMonthlyClosing extends Command
 {
     /**
-     * Signature diubah untuk menerima --period opsional
+     * Signature command: mendukung --period dan --dry-run
      */
-    protected $signature = 'app:process-monthly-closing {--period= : Periode yang akan diproses (format: YYYY-MM)}';
+    protected $signature = 'app:process-monthly-closing {--period= : Periode yang akan diproses (format: YYYY-MM)} {--dry-run : Menjalankan simulasi perhitungan tanpa menyimpan ke database}';
 
     /**
      * Deskripsi console command.
      */
-    protected $description = 'Menjalankan proses tutup buku dan alokasi dana bulanan secara otomatis untuk semua bisnis.';
+    protected $description = 'Menjalankan proses tutup buku per cabang, beban holding, dan alokasi dana bulanan secara otomatis untuk semua bisnis.';
 
     protected FinancialService $financialService;
     protected FundAllocationService $fundAllocationService;
@@ -40,70 +40,83 @@ class ProcessMonthlyClosing extends Command
      */
     public function handle()
     {
-        Log::info('[AutoClosing] Memulai proses tutup buku dan alokasi dana...');
+        $isDryRun = (bool) $this->option('dry-run');
+        $logPrefix = $isDryRun ? '[AutoClosing-DryRun]' : '[AutoClosing]';
+
+        Log::info("{$logPrefix} Memulai proses tutup buku...");
         
-        // =======================================================
-        // PERUBAHAN LOGIKA PERIODE
-        // =======================================================
-        // Ambil periode dari input, jika tidak ada, gunakan bulan lalu
         $periodInput = $this->option('period');
-        
         if ($periodInput) {
             $period = $periodInput;
-            $this->warn("Menjalankan proses manual untuk periode: $period");
-            Log::info("[AutoClosing] Menjalankan proses manual untuk periode: $period");
+            $this->warn("Menjalankan proses untuk periode: {$period}" . ($isDryRun ? ' [DRY-RUN]' : ''));
         } else {
             $period = Carbon::now()->subMonth()->format('Y-m');
-            $this->info("Menjalankan proses otomatis untuk periode: $period");
-            Log::info("[AutoClosing] Menjalankan proses otomatis untuk periode: $period");
+            $this->info("Menjalankan proses untuk periode: {$period}" . ($isDryRun ? ' [DRY-RUN]' : ''));
         }
-        // =======================================================
-        
-        // Ambil semua bisnis yang aktif di sistem Anda
-        $businesses = Business::all();
 
-        foreach ($businesses as $business) {
-            $this->info("Memproses bisnis: {$business->name} (ID: {$business->id}) untuk periode: $period");
-            Log::info("[AutoClosing] Memproses bisnis: {$business->name} (ID: {$business->id}) untuk periode: $period");
-            
-            try {
-                // 1. Login sebagai owner bisnis untuk simulasi Auth::user()
-                Auth::guard('web')->loginUsingId($business->owner_id);
+        return app(\App\Support\BranchContext::class)->runUnscoped(function () use ($period, $isDryRun, $logPrefix) {
+            $businesses = Business::all();
 
-                // 2. Jalankan "Tutup Buku"
-                $ownerProfit = $this->financialService->processMonthlyClosing($period);
+            foreach ($businesses as $business) {
+                $this->info("\n=======================================================");
+                $this->info("Bisnis: {$business->name} (ID: {$business->id}) | Periode: {$period}");
+                Log::info("{$logPrefix} Memproses bisnis: {$business->name} (ID: {$business->id}) periode: {$period}");
 
-                $this->info(" - Laba bersih dihitung: Rp {$ownerProfit->net_profit}");
-                Log::info(" - Laba bersih dihitung: Rp {$ownerProfit->net_profit}");
+                try {
+                    $result = $this->financialService->processMonthlyClosing(
+                        $period,
+                        $business->id,
+                        null,
+                        $isDryRun
+                    );
 
-                // 3. Jika ada profit, langsung jalankan "Alokasi Dana"
-                if ($ownerProfit->net_profit > 0) {
-                    $this->fundAllocationService->processAllocation([$ownerProfit->id]);
-                    $this->info(" - Alokasi dana berhasil diproses.");
-                    Log::info(" - Alokasi dana berhasil diproses.");
-                } else {
-                    // Jika profit 0 atau minus, tetap tandai 'completed' agar tidak menumpuk
-                    $ownerProfit->update(['status' => 'completed', 'allocated_at' => now()]);
-                    $this->info(" - Tidak ada profit untuk dialokasikan (Rp {$ownerProfit->net_profit}). Ditandai selesai.");
-                    Log::info(" - Tidak ada profit untuk dialokasikan (Rp {$ownerProfit->net_profit}). Ditandai selesai.");
-                }
+                    if ($isDryRun) {
+                        $tableHeaders = ['Cabang', 'Kode', 'Omzet', 'HPP', 'Laba Kotor', 'Beban Ops', 'Laba Bersih'];
+                        $tableRows = [];
 
-                // 4. Logout setelah selesai
-                Auth::guard('web')->logout();
+                        foreach ($result['branches'] ?? [] as $b) {
+                            $tableRows[] = [
+                                $b['branch_name'] . ($b['is_main'] ? ' (Pusat)' : ''),
+                                $b['branch_code'],
+                                'Rp ' . number_format($b['monthly_income'], 0, ',', '.'),
+                                'Rp ' . number_format($b['monthly_cogs'], 0, ',', '.'),
+                                'Rp ' . number_format($b['gross_profit'], 0, ',', '.'),
+                                'Rp ' . number_format($b['monthly_expense'], 0, ',', '.'),
+                                'Rp ' . number_format($b['net_profit'], 0, ',', '.'),
+                            ];
+                        }
 
-            } catch (\Exception $e) {
-                $this->error(" - Gagal memproses bisnis ID {$business->id}: " . $e->getMessage());
-                Log::error("[AutoClosing] Gagal memproses bisnis ID {$business->id}: " . $e->getMessage());
-                
-                // Pastikan logout jika terjadi error
-                if (Auth::guard('web')->check()) {
-                    Auth::guard('web')->logout();
+                        $this->table($tableHeaders, $tableRows);
+                        $this->line("Total Laba Bersih Cabang : Rp " . number_format($result['total_branch_net'], 0, ',', '.'));
+                        $this->line("Beban Holding/Owner     : Rp " . number_format($result['total_holding_expense'], 0, ',', '.'));
+                        $this->info("Laba Bersih Konsolidasi : Rp " . number_format($result['consolidated_net_profit'], 0, ',', '.'));
+                        continue;
+                    }
+
+                    $ownerProfit = $result;
+                    $this->info(" - Rekonsiliasi cabang & holding tersimpan.");
+                    $this->info(" - Laba bersih konsolidasi dihitung: Rp " . number_format($ownerProfit->net_profit, 0, ',', '.'));
+                    Log::info("{$logPrefix} Laba bersih konsolidasi: Rp {$ownerProfit->net_profit}");
+
+                    // Alokasi dana jika laba positif
+                    if ($ownerProfit->net_profit > 0) {
+                        $this->fundAllocationService->processAllocation([$ownerProfit->id]);
+                        $this->info(" - Alokasi dana berhasil diproses.");
+                        Log::info("{$logPrefix} Alokasi dana berhasil diproses.");
+                    } else {
+                        $ownerProfit->update(['status' => 'completed', 'allocated_at' => now()]);
+                        $this->info(" - Profit nihil / minus (Rp " . number_format($ownerProfit->net_profit, 0, ',', '.') . "). Ditandai selesai.");
+                        Log::info("{$logPrefix} Profit nihil / minus. Ditandai selesai.");
+                    }
+
+                } catch (\Exception $e) {
+                    $this->error(" - Gagal memproses bisnis ID {$business->id}: " . $e->getMessage());
+                    Log::error("{$logPrefix} Gagal memproses bisnis ID {$business->id}: " . $e->getMessage());
                 }
             }
-        }
-        
-        Log::info('[AutoClosing] Semua proses bulanan selesai.');
-        $this->info('Semua proses tutup buku dan alokasi bulanan telah selesai.');
-        return 0;
+
+            $this->info("\nSemua proses selesai.");
+            return 0;
+        });
     }
 }

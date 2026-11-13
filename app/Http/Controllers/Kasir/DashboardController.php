@@ -38,7 +38,10 @@ class DashboardController extends Controller
             return view('kasir.dashboard.index', $data);
         } catch (\Exception $e) {
             logger()->error('Error fetching kasir dashboard data: ' . $e->getMessage());
-            return view('kasir.errors.500', ['message' => 'Tidak dapat memuat data dashboard.']);
+            if (view()->exists('kasir.errors.500')) {
+                return view('kasir.errors.500', ['message' => 'Tidak dapat memuat data dashboard.']);
+            }
+            abort(500, 'Tidak dapat memuat data dashboard: ' . $e->getMessage());
         }
     }
 
@@ -54,11 +57,13 @@ class DashboardController extends Controller
 
         $businessId = Auth::user()->business_id;
         $userId = Auth::id();
+        $branchId = app(\App\Support\BranchContext::class)->requireBranchId();
         $today = Carbon::today('Asia/Jakarta')->toDateString();
 
         CashierOpeningBalance::updateOrCreate(
             [
                 'business_id' => $businessId,
+                'branch_id'   => $branchId,
                 'user_id'     => $userId,
                 'date'        => $today,
             ],

@@ -10,11 +10,9 @@ use App\Http\Controllers\Api\V1\AiOrderWebhookController;
 Route::prefix('v1')->group(function () {
 
     // ==============================================================
-    // RUTE WEBHOOK FONNTE (AI ORDER RECEIVER) & ANTREAN KASIR
+    // RUTE WEBHOOK FONNTE (AI ORDER RECEIVER)
     // ==============================================================
     Route::post('/webhook/fonnte', [AiOrderWebhookController::class, 'handle'])->name('webhook.fonnte');
-    Route::get('/kasir/ai-orders', [AiOrderWebhookController::class, 'getValidatedOrders'])->name('api.kasir.ai_orders');
-    Route::post('/kasir/ai-orders/{id}/processed', [AiOrderWebhookController::class, 'markAsProcessed'])->name('api.kasir.ai_orders.processed');
 
     // Rute Publik (Tidak butuh token)
     Route::post('/sync/salary', [ExpenseSyncController::class, 'storeFromAttendance']);
@@ -31,14 +29,18 @@ Route::prefix('v1')->group(function () {
 
 
     // ==============================================================
-    // Rute Khusus Aplikasi Mobile Kasir (Android) - WAJIB LOGIN
+    // Rute Khusus Aplikasi Mobile Kasir (Android) - WAJIB LOGIN & BRANCH CONTEXT
     // ==============================================================
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'branch.context'])->group(function () {
 
         // Rute Logout
         Route::post('/logout', [LoginApiController::class, 'logout']);
 
         Route::prefix('kasir')->name('api.kasir.')->group(function () {
+            // Antrean Pesanan AI Mobile (Tervalidasi per cabang aktif)
+            Route::get('/ai-orders', [AiOrderWebhookController::class, 'getValidatedOrders'])->name('ai_orders');
+            Route::post('/ai-orders/{id}/processed', [AiOrderWebhookController::class, 'markAsProcessed'])->name('ai_orders.processed');
+
             Route::get('/pos-data', [PosApiController::class, 'getPosData'])->name('pos_data');
             Route::post('/order', [PosApiController::class, 'storeOrder'])->name('store_order');
             Route::get('/orders/delivery', [PosApiController::class, 'getDeliveryOrders'])->name('delivery_orders');

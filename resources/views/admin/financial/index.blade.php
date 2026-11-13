@@ -9,6 +9,7 @@
 
 @section('content')
     <div class="container-fluid">
+        @include('components.alert')
         <div class="row g-4 mb-4">
 
             <div class="col-md-6">

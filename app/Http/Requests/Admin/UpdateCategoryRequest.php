@@ -25,16 +25,19 @@ class UpdateCategoryRequest extends FormRequest
      */
     public function rules(): array
     {
-        // Mengambil ID kategori dari route parameter
-        $categoryId = $this->route('category')->id;
+        // Mengambil ID kategori dari route parameter (baik model binding maupun id)
+        $categoryParam = $this->route('category');
+        $categoryId = $categoryParam instanceof \App\Models\ProductCategory ? $categoryParam->id : $categoryParam;
 
         return [
-            // Nama harus unik, kecuali untuk kategori itu sendiri
+            // Nama harus unik dalam lingkup bisnis yang sama, kecuali untuk kategori itu sendiri
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('product_categories')->ignore($categoryId),
+                Rule::unique('product_categories', 'name')
+                    ->where('business_id', auth()->user()?->business_id)
+                    ->ignore($categoryId),
             ],
             'description' => ['nullable', 'string'],
             // Kategori tidak bisa menjadi parent dari dirinya sendiri

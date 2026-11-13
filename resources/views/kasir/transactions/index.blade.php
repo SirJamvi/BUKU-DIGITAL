@@ -33,7 +33,9 @@
 
                 @forelse ($transactions as $transaction)
                     <tr>
-                        <td>#{{ $transaction->id }}</td>
+                        <td>
+                            <span class="fw-bold">{{ $transaction->receiptNumber() }}</span>
+                        </td>
                         <td>{{ $transaction->transaction_date->isoFormat('D MMMM YYYY, HH:mm') }}</td>
                         <td>{{ $transaction->customer->name ?? 'Umum' }}</td>
                         <td class="text-end fw-bold">Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</td>

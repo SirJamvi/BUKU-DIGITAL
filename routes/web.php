@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
+use App\Http\Controllers\BranchSwitchController;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,8 +39,16 @@ Route::post('register', [RegisterController::class, 'register']);
 // ====================================================================
 // PERBAIKAN DI SINI: Pindahkan semua rute yang butuh login ke dalam grup ini
 // ====================================================================
-Route::middleware('auth')->group(function() {
+Route::middleware(['auth', 'branch.context'])->group(function() {
     
+    // Pilih Cabang Aktif (untuk staf multi-cabang)
+    Route::get('/branch/select', [BranchSwitchController::class, 'selectBranchForm'])
+        ->name('branch.select');
+
+    // Switch Cabang Aktif (Pusat / Monitoring Cabang)
+    Route::match(['get', 'post'], '/branch/switch/{branchId}', [BranchSwitchController::class, 'switchBranch'])
+        ->name('branch.switch');
+
     // 3. Rute Redirect setelah login
     Route::get('/redirect-dashboard', function() {
         $user = Auth::user(); if ($user->role === 'ko') { Auth::logout(); request()->session()->invalidate(); request()->session()->regenerateToken(); return redirect('/login')->withErrors(['email' => 'Akun KO tidak dapat masuk ke sistem ini. Silakan gunakan aplikasi ACS.']); }

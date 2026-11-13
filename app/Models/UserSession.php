@@ -14,6 +14,7 @@ class UserSession extends Model
 
     protected $fillable = [
         'business_id',
+        'branch_id',
         'user_id',
         'role',
         'ip_address',

@@ -39,6 +39,14 @@ class AiOrderProcessor
      */
     public function process(string $sender, string $combinedMessage, ?string $location = null, array $payload = []): array
     {
+        // TODO-FASE-5: Map fonnte token to branch_id and run under specific branch context
+        return app(\App\Support\BranchContext::class)->runUnscoped(function () use ($sender, $combinedMessage, $location, $payload) {
+            return $this->processInternal($sender, $combinedMessage, $location, $payload);
+        });
+    }
+
+    protected function processInternal(string $sender, string $combinedMessage, ?string $location = null, array $payload = []): array
+    {
         $canonicalSender = PhoneNumberHelper::normalize($sender);
 
         // ==============================================================

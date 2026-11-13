@@ -9,6 +9,7 @@
 @endsection
 
 @section('content')
+    @include('components.alert')
     <x-card title="Formulir Edit Produk">
         <form action="{{ route('admin.products.update', $product->id) }}" method="POST">
             @csrf

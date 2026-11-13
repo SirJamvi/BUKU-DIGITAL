@@ -1,4 +1,4 @@
-﻿@extends('admin.layouts.app')
+@extends('admin.layouts.app')
 
 @section('title', 'Dashboard Admin')
 
@@ -180,6 +180,85 @@
         </div>
     </div>
 </div>
+
+{{-- LIVE MONITORING PERBANDINGAN ANTAR CABANG (MODE KONSOLIDASI PUSAT) --}}
+@if(app(\App\Support\BranchContext::class)->isConsolidated() || session('active_branch_id') === 'all')
+<div class="row mb-4" id="branch-comparison-container">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden; border-top: 4px solid #3b82f6 !important;">
+            <div class="card-header text-white d-flex justify-content-between align-items-center py-3 flex-wrap gap-2" style="background: linear-gradient(135deg, #1e3a8a 0%, #1e293b 100%) !important;">
+                <div>
+                    <h5 class="mb-0 fw-bold d-flex align-items-center">
+                        <span class="badge bg-primary me-2 px-2 py-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">LIVE</span>
+                        <i class="fas fa-network-wired text-warning me-2"></i> Perbandingan Antar Cabang (Hari Ini)
+                    </h5>
+                    <small class="text-white-50">Monitoring real-time omzet, arus kas fisik, dan status stok kritis di setiap cabang.</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="spinner-border spinner-border-sm text-info" id="branchPollingSpinner" style="display: none; width: 0.75rem; height: 0.75rem;" role="status"></span>
+                    <span class="badge bg-light text-dark font-monospace" style="font-size: 0.75rem;" id="branchPollingTimer">Update: 60s</span>
+                    <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="refreshBranchComparisonNow()" title="Perbarui Sekarang">
+                        <i class="fas fa-sync-alt" id="branchRefreshIcon"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="branchComparisonTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">Nama Cabang</th>
+                                <th>Kode</th>
+                                <th class="text-end">Omzet Hari Ini</th>
+                                <th class="text-end">Kas Bersih Hari Ini</th>
+                                <th class="text-center">Stok Kritis</th>
+                                <th class="text-center pe-3">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="branchComparisonTbody">
+                            @forelse($branchComparison ?? [] as $bc)
+                                <tr>
+                                    <td class="ps-3 fw-bold">
+                                        {{ $bc['branch_name'] }}
+                                        @if(!empty($bc['is_main']))
+                                            <span class="badge bg-primary ms-1"><i class="fas fa-crown me-1"></i>Pusat</span>
+                                        @endif
+                                    </td>
+                                    <td><span class="badge bg-dark font-monospace">{{ $bc['branch_code'] }}</span></td>
+                                    <td class="text-end fw-semibold text-primary">Rp {{ number_format($bc['omzet_today'], 0, ',', '.') }}</td>
+                                    <td class="text-end fw-semibold {{ $bc['cash_today'] >= 0 ? 'text-success' : 'text-danger' }}">
+                                        Rp {{ number_format($bc['cash_today'], 0, ',', '.') }}
+                                    </td>
+                                    <td class="text-center">
+                                        @if($bc['critical_stock_count'] > 0)
+                                            <span class="badge bg-danger">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>{{ $bc['critical_stock_count'] }} Produk
+                                            </span>
+                                        @else
+                                            <span class="badge bg-success">
+                                                <i class="fas fa-check-circle me-1"></i>Aman
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center pe-3">
+                                        <a href="{{ route('branch.switch', $bc['branch_id']) }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Masuk ke Monitoring Cabang Ini">
+                                            <i class="fas fa-sign-in-alt me-1"></i> Masuk Cabang
+                                        </a>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6" class="text-center py-3 text-muted">Belum ada cabang aktif.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- FILTER TANGGAL UNTUK AKTIVITAS HARIAN --}}
 <div class="row mb-3">
@@ -2012,6 +2091,80 @@
             }
         });
     }
+
+    // Live 60s Polling untuk Tabel Perbandingan Cabang (Jeda saat tab diminimalkan / hidden)
+    (function() {
+        let branchCountdown = 60;
+        const timerElem = document.getElementById('branchPollingTimer');
+        const spinner = document.getElementById('branchPollingSpinner');
+        const tbody = document.getElementById('branchComparisonTbody');
+
+        if (!tbody) return;
+
+        async function fetchBranchComparison() {
+            if (spinner) spinner.style.display = 'inline-block';
+            try {
+                const resp = await fetch('{{ route('admin.dashboard.branch-comparison') }}');
+                if (!resp.ok) return;
+                const res = await resp.json();
+                if (res.status === 'success' && res.data) {
+                    renderBranchComparison(res.data);
+                }
+            } catch (e) {
+                console.error('Failed to fetch branch comparison:', e);
+            } finally {
+                if (spinner) spinner.style.display = 'none';
+                branchCountdown = 60;
+            }
+        }
+
+        function renderBranchComparison(data) {
+            if (!data || !data.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Belum ada cabang aktif.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(item => {
+                const isMainBadge = item.is_main ? '<span class="badge bg-primary ms-1"><i class="fas fa-crown me-1"></i>Pusat</span>' : '';
+                const omzetFormatted = new Intl.NumberFormat('id-ID').format(item.omzet_today);
+                const cashFormatted = new Intl.NumberFormat('id-ID').format(item.cash_today);
+                const cashClass = item.cash_today >= 0 ? 'text-success' : 'text-danger';
+                const criticalBadge = item.critical_stock_count > 0 
+                    ? `<span class="badge bg-danger"><i class="fas fa-exclamation-triangle me-1"></i>${item.critical_stock_count} Produk</span>`
+                    : '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Aman</span>';
+                const switchUrl = '{{ url('/branch/switch') }}/' + item.branch_id;
+
+                html += `<tr>
+                    <td class="ps-3 fw-bold">${item.branch_name} ${isMainBadge}</td>
+                    <td><span class="badge bg-dark font-monospace">${item.branch_code}</span></td>
+                    <td class="text-end fw-semibold text-primary">Rp ${omzetFormatted}</td>
+                    <td class="text-end fw-semibold ${cashClass}">Rp ${cashFormatted}</td>
+                    <td class="text-center">${criticalBadge}</td>
+                    <td class="text-center pe-3">
+                        <a href="${switchUrl}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Masuk ke Monitoring Cabang Ini">
+                            <i class="fas fa-sign-in-alt me-1"></i> Masuk Cabang
+                        </a>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        window.refreshBranchComparisonNow = function() {
+            branchCountdown = 60;
+            fetchBranchComparison();
+        };
+
+        setInterval(() => {
+            if (document.hidden) return; // Pause polling when tab is not active
+            branchCountdown--;
+            if (timerElem) timerElem.textContent = 'Update: ' + branchCountdown + 's';
+            if (branchCountdown <= 0) {
+                fetchBranchComparison();
+            }
+        }, 1000);
+    })();
 
 </script>
 @endpush

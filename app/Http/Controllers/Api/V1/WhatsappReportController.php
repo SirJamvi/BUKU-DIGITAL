@@ -27,6 +27,14 @@ class WhatsappReportController extends Controller
 
     public function generateDailyReport(Request $request): JsonResponse
     {
+        // TODO-FASE-4: Parameterize WhatsApp reports per branch or consolidation
+        return app(\App\Support\BranchContext::class)->runUnscoped(function () use ($request) {
+            return $this->generateDailyReportInternal($request);
+        });
+    }
+
+    protected function generateDailyReportInternal(Request $request): JsonResponse
+    {
         // 1. Pengaman API Sederhana (Ganti 'rahasia123' dengan token Anda sendiri)
         if ($request->query('token') !== 'rahasia123') {
             return response()->json(['error' => 'Unauthorized'], 401);
@@ -213,6 +221,14 @@ class WhatsappReportController extends Controller
     }
 
     public function checkKasbonLimit(Request $request): JsonResponse
+    {
+        // TODO-FASE-4: Parameterize WhatsApp reports per branch or consolidation
+        return app(\App\Support\BranchContext::class)->runUnscoped(function () use ($request) {
+            return $this->checkKasbonLimitInternal($request);
+        });
+    }
+
+    protected function checkKasbonLimitInternal(Request $request): JsonResponse
     {
         // 1. Pengaman API Sederhana
         if ($request->query('token') !== 'rahasia123') {

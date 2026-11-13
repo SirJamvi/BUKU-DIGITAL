@@ -5,15 +5,17 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Traits\BelongsToBusiness;
+use App\Traits\BelongsToBranch;
 
 class CashierOpeningBalance extends Model
 {
-    use HasFactory, BelongsToBusiness;
+    use HasFactory, BelongsToBusiness, BelongsToBranch;
 
     protected $table = 'cashier_opening_balances';
 
     protected $fillable = [
         'business_id',
+        'branch_id',
         'user_id',
         'date',
         'amount',

@@ -57,6 +57,31 @@
             </div>
         </div>
 
+        {{-- Penugasan Cabang (Khusus Kasir / Driver) --}}
+        <input type="hidden" name="branch_ids_submitted" value="1">
+        <div class="row mt-3">
+            <div class="col-12">
+                <label class="form-label fw-bold">Penugasan Cabang (Kasir / Driver)</label>
+                <p class="text-muted small mb-2">Pilih cabang yang dapat diakses oleh pengguna ini. Pengguna Admin/Owner secara otomatis memiliki akses ke seluruh cabang.</p>
+                <div class="row">
+                    @foreach($branches ?? [] as $branch)
+                        @php
+                            $isAssigned = $user->branches->contains('id', $branch->id);
+                        @endphp
+                        <div class="col-md-4 mb-2">
+                            <div class="form-check border p-2 rounded {{ $isAssigned ? 'bg-light' : '' }}">
+                                <input class="form-check-input ms-1" type="checkbox" name="branch_ids[]" value="{{ $branch->id }}" id="branch_{{ $branch->id }}" {{ $isAssigned ? 'checked' : '' }}>
+                                <label class="form-check-label ms-2" for="branch_{{ $branch->id }}">
+                                    <strong>{{ $branch->name }}</strong> ({{ $branch->code }})
+                                    @if($branch->is_main) <span class="badge bg-primary ms-1">Pusat</span> @endif
+                                </label>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+
         <div class="d-flex justify-content-end mt-3">
             <x-button href="{{ route('admin.users.index') }}" variant="secondary" class="me-2">Batal</x-button>
             <x-button type="submit" variant="primary"><i class="fas fa-save me-2"></i>Simpan Perubahan</x-button>

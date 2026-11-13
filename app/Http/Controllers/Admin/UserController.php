@@ -52,7 +52,11 @@ class UserController extends Controller
 
     public function create(): View
     {
-        return view('admin.users.create');
+        $branches = \App\Models\Branch::where('business_id', Auth::user()->business_id)
+            ->where('is_active', true)
+            ->get();
+
+        return view('admin.users.create', compact('branches'));
     }
 
     public function store(StoreUserRequest $request): RedirectResponse
@@ -73,7 +77,11 @@ class UserController extends Controller
 
     public function edit(User $user): View
     {
-        return view('admin.users.edit', compact('user'));
+        $branches = \App\Models\Branch::where('business_id', Auth::user()->business_id)
+            ->where('is_active', true)
+            ->get();
+
+        return view('admin.users.edit', compact('user', 'branches'));
     }
 
     public function update(UpdateUserRequest $request, User $user): RedirectResponse

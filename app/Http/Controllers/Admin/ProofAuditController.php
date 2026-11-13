@@ -286,6 +286,8 @@ class ProofAuditController extends Controller
             'proof_verified_by' => Auth::id(),
         ]);
 
+        \App\Support\BranchCache::flush(Auth::user()->business_id);
+
         return back()->with('success', 'Bukti nota pengeluaran #' . $expense->id . ' berhasil diverifikasi.');
     }
 
@@ -302,6 +304,8 @@ class ProofAuditController extends Controller
             'proof_verified_at' => null,
             'proof_verified_by' => null,
         ]);
+
+        \App\Support\BranchCache::flush(Auth::user()->business_id);
 
         return back()->with('success', 'Status verifikasi nota #' . $expense->id . ' telah dibatalkan.');
     }
@@ -328,6 +332,7 @@ class ProofAuditController extends Controller
                 ]);
 
             if ($count > 1) {
+                \App\Support\BranchCache::flush($businessId);
                 return back()->with('success', "Bukti transfer Bulk ({$count} transaksi) berhasil diverifikasi cocok mutasi.");
             }
         } else {
@@ -336,6 +341,8 @@ class ProofAuditController extends Controller
                 'proof_verified_by' => Auth::id(),
             ]);
         }
+
+        \App\Support\BranchCache::flush($businessId);
 
         return back()->with('success', 'Bukti pembayaran transaksi #' . $transaction->id . ' berhasil diverifikasi sesuai mutasi.');
     }
@@ -361,6 +368,7 @@ class ProofAuditController extends Controller
                 ]);
 
             if ($count > 1) {
+                \App\Support\BranchCache::flush($businessId);
                 return back()->with('success', "Status verifikasi untuk seluruh {$count} transaksi pada bukti transfer Bulk ini telah dibatalkan.");
             }
         } else {
@@ -369,6 +377,8 @@ class ProofAuditController extends Controller
                 'proof_verified_by' => null,
             ]);
         }
+
+        \App\Support\BranchCache::flush($businessId);
 
         return back()->with('success', 'Status verifikasi transaksi #' . $transaction->id . ' telah dibatalkan.');
     }

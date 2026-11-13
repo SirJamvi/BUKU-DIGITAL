@@ -7,6 +7,11 @@ use App\Models\Transaction;
 use App\Models\ExpenseCategory;
 use App\Models\CapitalTracking;
 use App\Models\OwnerProfit;
+use App\Models\OwnerExpense;
+use App\Models\Branch;
+use App\Models\BranchMonthlyClosing;
+use App\Support\BranchCache;
+use App\Support\BranchContext;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -273,82 +278,277 @@ class FinancialService
     }
 
     /**
-     * [FIXED]: Standardisasi CogsCalculator dan Revenue - COGS calculation.
+     * Hitung dan simpan rekonsiliasi tutup buku bulanan untuk satu cabang spesifik.
      */
-    public function processMonthlyClosing(string $period): OwnerProfit
-    {
-        $businessId = Auth::user()->business_id;
+    public function computeBranchClosing(
+        int $businessId,
+        int $branchId,
+        int $month,
+        int $year,
+        ?int $closedBy = null,
+        ?string $notes = null,
+        bool $dryRun = false
+    ): BranchMonthlyClosing|array {
+        $context = app(BranchContext::class);
+
+        return $context->runAs($branchId, function () use ($businessId, $branchId, $month, $year, $closedBy, $notes, $dryRun) {
+            $date = Carbon::create($year, $month, 1);
+            $startOfMonth = $date->copy()->startOfMonth();
+            $endOfMonth = $date->copy()->endOfMonth();
+
+            // Transaksi penjualan cabang ini
+            $transactions = Transaction::withoutGlobalScope('branch')
+                ->where('business_id', $businessId)
+                ->where('branch_id', $branchId)
+                ->where('type', 'sale')
+                ->where('status', 'completed')
+                ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
+                ->with(['details.product'])
+                ->get();
+
+            $cogsResult = CogsCalculator::calculateForTransactions($transactions);
+            $monthlyIncome = (float) $cogsResult['total_income'];
+            $monthlyCogs = (float) $cogsResult['total_cogs'];
+            $grossProfit = (float) $cogsResult['total_gross_profit'];
+
+            // Beban operasional murni (is_cogs = 0) cabang ini
+            $monthlyOpexQuery = CashFlow::withoutGlobalScope('branch')
+                ->where('business_id', $businessId)
+                ->where('branch_id', $branchId)
+                ->where('type', 'expense')
+                ->whereBetween('date', [$startOfMonth, $endOfMonth]);
+
+            if (config('accounting.use_cashflow_is_cogs', false)) {
+                $monthlyOpexQuery->where('is_cogs', 0);
+            } else {
+                $monthlyOpexQuery->whereHas('category', function ($q) {
+                    $q->where('is_cogs', 0);
+                });
+            }
+
+            $monthlyExpense = (float) $monthlyOpexQuery->sum('amount');
+            $netProfit = $grossProfit - $monthlyExpense;
+
+            $closingData = [
+                'business_id'     => $businessId,
+                'branch_id'       => $branchId,
+                'period_month'    => $month,
+                'period_year'     => $year,
+                'monthly_income'  => $monthlyIncome,
+                'monthly_cogs'    => $monthlyCogs,
+                'gross_profit'    => $grossProfit,
+                'monthly_expense' => $monthlyExpense,
+                'net_profit'      => $netProfit,
+                'status'          => 'completed',
+                'closed_at'       => now(),
+                'closed_by'       => $closedBy,
+                'notes'           => $notes,
+            ];
+
+            if ($dryRun) {
+                return $closingData;
+            }
+
+            return BranchMonthlyClosing::updateOrCreate(
+                [
+                    'business_id'  => $businessId,
+                    'branch_id'    => $branchId,
+                    'period_month' => $month,
+                    'period_year'  => $year,
+                ],
+                $closingData
+            );
+        }, $businessId);
+    }
+
+    /**
+     * Memproses tutup buku bulanan:
+     * 1. Menghitung & menyimpan closing masing-masing cabang ke branch_monthly_closings
+     * 2. Menghitung beban holding korporat (owner_expenses & unbranched cash_flow)
+     * 3. Mengagregasi laba bersih konsolidasi ke tabel owner_profits
+     */
+    public function processMonthlyClosing(
+        string $period,
+        ?int $businessId = null,
+        ?int $closedBy = null,
+        bool $dryRun = false
+    ): OwnerProfit|array {
+        $businessId = $businessId ?? (Auth::check() ? Auth::user()->business_id : null);
+        if (!$businessId) {
+            throw new \InvalidArgumentException('Business ID wajib ditentukan untuk proses tutup buku.');
+        }
+
         $date = Carbon::createFromFormat('Y-m', $period);
         $month = $date->month;
         $year = $date->year;
+        $startOfMonth = $date->copy()->startOfMonth();
+        $endOfMonth = $date->copy()->endOfMonth();
 
         $existingProfit = OwnerProfit::where('business_id', $businessId)
             ->where('period_month', $month)
             ->where('period_year', $year)
             ->first();
 
-        if ($existingProfit && $existingProfit->status === 'completed') {
+        if ($existingProfit && $existingProfit->status === 'completed' && !$dryRun) {
             return $existingProfit;
         }
 
-        $startOfMonth = $date->copy()->startOfMonth();
-        $endOfMonth = $date->copy()->endOfMonth();
-
-        $transactions = Transaction::where('business_id', $businessId)
-            ->where('type', 'sale')
-            ->where('status', 'completed')
-            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
-            ->with(['details.product'])
+        // Kumpulkan semua cabang: yang aktif saat ini maupun yang memiliki riwayat di periode terkait
+        $activeBranches = Branch::where('business_id', $businessId)
+            ->where('is_active', true)
             ->get();
 
-        $cogsResult = CogsCalculator::calculateForTransactions($transactions);
-        $monthlyIncome = $cogsResult['total_income'];
-        $monthlyGrossProfit = $cogsResult['total_gross_profit'];
+        $historicalBranchIds = DB::table('transactions')
+            ->where('business_id', $businessId)
+            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
+            ->whereNotNull('branch_id')
+            ->distinct()
+            ->pluck('branch_id')
+            ->merge(
+                DB::table('cash_flow')
+                    ->where('business_id', $businessId)
+                    ->whereBetween('date', [$startOfMonth, $endOfMonth])
+                    ->whereNotNull('branch_id')
+                    ->distinct()
+                    ->pluck('branch_id')
+            )
+            ->unique()
+            ->all();
 
-        $monthlyOpexQuery = $this->basePureExpenseQuery($businessId)
-            ->whereBetween('date', [$startOfMonth, $endOfMonth]);
-        $monthlyOpex = $monthlyOpexQuery->sum('amount');
+        $allBranchIds = $activeBranches->pluck('id')->merge($historicalBranchIds)->unique()->values();
 
-        $netProfit = $monthlyGrossProfit - $monthlyOpex;
+        $branches = Branch::where('business_id', $businessId)
+            ->whereIn('id', $allBranchIds)
+            ->orderByDesc('is_main')
+            ->orderBy('name')
+            ->get();
 
-        return OwnerProfit::updateOrCreate(
-            [
-                'business_id'  => $businessId,
-                'period_month' => $month,
-                'period_year'  => $year,
-            ],
-            [
-                'monthly_income'  => $monthlyIncome,
-                'monthly_expense' => $monthlyOpex,
-                'gross_profit'    => $monthlyGrossProfit,
-                'net_profit'      => $netProfit,
-                'status'          => 'pending',
-                'allocated_at'    => null,
-                'allocated_funds' => 0,
-                'recorded_at'     => now(),
-                'updated_at'      => now(),
-            ]
-        );
+        $execute = function () use (
+            $businessId, $branches, $month, $year, $closedBy, $dryRun, 
+            $startOfMonth, $endOfMonth
+        ) {
+            $branchResults = [];
+            $totalBranchIncome = 0.0;
+            $totalBranchCogs = 0.0;
+            $totalBranchGross = 0.0;
+            $totalBranchExpense = 0.0;
+            $totalBranchNet = 0.0;
+
+            foreach ($branches as $branch) {
+                $bRes = $this->computeBranchClosing(
+                    $businessId,
+                    $branch->id,
+                    $month,
+                    $year,
+                    $closedBy,
+                    null,
+                    $dryRun
+                );
+
+                $bArray = is_array($bRes) ? $bRes : $bRes->toArray();
+                $bArray['branch_name'] = $branch->name;
+                $bArray['branch_code'] = $branch->code;
+                $bArray['is_main'] = $branch->is_main;
+
+                $branchResults[] = $bArray;
+
+                $totalBranchIncome += (float) $bArray['monthly_income'];
+                $totalBranchCogs += (float) $bArray['monthly_cogs'];
+                $totalBranchGross += (float) $bArray['gross_profit'];
+                $totalBranchExpense += (float) $bArray['monthly_expense'];
+                $totalBranchNet += (float) $bArray['net_profit'];
+            }
+
+            // Beban Korporat / Holding (owner_expenses + cash_flow tanpa cabang)
+            $holdingOwnerExpenses = (float) OwnerExpense::where('business_id', $businessId)
+                ->whereBetween('date', [$startOfMonth, $endOfMonth])
+                ->sum('amount');
+
+            $holdingCashFlowExpenses = (float) CashFlow::where('business_id', $businessId)
+                ->whereNull('branch_id')
+                ->where('type', 'expense')
+                ->whereBetween('date', [$startOfMonth, $endOfMonth])
+                ->sum('amount');
+
+            $totalHoldingExpense = $holdingOwnerExpenses + $holdingCashFlowExpenses;
+
+            // Total Konsolidasi Holding
+            $consolidatedIncome = $totalBranchIncome;
+            $consolidatedGross = $totalBranchGross;
+            $consolidatedExpense = $totalBranchExpense + $totalHoldingExpense;
+            $consolidatedNetProfit = $consolidatedGross - $consolidatedExpense;
+
+            if ($dryRun) {
+                return [
+                    'business_id'             => $businessId,
+                    'period'                  => $startOfMonth->format('Y-m'),
+                    'branches'                => $branchResults,
+                    'total_branch_income'     => $totalBranchIncome,
+                    'total_branch_cogs'       => $totalBranchCogs,
+                    'total_branch_gross'      => $totalBranchGross,
+                    'total_branch_expense'    => $totalBranchExpense,
+                    'total_branch_net'        => $totalBranchNet,
+                    'holding_owner_expenses'  => $holdingOwnerExpenses,
+                    'holding_cf_expenses'     => $holdingCashFlowExpenses,
+                    'total_holding_expense'   => $totalHoldingExpense,
+                    'consolidated_income'     => $consolidatedIncome,
+                    'consolidated_gross'      => $consolidatedGross,
+                    'consolidated_expense'    => $consolidatedExpense,
+                    'consolidated_net_profit' => $consolidatedNetProfit,
+                ];
+            }
+
+            $ownerProfit = OwnerProfit::updateOrCreate(
+                [
+                    'business_id'  => $businessId,
+                    'period_month' => $month,
+                    'period_year'  => $year,
+                ],
+                [
+                    'monthly_income'  => $consolidatedIncome,
+                    'monthly_expense' => $consolidatedExpense,
+                    'gross_profit'    => $consolidatedGross,
+                    'net_profit'      => $consolidatedNetProfit,
+                    'status'          => 'pending',
+                    'allocated_at'    => null,
+                    'allocated_funds' => 0,
+                    'recorded_at'     => now(),
+                    'updated_at'      => now(),
+                ]
+            );
+
+            BranchCache::flush($businessId);
+
+            return $ownerProfit;
+        };
+
+        if ($dryRun) {
+            return $execute();
+        }
+
+        return DB::transaction($execute);
     }
 
     public function getAvailablePeriodsForClosing(): array
     {
         $businessId = Auth::user()->business_id;
 
-        $transactionPeriods = DB::table('transactions')
+        $context = app(\App\Support\BranchContext::class);
+
+        $txQuery = DB::table('transactions')
             ->select(DB::raw('YEAR(transaction_date) as year, MONTH(transaction_date) as month'))
             ->where('business_id', $businessId)
             ->where('type', 'sale')
-            ->where('status', 'completed')
-            ->distinct()
-            ->get();
+            ->where('status', 'completed');
+        $context->applyTo($txQuery);
+        $transactionPeriods = $txQuery->distinct()->get();
 
-        $expensePeriods = DB::table('cash_flows')
+        $expQuery = DB::table('cash_flow')
             ->select(DB::raw('YEAR(date) as year, MONTH(date) as month'))
             ->where('business_id', $businessId)
-            ->where('type', 'expense')
-            ->distinct()
-            ->get();
+            ->where('type', 'expense');
+        $context->applyTo($expQuery);
+        $expensePeriods = $expQuery->distinct()->get();
 
         $periods = collect($transactionPeriods)->merge($expensePeriods)
             ->unique(function ($item) {
@@ -581,7 +781,11 @@ class FinancialService
             }
         }
 
+        $branchId = app(\App\Support\BranchContext::class)->requireBranchId();
+        $expensePayload['branch_id'] = $branchId;
+
         CashFlow::create($expensePayload);
+        \App\Support\BranchCache::flush($businessId);
     }
 
     public function updateExpense(CashFlow $expense, array $data): void
@@ -628,14 +832,17 @@ class FinancialService
         }
 
         $expense->update($updateData);
+        \App\Support\BranchCache::flush($businessId);
     }
 
     public function deleteExpense(CashFlow $expense): void
     {
+        $bizId = $expense->business_id;
         if ($expense->receipt_image) {
             \App\Services\ProofUploadService::deleteProof($expense->receipt_image);
         }
         $expense->delete();
+        \App\Support\BranchCache::flush($bizId);
     }
 
     public function createExpenseCategory(array $data): void

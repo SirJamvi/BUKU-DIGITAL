@@ -17,8 +17,11 @@ class ActivityLogger
         if (Auth::check() && $request->method() !== 'GET' && $response->isSuccessful()) {
             $user = Auth::user();
             if ($user->business_id) {
+                $branchId = app(\App\Support\BranchContext::class)->getBranchId() ?? $user->getActiveBranchId();
+
                 UserActivityLog::create([
                     'business_id' => $user->business_id,
+                    'branch_id'   => $branchId,
                     'user_id'     => $user->id,
                     'action'      => $request->route()->getActionName(),
                     'module'      => explode('/', $request->path())[0] ?? 'general',

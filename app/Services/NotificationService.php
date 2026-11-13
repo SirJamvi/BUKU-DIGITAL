@@ -6,6 +6,8 @@ use App\Jobs\SendNotification;
 use App\Models\Transaction;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\Inventory;
+use App\Models\Branch;
 use App\Notifications\LowStockAlert;
 use App\Notifications\NewTransaction;
 use App\Mail\TransactionReceipt;
@@ -32,14 +34,16 @@ class NotificationService
      * Mengirim notifikasi stok rendah ke semua admin.
      *
      * @param Product $product
+     * @param Inventory|null $inventory
+     * @param Branch|null $branch
      * @return void
      */
-    public function sendLowStockAlert(Product $product): void
+    public function sendLowStockAlert(Product $product, ?Inventory $inventory = null, ?Branch $branch = null): void
     {
         $admins = User::where('role', 'admin')->where('is_active', true)->get();
 
         if ($admins->isNotEmpty()) {
-            SendNotification::dispatch($admins, new LowStockAlert($product));
+            SendNotification::dispatch($admins, new LowStockAlert($product, $inventory, $branch));
         }
     }
 

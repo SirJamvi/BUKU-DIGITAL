@@ -45,34 +45,37 @@ class GenerateReports extends Command
         $reportType = $this->option('type');
         $this->info("Memulai pembuatan laporan {$reportType}...");
 
-        try {
-            // Tentukan rentang tanggal berdasarkan tipe laporan
-            $filters = $this->getDateFilters($reportType);
+        // TODO-FASE-4: Parameterize automated reports per branch or consolidation
+        return app(\App\Support\BranchContext::class)->runUnscoped(function () use ($reportType) {
+            try {
+                // Tentukan rentang tanggal berdasarkan tipe laporan
+                $filters = $this->getDateFilters($reportType);
 
-            // Buat laporan
-            $salesReport = $this->reportService->getSalesReport($filters);
-            $financialReport = $this->reportService->getFinancialReport($filters);
+                // Buat laporan
+                $salesReport = $this->reportService->getSalesReport($filters);
+                $financialReport = $this->reportService->getFinancialReport($filters);
 
-            // Kirim laporan ke semua admin
-            $admins = User::where('role', 'admin')->where('is_active', true)->get();
-            if ($admins->isEmpty()) {
-                $this->warn('Tidak ada admin aktif yang ditemukan untuk dikirimi laporan.');
+                // Kirim laporan ke semua admin
+                $admins = User::where('role', 'admin')->where('is_active', true)->get();
+                if ($admins->isEmpty()) {
+                    $this->warn('Tidak ada admin aktif yang ditemukan untuk dikirimi laporan.');
+                    return 1;
+                }
+
+                foreach ($admins as $admin) {
+                    Mail::to($admin->email)->send(new ReportGenerated($salesReport, $financialReport, $reportType));
+                    $this->info("Laporan berhasil dikirim ke: {$admin->email}");
+                }
+
+                $this->info('Semua laporan telah berhasil dibuat dan dikirim.');
+                return 0;
+
+            } catch (\Exception $e) {
+                $this->error("Terjadi kesalahan saat membuat laporan: {$e->getMessage()}");
+                logger()->error('GenerateReports Command Error: ' . $e->getMessage());
                 return 1;
             }
-
-            foreach ($admins as $admin) {
-                Mail::to($admin->email)->send(new ReportGenerated($salesReport, $financialReport, $reportType));
-                $this->info("Laporan berhasil dikirim ke: {$admin->email}");
-            }
-
-            $this->info('Semua laporan telah berhasil dibuat dan dikirim.');
-            return 0;
-
-        } catch (\Exception $e) {
-            $this->error("Terjadi kesalahan saat membuat laporan: {$e->getMessage()}");
-            logger()->error('GenerateReports Command Error: ' . $e->getMessage());
-            return 1;
-        }
+        });
     }
 
     /**

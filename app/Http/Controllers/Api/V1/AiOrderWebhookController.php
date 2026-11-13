@@ -29,6 +29,14 @@ class AiOrderWebhookController extends Controller
      */
     public function handle(Request $request): JsonResponse
     {
+        // TODO-FASE-5: Jalankan di dalam branch_id spesifik berdasarkan fonnte_token atau sender device mapping
+        return app(\App\Support\BranchContext::class)->runUnscoped(function () use ($request) {
+            return $this->handleInternal($request);
+        });
+    }
+
+    protected function handleInternal(Request $request): JsonResponse
+    {
         $payload = $request->all();
 
         // ==============================================================

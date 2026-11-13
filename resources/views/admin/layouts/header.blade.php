@@ -30,6 +30,66 @@
                     </div>
                 </div>
 
+                {{-- Mode Cabang / Indikator & Switcher Cepat --}}
+                <div class="d-flex align-items-center me-2">
+                    @if(app(\App\Support\BranchContext::class)->isConsolidated() || session('active_branch_id') === 'all')
+                        <span class="badge bg-primary px-3 py-2 me-2 shadow-sm" style="font-size: 0.85rem;">
+                            <i class="fas fa-network-wired me-1"></i> Pusat (Konsolidasi)
+                        </span>
+                    @else
+                        <span class="badge bg-success px-3 py-2 me-2 shadow-sm" style="font-size: 0.85rem;">
+                            <i class="fas fa-store me-1"></i> Cabang: {{ session('active_branch_name', 'Cabang Aktif') }}
+                        </span>
+                    @endif
+
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-warning dropdown-toggle d-flex align-items-center gap-1" type="button" id="branchSwitchDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="border-color: rgba(212, 175, 55, 0.5); color: var(--luxury-gold); background: rgba(212, 175, 55, 0.1);">
+                            <i class="fas fa-exchange-alt me-1"></i>
+                            <span class="d-none d-sm-inline">Pindah Cabang</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="branchSwitchDropdown" style="min-width: 270px;">
+                            <li class="dropdown-header text-gold">Mode Navigasi</li>
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center justify-content-between {{ (session('active_branch_id') === 'all' || !session('active_branch_id')) ? 'active fw-bold' : '' }}" href="{{ route('branch.switch', 'all') }}">
+                                    <span><i class="fas fa-network-wired me-2 text-primary"></i> Pusat (Semua Cabang)</span>
+                                    @if(session('active_branch_id') === 'all' || !session('active_branch_id'))
+                                        <i class="fas fa-check text-success"></i>
+                                    @endif
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header text-gold">Monitoring Cabang</li>
+                            @if(isset($available_branches) && $available_branches->isNotEmpty())
+                                @foreach($available_branches as $ab)
+                                    <li>
+                                        <a class="dropdown-item d-flex align-items-center justify-content-between {{ (string)session('active_branch_id') === (string)$ab->id ? 'active fw-bold' : '' }}" href="{{ route('branch.switch', $ab->id) }}">
+                                            <div>
+                                                <i class="fas fa-store me-2 text-gold"></i>
+                                                {{ $ab->name }}
+                                                <small class="text-muted">({{ $ab->code }})</small>
+                                                @if(!$ab->is_active)
+                                                    <span class="badge bg-secondary ms-1">Nonaktif</span>
+                                                @endif
+                                            </div>
+                                            @if((string)session('active_branch_id') === (string)$ab->id)
+                                                <i class="fas fa-check text-success"></i>
+                                            @endif
+                                        </a>
+                                    </li>
+                                @endforeach
+                            @else
+                                <li><span class="dropdown-item text-muted small">Tidak ada cabang aktif</span></li>
+                            @endif
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item text-muted small" href="{{ route('admin.branches.index') }}">
+                                    <i class="fas fa-cog me-2"></i>Kelola Cabang
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
                 {{-- Notifications --}}
                 <div class="dropdown">
                     <a class="btn btn-link text-decoration-none position-relative" href="#" role="button" id="notificationDropdown" data-bs-toggle="dropdown" aria-expanded="false">

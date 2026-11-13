@@ -11,6 +11,8 @@ use App\Models\Transaction;
 use App\Models\CashFlow;
 use App\Models\User;
 use App\Models\Inventory;
+use App\Models\StockMovement;
+use App\Support\BranchContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -22,15 +24,29 @@ class PosApiController extends Controller
      */
     public function getPosData(Request $request)
     {
-        $businessId = $request->user() ? $request->user()->business_id : 1;
+        $user = $request->user();
+        if (!$user || !$user->business_id) {
+            return response()->json(['status' => 'error', 'message' => 'Autentikasi gagal atau business_id tidak valid.'], 401);
+        }
 
-        $products = Product::where('is_active', true)
-            ->where('business_id', $businessId)
-            ->whereHas('inventory', function ($query) {
+        $businessId = $user->business_id;
+        $branchId = app(BranchContext::class)->getBranchId() ?? $user->getActiveBranchId() ?? $user->branch_id;
+
+        $productQuery = Product::where('is_active', true)->where('business_id', $businessId);
+        if ($branchId) {
+            $productQuery->whereHas('inventory', function ($query) use ($branchId) {
+                $query->where('branch_id', $branchId)->where('current_stock', '>', 0);
+            })->with([
+                'category',
+                'inventory' => fn($q) => $q->where('branch_id', $branchId),
+                'variants'
+            ]);
+        } else {
+            $productQuery->whereHas('inventory', function ($query) {
                 $query->where('current_stock', '>', 0);
-            })
-            ->with(['category', 'inventory', 'variants'])
-            ->get();
+            })->with(['category', 'inventory', 'variants']);
+        }
+        $products = $productQuery->get();
 
         $customers = Customer::where('status', 'active')
             ->orderBy('name', 'asc')
@@ -41,9 +57,20 @@ class PosApiController extends Controller
             ->orderBy('name', 'asc')
             ->get();
 
-        $drivers = User::where('business_id', $businessId)
-            ->select('id', 'name')
-            ->get();
+        $driverQuery = User::where('business_id', $businessId)
+            ->where('role', 'driver')
+            ->where('is_active', true);
+
+        if ($branchId) {
+            $branchDrivers = (clone $driverQuery)->where(function ($q) use ($branchId) {
+                $q->whereHas('branches', fn($b) => $b->where('branches.id', $branchId))
+                  ->orWhere('branch_id', $branchId);
+            })->select('id', 'name')->get();
+
+            $drivers = $branchDrivers->isNotEmpty() ? $branchDrivers : $driverQuery->select('id', 'name')->get();
+        } else {
+            $drivers = $driverQuery->select('id', 'name')->get();
+        }
 
         return response()->json([
             'status' => 'success',
@@ -61,6 +88,11 @@ class PosApiController extends Controller
      */
     public function storeOrder(Request $request)
     {
+        $user = $request->user();
+        if (!$user || !$user->business_id) {
+            return response()->json(['status' => 'error', 'message' => 'Autentikasi gagal atau business_id tidak valid.'], 401);
+        }
+
         $validator = Validator::make($request->all(), [
             'customer_id' => 'nullable|exists:customers,id',
             'driver_id' => 'required|exists:users,id',
@@ -78,83 +110,115 @@ class PosApiController extends Controller
         }
 
         try {
-            $transaction = DB::transaction(function () use ($request) {
-                $userId = $request->user() ? $request->user()->id : 1;
-                $businessId = $request->user() ? $request->user()->business_id : 1;
+            $businessId = $user->business_id;
+            $branchId = app(BranchContext::class)->getBranchId() ?? $user->getActiveBranchId() ?? $user->branch_id;
+            if (!$branchId) {
+                return response()->json(['status' => 'error', 'message' => 'Cabang aktif tidak ditemukan untuk user ini.'], 422);
+            }
+
+            $transaction = DB::transaction(function () use ($request, $user, $businessId, $branchId) {
+                $userId = $user->id;
 
                 foreach ($request->items as $item) {
-                    $product = Product::with('inventory')->find($item['product_id']);
-                    if ($product->inventory->current_stock < $item['quantity']) {
-                        throw new \Exception("Stok untuk produk '{$product->name}' tidak mencukupi.");
+                    $inventory = Inventory::where('product_id', $item['product_id'])
+                        ->where('branch_id', $branchId)
+                        ->first();
+                    $currentStock = $inventory ? (float) $inventory->current_stock : 0;
+                    if ($currentStock < $item['quantity']) {
+                        $product = Product::find($item['product_id']);
+                        $pName = $product ? $product->name : 'Produk ID ' . $item['product_id'];
+                        throw new \Exception("Stok untuk produk '{$pName}' tidak mencukupi di cabang ini.");
                     }
                 }
 
                 $transaction = Transaction::create([
-                    'business_id' => $businessId,
-                    'type' => 'sale',
-                    'customer_id' => $request->customer_id,
+                    'business_id'          => $businessId,
+                    'branch_id'            => $branchId,
+                    'type'                 => 'sale',
+                    'customer_id'          => $request->customer_id,
                     'claimed_by_driver_id' => $request->driver_id,
-                    'total_amount' => $request->total_amount,
-                    'payment_method' => 'kasbon',
-                    'payment_status' => 'pending',
-                    'order_status' => 'delivering',
-                    'status' => 'completed',
-                    'transaction_date' => now(),
-                    'notes' => $request->notes,
-                    'created_by' => $userId,
+                    'total_amount'         => $request->total_amount,
+                    'payment_method'       => 'kasbon',
+                    'payment_status'       => 'pending',
+                    'order_status'         => 'delivering',
+                    'status'               => 'completed',
+                    'transaction_date'     => now(),
+                    'notes'                => $request->notes,
+                    'created_by'           => $userId,
                 ]);
 
                 foreach ($request->items as $item) {
                     $product = Product::find($item['product_id']);
-                    $inventory = Inventory::where('product_id', $item['product_id'])
-                        ->where('business_id', $businessId)
-                        ->lockForUpdate()
-                        ->first();
+                    $inventory = Inventory::firstOrCreate(
+                        ['product_id' => $item['product_id'], 'branch_id' => $branchId, 'business_id' => $businessId],
+                        ['current_stock' => 0, 'cost_price' => (float) ($product->cost_price ?? 0)]
+                    );
+                    $inventory = Inventory::where('id', $inventory->id)->lockForUpdate()->first();
 
-                    if (!$inventory) {
-                        throw new \Exception("Data inventaris untuk produk '{$product->name}' (ID: {$item['product_id']}) belum ada di sistem.");
-                    }
                     if ($inventory->current_stock < $item['quantity']) {
-                        throw new \Exception("Stok untuk produk '{$product->name}' tidak mencukupi.");
+                        throw new \Exception("Stok untuk produk '{$product->name}' tidak mencukupi di cabang ini.");
                     }
 
                     // Tentukan snapshot cost_price
                     $snapshotCost = 0.0;
                     if ($product && !$product->isService()) {
-                        $masterCost = (float) ($product->cost_price ?? 0);
-                        if ($masterCost > 0) {
-                            $snapshotCost = $masterCost;
+                        $branchHpp = (float) ($inventory->cost_price ?? 0);
+                        if ($branchHpp > 0) {
+                            $snapshotCost = $branchHpp;
                         } else {
-                            // Rata-rata snapshot positif 7 hari terakhir untuk product_id & business_id
-                            $avg7Days = DB::table('transaction_details')
-                                ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
-                                ->where('transactions.business_id', $businessId)
-                                ->where('transaction_details.product_id', $product->id)
-                                ->where('transaction_details.cost_price', '>', 0)
-                                ->where('transactions.transaction_date', '>=', now()->subDays(7))
-                                ->avg('transaction_details.cost_price');
-
-                            if ($avg7Days !== null && (float) $avg7Days > 0) {
-                                $snapshotCost = round((float) $avg7Days, 2);
-                            } else {
+                            $masterCost = (float) ($product->cost_price ?? 0);
+                            if ($masterCost > 0) {
                                 $snapshotCost = $masterCost;
-                                Log::warning("POS API Snapshot Fallback: Produk {$product->name} (ID: {$product->id}, Business: {$businessId}) master cost_price <= 0 dan tidak ada riwayat snapshot positif 7 hari terakhir.");
+                            } else {
+                                $avg7DaysQuery = DB::table('transaction_details')
+                                    ->join('transactions', 'transaction_details.transaction_id', '=', 'transactions.id')
+                                    ->where('transactions.business_id', $businessId)
+                                    ->where('transaction_details.product_id', $product->id)
+                                    ->where('transaction_details.cost_price', '>', 0)
+                                    ->where('transactions.transaction_date', '>=', now()->subDays(7));
+
+                                app(BranchContext::class)->applyTo($avg7DaysQuery, 'transactions', 'branch_id');
+                                $avg7Days = $avg7DaysQuery->avg('transaction_details.cost_price');
+
+                                if ($avg7Days !== null && (float) $avg7Days > 0) {
+                                    $snapshotCost = round((float) $avg7Days, 2);
+                                } else {
+                                    $snapshotCost = $masterCost;
+                                    Log::warning("POS API Snapshot Fallback: Produk {$product->name} (ID: {$product->id}, Business: {$businessId}, Branch: {$branchId}) HPP <= 0 dan tidak ada riwayat snapshot positif 7 hari terakhir.");
+                                }
                             }
                         }
                     }
 
                     $transaction->details()->create([
-                        'product_id' => $item['product_id'],
-                        'quantity' => $item['quantity'],
-                        'cost_price' => $snapshotCost,
-                        'unit_price' => $item['unit_price'],
+                        'product_id'  => $item['product_id'],
+                        'quantity'    => $item['quantity'],
+                        'cost_price'  => $snapshotCost,
+                        'unit_price'  => $item['unit_price'],
                         'total_price' => $item['total_price'],
                     ]);
+
                     $inventory->decrement('current_stock', $item['quantity']);
+
+                    // Catat mutasi stok keluar bertipe 'sale'
+                    StockMovement::create([
+                        'business_id'    => $businessId,
+                        'branch_id'      => $branchId,
+                        'product_id'     => $item['product_id'],
+                        'type'           => 'sale',
+                        'quantity'       => $item['quantity'],
+                        'unit_cost'      => $snapshotCost,
+                        'reference_type' => Transaction::class,
+                        'reference_id'   => (string) $transaction->id,
+                        'notes'          => "Penjualan POS API #" . $transaction->id,
+                        'created_by'     => $userId,
+                    ]);
                 }
 
                 return $transaction;
             });
+
+            \App\Support\BranchCache::flush($businessId);
 
             return response()->json([
                 'status' => 'success',
@@ -171,13 +235,24 @@ class PosApiController extends Controller
      */
     public function getDeliveryOrders(Request $request)
     {
-        $businessId = $request->user() ? $request->user()->business_id : 1;
+        $user = $request->user();
+        if (!$user || !$user->business_id) {
+            return response()->json(['status' => 'error', 'message' => 'Autentikasi gagal.'], 401);
+        }
 
-        $orders = Transaction::with(['customer', 'driver'])
+        $businessId = $user->business_id;
+        $branchId = app(BranchContext::class)->getBranchId() ?? $user->getActiveBranchId() ?? $user->branch_id;
+
+        $ordersQuery = Transaction::with(['customer', 'driver'])
             ->where('business_id', $businessId)
             ->whereIn('order_status', ['pending', 'delivering'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->orderBy('created_at', 'desc');
+
+        if ($branchId) {
+            $ordersQuery->where('branch_id', $branchId);
+        }
+
+        $orders = $ordersQuery->get();
 
         return response()->json(['status' => 'success', 'data' => $orders]);
     }
@@ -214,6 +289,11 @@ class PosApiController extends Controller
      */
     public function confirmPayment(Request $request)
     {
+        $user = $request->user();
+        if (!$user || !$user->business_id) {
+            return response()->json(['status' => 'error', 'message' => 'Autentikasi gagal.'], 401);
+        }
+
         $validator = Validator::make($request->all(), [
             'transaction_ids' => 'required|array|min:1',
             'transaction_ids.*' => 'exists:transactions,id',
@@ -228,7 +308,7 @@ class PosApiController extends Controller
             DB::beginTransaction();
 
             $transactions = Transaction::whereIn('id', $request->transaction_ids)->get();
-            $userId = $request->user() ? $request->user()->id : 1;
+            $userId = $user->id;
 
             foreach ($transactions as $transaction) {
                 $isKasbon = strtolower($request->payment_method) === 'kasbon';
@@ -241,15 +321,16 @@ class PosApiController extends Controller
 
                 if (!$isKasbon) {
                     CashFlow::create([
-                        'business_id' => $transaction->business_id,
-                        'type' => 'income',
-                        'category_id' => 1,
+                        'business_id'    => $transaction->business_id,
+                        'branch_id'      => $transaction->branch_id,
+                        'type'           => 'income',
+                        'category_id'    => 1,
                         'payment_method' => $request->payment_method,
-                        'amount' => $transaction->total_amount,
-                        'description' => 'Pembayaran pesanan diantar #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT),
-                        'date' => now(),
-                        'reference_id' => $transaction->id,
-                        'created_by' => $userId,
+                        'amount'         => $transaction->total_amount,
+                        'description'    => 'Pembayaran pesanan diantar #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT),
+                        'date'           => now(),
+                        'reference_id'   => $transaction->id,
+                        'created_by'     => $userId,
                     ]);
 
                     if ($transaction->customer_id) {
@@ -259,6 +340,8 @@ class PosApiController extends Controller
             }
 
             DB::commit();
+
+            \App\Support\BranchCache::flush($user->business_id);
 
             return response()->json([
                 'status' => 'success',

@@ -5,6 +5,8 @@ namespace App\Services\Admin;
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\StockMovement;
+use App\Services\Inventory\InventoryCostService;
+use App\Support\BranchContext;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -13,13 +15,66 @@ class InventoryService
 {
     /**
      * Mendapatkan data inventory dengan paginasi.
+     * - Mode Cabang: Menampilkan inventori spesifik cabang aktif.
+     * - Mode Pusat (Konsolidasi): Menampilkan total akumulasi stok, nilai inventori, dan weighted average HPP per produk.
      *
      * @param int $perPage
      * @return LengthAwarePaginator
      */
     public function getInventoryWithPagination(int $perPage = 15): LengthAwarePaginator
     {
-        return Inventory::with('product.category')->latest('updated_at')->paginate($perPage);
+        $context = app(BranchContext::class);
+        $businessId = Auth::user()->business_id;
+
+        if ($context->isBranch() && $context->getBranchId() !== null) {
+            return Inventory::with('product.category')
+                ->where('branch_id', $context->getBranchId())
+                ->latest('updated_at')
+                ->paginate($perPage);
+        }
+
+        // Mode CONSOLIDATED (Pusat): Agregasi per produk dari seluruh cabang aktif
+        $productsPaginator = Product::where('business_id', $businessId)
+            ->where('is_active', true)
+            ->with(['category', 'inventories' => function ($q) {
+                $q->withoutGlobalScope('branch')
+                  ->whereHas('branch', fn($b) => $b->where('is_active', true));
+            }])
+            ->orderBy('name')
+            ->paginate($perPage);
+
+        $items = $productsPaginator->getCollection()->map(function ($product) {
+            $inventories = $product->inventories;
+            $totalStock = (float) $inventories->sum('current_stock');
+            $totalValue = (float) $inventories->sum(fn($inv) => (float) $inv->current_stock * (float) $inv->cost_price);
+
+            if ($totalStock > 0 && $totalValue > 0) {
+                $weightedHpp = round($totalValue / $totalStock, 2);
+            } else {
+                $weightedHpp = (float) ($inventories->avg('cost_price') ?: ($product->cost_price ?? 0));
+            }
+
+            $minStock = (int) ($inventories->max('min_stock') ?: 10);
+            $latestUpdated = $inventories->max('updated_at') ?: $product->updated_at ?: now();
+            if (!$latestUpdated instanceof \Carbon\Carbon) {
+                $latestUpdated = \Carbon\Carbon::parse($latestUpdated);
+            }
+
+            $obj = new Inventory();
+            $obj->exists = true;
+            $obj->setRelation('product', $product);
+            $obj->current_stock = $totalStock;
+            $obj->min_stock = $minStock;
+            $obj->cost_price = $weightedHpp;
+            $obj->stock_value = $totalValue;
+            $obj->updated_at = $latestUpdated;
+
+            return $obj;
+        });
+
+        $productsPaginator->setCollection($items);
+
+        return $productsPaginator;
     }
 
     /**
@@ -48,31 +103,25 @@ class InventoryService
     {
         DB::transaction(function () use ($data) {
             $businessId = Auth::user()->business_id;
+            $branchId = app(BranchContext::class)->requireBranchId();
             $product = Product::findOrFail($data['product_id']);
 
             // Buat inventory dulu jika belum ada, lalu kunci (A2)
             $inventory = Inventory::firstOrCreate(
-                ['product_id' => $product->id, 'business_id' => $businessId],
-                ['current_stock' => 0]
+                ['product_id' => $product->id, 'branch_id' => $branchId, 'business_id' => $businessId],
+                ['current_stock' => 0, 'cost_price' => (float) ($product->cost_price ?? 0)]
             );
-            $inventory = Inventory::where('id', $inventory->id)->lockForUpdate()->first();
 
             $stockBefore = (float) $inventory->current_stock;
-            $cogsBefore = (float) ($product->cost_price ?? 0);
+            $cogsBefore = (float) ($inventory->cost_price > 0 ? $inventory->cost_price : ($product->cost_price ?? 0));
             $addedQty = (float) $data['quantity'];
 
-            // Jika membawa purchase_price, hitung moving average; jika tidak, jangan ubah HPP (1.3)
             $hasPrice = isset($data['purchase_price']) && is_numeric($data['purchase_price']) && (float) $data['purchase_price'] > 0;
+            $purchasePrice = $hasPrice ? (float) $data['purchase_price'] : $cogsBefore;
+
             if ($hasPrice) {
-                $purchasePrice = (float) $data['purchase_price'];
-                $newCogs = $stockBefore <= 0
-                    ? $purchasePrice
-                    : (($stockBefore * $cogsBefore) + ($addedQty * $purchasePrice)) / ($stockBefore + $addedQty);
-                $newCogs = round($newCogs, 2);
-                $product->update(['cost_price' => $newCogs]);
-                $auditNote = "Restock Admin | Beli " . number_format($purchasePrice, 2, '.', '') . " | HPP {$cogsBefore} -> {$newCogs} | Stok {$stockBefore} -> " . ($stockBefore + $addedQty);
+                $auditNote = "Restock Admin | Beli " . number_format($purchasePrice, 2, '.', '') . " | Stok {$stockBefore} -> " . ($stockBefore + $addedQty);
             } else {
-                $newCogs = $cogsBefore;
                 $auditNote = "Restock Admin (Tanpa Harga Beli - HPP Tetap) | HPP {$cogsBefore} | Stok {$stockBefore} -> " . ($stockBefore + $addedQty);
             }
 
@@ -80,16 +129,17 @@ class InventoryService
                 $auditNote .= " | " . $data['notes'];
             }
 
-            $inventory->increment('current_stock', $data['quantity']);
+            $costService = app(InventoryCostService::class);
+            $costService->receive(
+                $inventory,
+                $addedQty,
+                $purchasePrice,
+                'in',
+                $product,
+                $auditNote
+            );
 
-            StockMovement::create([
-                'business_id' => $businessId,
-                'product_id'  => $data['product_id'],
-                'type'        => 'in',
-                'quantity'    => $data['quantity'],
-                'notes'       => $auditNote,
-                'created_by'  => Auth::id(),
-            ]);
+            \App\Support\BranchCache::flush($businessId);
         });
     }
 
@@ -102,6 +152,7 @@ class InventoryService
     public function processStockOpname(array $data): void
     {
         DB::transaction(function () use ($data) {
+            $branchId = app(BranchContext::class)->requireBranchId();
             $currentUserId = Auth::id();
             $itemsCount = 0;
             $differenceCount = 0;
@@ -119,15 +170,21 @@ class InventoryService
                 $totalActual += (int) $item['actual_stock'];
 
                 if ($difference !== 0) {
-                    $inventory->update(['current_stock' => $item['actual_stock']]);
+                    $inventory->update([
+                        'current_stock' => $item['actual_stock'],
+                        'last_updated'  => now(),
+                        'updated_by'    => $currentUserId,
+                    ]);
 
                     StockMovement::create([
-                        'business_id' => $inventory->business_id,
-                        'product_id' => $inventory->product_id,
-                        'type' => 'adjustment',
-                        'quantity' => $difference,
-                        'notes' => 'Stock Opname: ' . ($item['notes'] ?? 'Tutup Shift / Penyesuaian fisik.'),
-                        'created_by' => $currentUserId,
+                        'business_id'    => $inventory->business_id,
+                        'branch_id'      => $inventory->branch_id ?? $branchId,
+                        'product_id'     => $inventory->product_id,
+                        'type'           => 'adjustment',
+                        'quantity'       => $difference,
+                        'unit_cost'      => (float) ($inventory->cost_price ?? 0),
+                        'notes'          => 'Stock Opname: ' . ($item['notes'] ?? 'Tutup Shift / Penyesuaian fisik.'),
+                        'created_by'     => $currentUserId,
                     ]);
 
                     $differenceCount++;
@@ -136,20 +193,27 @@ class InventoryService
 
             // Jejak sesi opname (dicatat juga saat tidak ada selisih) - dibaca ACS untuk checksheet.
             if ($itemsCount > 0 && \Illuminate\Support\Facades\Schema::hasTable('opname_sessions')) {
-                DB::table('opname_sessions')->insert([
-                    'business_id' => Auth::user()->business_id,
-                    'created_by' => $currentUserId,
-                    'items_count' => $itemsCount,
+                $opnameData = [
+                    'business_id'      => Auth::user()->business_id,
+                    'created_by'       => $currentUserId,
+                    'items_count'      => $itemsCount,
                     'difference_count' => $differenceCount,
-                    'total_system' => $totalSystem,
-                    'total_actual' => $totalActual,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+                    'total_system'     => $totalSystem,
+                    'total_actual'     => $totalActual,
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ];
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('opname_sessions', 'branch_id')) {
+                    $opnameData['branch_id'] = $branchId;
+                }
+
+                DB::table('opname_sessions')->insert($opnameData);
             }
+
+            \App\Support\BranchCache::flush(Auth::user()->business_id);
         });
     }
-
 
     /**
      * Memecah produk besar (Ball) menjadi produk eceran.
@@ -163,19 +227,20 @@ class InventoryService
         }
 
         DB::transaction(function () use ($fromProductId, $toProductId, $quantityToBreak, $yieldAmount) {
-            $fromInventory = $this->getInventoryByProductId($fromProductId);
-            $toInventory = $this->getInventoryByProductId($toProductId);
+            $branchId = app(BranchContext::class)->requireBranchId();
+            $businessId = Auth::user()->business_id;
+
+            $fromInventory = Inventory::where('product_id', $fromProductId)
+                ->where('branch_id', $branchId)
+                ->first();
+            $toInventory = Inventory::firstOrCreate(
+                ['product_id' => $toProductId, 'branch_id' => $branchId, 'business_id' => $businessId],
+                ['current_stock' => 0]
+            );
 
             if (!$fromInventory || $fromInventory->current_stock < $quantityToBreak) {
-                throw new \Exception("Stok karung tidak mencukupi untuk dipecah.");
+                throw new \Exception("Stok karung tidak mencukupi untuk dipecah di cabang aktif.");
             }
-            if (!$toInventory) {
-                throw new \Exception("Inventory untuk produk eceran belum dibuat.");
-            }
-
-            // Kunci baris inventory
-            $fromInventory = Inventory::where('id', $fromInventory->id)->lockForUpdate()->first();
-            $toInventory = Inventory::where('id', $toInventory->id)->lockForUpdate()->first();
 
             $fromProduct = $fromInventory->product;
             $toProduct = $toInventory->product;
@@ -184,43 +249,37 @@ class InventoryService
             $toStockBefore = (float) $toInventory->current_stock;
 
             // Hitung modal per unit pecahan baru
-            $sourceCostPrice = (float) ($fromProduct->cost_price ?? 0);
+            $sourceCostPrice = (float) ($fromInventory->cost_price > 0 ? $fromInventory->cost_price : ($fromProduct->cost_price ?? 0));
             $modalPerUnitPecahanBaru = ($yieldAmount > 0) ? (($quantityToBreak * $sourceCostPrice) / $yieldAmount) : 0;
-
-            // Rumus Moving Average HPP produk pecahan:
-            $currentChildCostPrice = (float) ($toProduct->cost_price ?? 0);
-
-            if ($toStockBefore > 0 && $currentChildCostPrice > 0) {
-                $newChildCostPrice = (($toStockBefore * $currentChildCostPrice) + ($yieldAmount * $modalPerUnitPecahanBaru)) / ($toStockBefore + $yieldAmount);
-            } else {
-                $newChildCostPrice = $modalPerUnitPecahanBaru;
-            }
-
-            $newChildCostPrice = round($newChildCostPrice, 2);
-            if ($toProduct) {
-                $toProduct->update(['cost_price' => $newChildCostPrice]);
-            }
 
             $fromStockAfter = $fromStockBefore - $quantityToBreak;
             $toStockAfter = $toStockBefore + $yieldAmount;
 
-            // 1. Kurangi stok karung besar terstruktur (1.4)
-            $this->updateStock(
-                $fromInventory->id,
+            $costService = app(InventoryCostService::class);
+
+            // 1. Kurangi stok karung besar
+            $costService->issue(
+                $fromInventory,
                 $quantityToBreak,
                 'out',
+                $fromProduct,
                 "Pecah ball ke eceran | Dari: {$fromProduct->name} ke {$toProduct->name} | Qty: {$quantityToBreak} | Stok: {$fromStockBefore} -> {$fromStockAfter}"
             );
 
-            // 2. Tambah stok eceran terstruktur (1.4)
-            $this->updateStock(
-                $toInventory->id,
+            // 2. Tambah stok eceran
+            $costService->receive(
+                $toInventory,
                 $yieldAmount,
+                $modalPerUnitPecahanBaru,
                 'in',
-                "Hasil pecah ball dari {$fromProduct->name} ke {$toProduct->name} | Qty: {$yieldAmount} | HPP: {$currentChildCostPrice} -> {$newChildCostPrice} | Stok: {$toStockBefore} -> {$toStockAfter}"
+                $fromProduct,
+                "Hasil pecah ball dari {$fromProduct->name} ke {$toProduct->name} | Qty: {$yieldAmount} | Stok: {$toStockBefore} -> {$toStockAfter}"
             );
+
+            \App\Support\BranchCache::flush($businessId);
         });
     }
+
     /**
      * Mendapatkan inventory berdasarkan product ID.
      *
@@ -255,17 +314,25 @@ class InventoryService
             };
 
             // Update stok
-            $inventory->update(['current_stock' => $newStock]);
+            $inventory->update([
+                'current_stock' => $newStock,
+                'last_updated'  => now(),
+                'updated_by'    => Auth::id(),
+            ]);
 
             // Catat pergerakan stok
             StockMovement::create([
-                'business_id' => $inventory->business_id, // <--- TAMBAHKAN BARIS INI
-                'product_id' => $inventory->product_id,
-                'type' => $type,
-                'quantity' => $type === 'adjustment' ? ($quantity - $inventory->current_stock) : $quantity,
-                'notes' => $notes,
-                'created_by' => Auth::id(),
+                'business_id' => $inventory->business_id,
+                'branch_id'   => $inventory->branch_id,
+                'product_id'  => $inventory->product_id,
+                'type'        => $type,
+                'quantity'    => $type === 'adjustment' ? ($quantity - $inventory->current_stock) : $quantity,
+                'unit_cost'   => (float) ($inventory->cost_price ?? 0),
+                'notes'       => $notes,
+                'created_by'  => Auth::id(),
             ]);
+
+            \App\Support\BranchCache::flush($inventory->business_id);
         });
     }
 

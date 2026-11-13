@@ -109,10 +109,15 @@ class FundAllocationService
      * [FIX FINAL] Memproses alokasi dana untuk SEMUA profit yang tertunda.
      * PERBAIKAN: Melakukan alokasi satu per satu untuk setiap periode profit.
      */
-    public function processAllocation(array $ownerProfitIds): void
+    public function processAllocation(array $ownerProfitIds, ?int $userId = null): void
     {
-        $businessId = Auth::user()->business_id;
-        
+        $firstProfit = OwnerProfit::whereIn('id', $ownerProfitIds)->first();
+        $businessId = Auth::user()?->business_id ?? $firstProfit?->business_id;
+
+        if (!$businessId) {
+            throw new \Exception('Business ID tidak ditemukan.');
+        }
+
         $profitsToProcess = OwnerProfit::where('business_id', $businessId)
                                         ->whereIn('id', $ownerProfitIds)
                                         ->where('status', 'pending')
@@ -122,12 +127,17 @@ class FundAllocationService
             throw new \Exception('Tidak ada data profit yang valid untuk diproses.');
         }
 
-        $settings = $this->getAllocationSettings();
+        $settings = $this->getAllocationSettings($businessId);
         if ($settings->isEmpty()) {
             throw new \Exception('Pengaturan alokasi dana belum dibuat.');
         }
-        
-        DB::transaction(function () use ($settings, $profitsToProcess, $businessId) {
+
+        $creatorId = $userId ?? Auth::id();
+        if (!$creatorId) {
+            $creatorId = DB::table('users')->where('business_id', $businessId)->value('id');
+        }
+
+        DB::transaction(function () use ($settings, $profitsToProcess, $businessId, $creatorId) {
             
             // =======================================================
             // PERUBAHAN LOGIKA UTAMA
@@ -154,7 +164,7 @@ class FundAllocationService
                             'period_year'           => $profit->period_year,  // Ambil dari data profit
                             'is_manual'             => false,
                             'allocated_at'          => now(),
-                            'created_by'            => Auth::id(),
+                            'created_by'            => $creatorId,
                         ]);
                     }
                 }
@@ -224,9 +234,10 @@ class FundAllocationService
     /**
      * Ambil pengaturan alokasi aktif
      */
-    public function getAllocationSettings(): Collection
+    public function getAllocationSettings(?int $businessId = null): Collection
     {
-        return FundAllocationSetting::where('business_id', Auth::user()->business_id)
+        $bizId = $businessId ?? Auth::user()?->business_id;
+        return FundAllocationSetting::where('business_id', $bizId)
                                     ->where('is_active', true)
                                     ->orderBy('sort_order')
                                     ->get();

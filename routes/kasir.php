@@ -77,3 +77,7 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/stock-opname', [KasirInventoryController::class, 'stockOpnameForm'])->name('stock_opname');
     Route::post('/stock-opname', [KasirInventoryController::class, 'processStockOpname'])->name('process_stock_opname');
 });
+
+// AI Orders Queue (Web Session + Branch Context Scoped)
+Route::get('/ai-orders', [\App\Http\Controllers\Api\V1\AiOrderWebhookController::class, 'getValidatedOrders'])->name('ai_orders');
+Route::post('/ai-orders/{id}/processed', [\App\Http\Controllers\Api\V1\AiOrderWebhookController::class, 'markAsProcessed'])->name('ai_orders.processed');

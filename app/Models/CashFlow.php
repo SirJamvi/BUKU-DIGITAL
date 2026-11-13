@@ -5,16 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Traits\BelongsToBusiness;
+use App\Traits\BelongsToBranch;
 use Illuminate\Support\Str;
 
 class CashFlow extends Model
 {
-    use HasFactory, BelongsToBusiness;
+    use HasFactory, BelongsToBusiness, BelongsToBranch;
 
     protected $table = 'cash_flow';
 
     protected $fillable = [
         'business_id',
+        'branch_id',
         'type',
         'category_id',
         'is_cogs',

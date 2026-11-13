@@ -33,7 +33,14 @@ class UnauthorizedException extends Exception
             );
         }
 
-        // Tampilkan halaman error 403 khusus
-        return response()->view('errors.403', ['exception' => $this], 403);
+        if (view()->exists('errors.403')) {
+            return response()->view('errors.403', ['exception' => $this], 403);
+        }
+
+        if (view()->exists('errors::403')) {
+            return response()->view('errors::403', ['exception' => $this], 403);
+        }
+
+        abort(403, $this->getMessage());
     }
 }

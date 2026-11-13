@@ -28,6 +28,16 @@
 
         @include('components.alert')
 
+        @if(app(\App\Support\BranchContext::class)->isConsolidated() || session('active_branch_id') === 'all')
+            <div class="alert alert-info d-flex align-items-center mb-3 py-2 px-3">
+                <i class="fas fa-info-circle fs-5 me-2"></i>
+                <div>
+                    <strong>Mode Pusat (Konsolidasi):</strong> Menampilkan akumulasi total stok dari seluruh cabang aktif. 
+                    Untuk menambah stok fisik atau stock opname, silakan pilih cabang tujuan di dropdown <em>Pindah Cabang</em> di bagian header.
+                </div>
+            </div>
+        @endif
+
         <x-table>
             @slot('thead')
                 <tr>

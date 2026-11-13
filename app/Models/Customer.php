@@ -44,12 +44,20 @@ class Customer extends Model
 
     /**
      * Menghitung total utang/kasbon pelanggan yang masih pending.
+     * Jika $branchId diberikan (atau konteks cabang aktif), dihitung terisolasi per cabang.
      */
-    public function getTotalKasbon()
+    public function getTotalKasbon(?int $branchId = null)
     {
-        return $this->transactions()
+        $branchId = $branchId ?? app(\App\Support\BranchContext::class)->getBranchId();
+
+        $query = $this->transactions()
                     ->where('type', 'sale')
-                    ->where('payment_status', 'pending')
-                    ->sum('total_amount');
+                    ->where('payment_status', 'pending');
+
+        if ($branchId) {
+            $query->where('branch_id', $branchId);
+        }
+
+        return $query->sum('total_amount');
     }
 }

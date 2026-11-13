@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\BelongsToBusiness;
+use App\Traits\BelongsToBranch;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,10 +11,11 @@ use Illuminate\Support\Str;
 
 class Transaction extends Model
 {
-    use HasFactory, BelongsToBusiness;
+    use HasFactory, BelongsToBusiness, BelongsToBranch;
 
     protected $fillable = [
         'business_id',
+        'branch_id',
         'type',
         'customer_id',
         'driver_id',
@@ -54,6 +56,29 @@ class Transaction extends Model
     public function driver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'driver_id');
+    }
+
+    /**
+     * Cabang tempat transaksi ini tercatat.
+     */
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
+    /**
+     * Format nomor nota/invoice standar per cabang: TRX-{branch.code}-{id 6 digit}
+     * Contoh: TRX-CB-PUSAT-000123
+     */
+    public function getReceiptNumberAttribute(): string
+    {
+        $code = $this->branch ? $this->branch->code : 'CB';
+        return sprintf('TRX-%s-%06d', $code, $this->id);
+    }
+
+    public function receiptNumber(): string
+    {
+        return $this->getReceiptNumberAttribute();
     }
 
     /**
