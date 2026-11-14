@@ -3,13 +3,15 @@
     
     {{-- Floating Toggle Button di Sisi Kiri Bawah --}}
     <button type="button" 
-            @click="isOpen = !isOpen"
-            class="fixed bottom-4 left-4 z-50 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg px-4 py-2.5 font-bold flex items-center space-x-2 border-2 border-white transition-all transform hover:scale-105 active:scale-95 focus:outline-none">
+            @click="toggleOpen()"
+            class="fixed bottom-4 left-4 z-50 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg px-4 py-2.5 font-bold flex items-center space-x-2 border-2 border-white transition-all transform hover:scale-105 active:scale-95 focus:outline-none"
+            :class="{ 'ring-4 ring-amber-400 animate-pulse': hasPendingAlert && !isOpen }">
         <div class="relative flex items-center justify-center">
-            <i class="fab fa-whatsapp text-lg"></i>
+            <i class="fab fa-whatsapp text-lg" x-show="!(hasPendingAlert && !isOpen)"></i>
+            <i class="fas fa-bell text-amber-300 text-lg animate-bounce" x-show="hasPendingAlert && !isOpen"></i>
             <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border border-white rounded-full animate-pulse" x-show="orders.length > 0"></span>
         </div>
-        <span class="text-xs tracking-wide">Pesanan WA</span>
+        <span class="text-xs tracking-wide" x-text="(hasPendingAlert && !isOpen) ? 'Pesanan Baru!' : 'Pesanan WA'">Pesanan WA</span>
         <span class="px-2 py-0.5 text-xs font-extrabold bg-white text-emerald-700 rounded-full shadow-xs" x-text="orders.length">0</span>
     </button>
 
@@ -44,6 +46,13 @@
             </div>
 
             <div class="flex items-center space-x-1">
+                {{-- Toggle Sound Notification Button --}}
+                <button type="button" 
+                        @click="toggleSound()"
+                        :title="soundEnabled ? 'Suara Bel Notifikasi: Aktif (Klik untuk heningkan)' : 'Suara Bel Notifikasi: Hening (Klik untuk aktifkan)'"
+                        class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition active:scale-95 focus:outline-none">
+                    <i class="fas text-xs" :class="soundEnabled ? 'fa-volume-up text-emerald-200' : 'fa-volume-mute text-rose-300'"></i>
+                </button>
                 {{-- Refresh Button --}}
                 <button type="button" 
                         @click="fetchOrders(true)"
@@ -53,7 +62,7 @@
                 </button>
                 {{-- Close / Minimize Button --}}
                 <button type="button" 
-                        @click="isOpen = false"
+                        @click="toggleOpen(false)"
                         title="Tutup Antrean"
                         class="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition active:scale-95 focus:outline-none">
                     <i class="fas fa-times text-xs"></i>
@@ -274,6 +283,127 @@
             draggedOrderId: null,
             pollTimer: null,
 
+            // State Suara & Pengingat Notifikasi Kasir
+            soundEnabled: localStorage.getItem('pos_ai_sound_enabled') !== '0',
+            hasPendingAlert: false,
+            knownOrderIds: new Set(),
+            isFirstFetch: true,
+            audioCtx: null,
+            reminderTimer: null,
+
+            // Unlock AudioContext browser (kebijakan Autoplay Chrome/Edge)
+            unlockAudio() {
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (!this.audioCtx && AudioContext) {
+                        this.audioCtx = new AudioContext();
+                    }
+                    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                        this.audioCtx.resume();
+                    }
+                } catch (e) {
+                    console.warn('[AiOrderSidebar] Tidak dapat menginisialisasi AudioContext:', e);
+                }
+            },
+
+            // Generator nada bel "Ting-Tung" kasir menggunakan Web Audio API murni (tanpa perlu unduh file mp3)
+            playChime() {
+                if (!this.soundEnabled) return;
+                try {
+                    this.unlockAudio();
+                    if (!this.audioCtx) return;
+
+                    const ctx = this.audioCtx;
+                    const now = ctx.currentTime;
+
+                    // Nada 1: "Ting" (Nada tinggi jernih A5 / 880 Hz)
+                    const osc1 = ctx.createOscillator();
+                    const gain1 = ctx.createGain();
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(880, now);
+                    gain1.gain.setValueAtTime(0, now);
+                    gain1.gain.linearRampToValueAtTime(0.4, now + 0.02);
+                    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+                    osc1.connect(gain1);
+                    gain1.connect(ctx.destination);
+                    osc1.start(now);
+                    osc1.stop(now + 0.45);
+
+                    // Nada 2: "Tung" (Nada hangat menyusul D5 / 587.3 Hz setelah 160ms)
+                    const osc2 = ctx.createOscillator();
+                    const gain2 = ctx.createGain();
+                    osc2.type = 'sine';
+                    osc2.frequency.setValueAtTime(587.33, now + 0.16);
+                    gain2.gain.setValueAtTime(0, now + 0.16);
+                    gain2.gain.linearRampToValueAtTime(0.45, now + 0.18);
+                    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+                    osc2.connect(gain2);
+                    gain2.connect(ctx.destination);
+                    osc2.start(now + 0.16);
+                    osc2.stop(now + 0.85);
+                } catch (e) {
+                    console.warn('[AiOrderSidebar] Gagal memutar nada bel:', e);
+                }
+            },
+
+            // Beralih mode suara aktif / hening
+            toggleSound() {
+                this.soundEnabled = !this.soundEnabled;
+                try {
+                    localStorage.setItem('pos_ai_sound_enabled', this.soundEnabled ? '1' : '0');
+                } catch (e) {}
+
+                if (this.soundEnabled) {
+                    this.unlockAudio();
+                    this.playChime(); // Tes bunyi bel saat kasir mengaktifkan
+                } else {
+                    this.stopReminder();
+                }
+            },
+
+            // Buka / tutup antrean popup kasir
+            toggleOpen(targetState = null) {
+                this.isOpen = (targetState !== null) ? targetState : !this.isOpen;
+                if (this.isOpen) {
+                    // Kasir sudah membuka antrean -> hentikan bunyi alarm berulang
+                    this.stopReminder();
+                }
+            },
+
+            // Picu notifikasi saat order baru datang
+            triggerAlert() {
+                if (!this.soundEnabled) return;
+                this.playChime();
+
+                // Jika popup drawer belum dibuka kasir, aktifkan alarm berulang tiap 20 detik
+                if (!this.isOpen) {
+                    this.startReminder();
+                }
+            },
+
+            // Mulai loop pengingat berulang (tiap 20 detik)
+            startReminder() {
+                this.stopReminder();
+                this.hasPendingAlert = true;
+
+                this.reminderTimer = setInterval(() => {
+                    if (!this.soundEnabled || this.isOpen || this.orders.length === 0) {
+                        this.stopReminder();
+                        return;
+                    }
+                    this.playChime();
+                }, 20000);
+            },
+
+            // Hentikan loop pengingat berulang
+            stopReminder() {
+                this.hasPendingAlert = false;
+                if (this.reminderTimer) {
+                    clearInterval(this.reminderTimer);
+                    this.reminderTimer = null;
+                }
+            },
+
             get filteredOrders() {
                 if (!this.searchTerm.trim()) return this.orders;
                 const q = this.searchTerm.toLowerCase();
@@ -329,6 +459,17 @@
             },
 
             init() {
+                // Unlock Web Audio otomatis pada interaksi pertama (klik/keyboard/touch) di halaman
+                const unlock = () => {
+                    this.unlockAudio();
+                    window.removeEventListener('click', unlock);
+                    window.removeEventListener('keydown', unlock);
+                    window.removeEventListener('touchstart', unlock);
+                };
+                window.addEventListener('click', unlock, { once: true });
+                window.addEventListener('keydown', unlock, { once: true });
+                window.addEventListener('touchstart', unlock, { once: true });
+
                 this.fetchOrders();
                 // Polling otomatis setiap 10 detik
                 this.pollTimer = setInterval(() => {
@@ -337,7 +478,7 @@
 
                 // Dengarkan event toggle dari tombol eksternal
                 window.addEventListener('toggle-ai-orders', () => {
-                    this.isOpen = !this.isOpen;
+                    this.toggleOpen();
                 });
 
                 // Dengarkan event saat pesanan dimasukkan ke keranjang POS
@@ -364,6 +505,9 @@
                         const id = parseInt(e.detail.orderId, 10);
                         this.orders = this.orders.filter(o => o.id !== id);
                         this.inCartOrderIds = this.inCartOrderIds.filter(i => i !== id);
+                        if (this.orders.length === 0) {
+                            this.stopReminder();
+                        }
                         window.dispatchEvent(new CustomEvent('ai-orders-count-changed', {
                             detail: { count: this.orders.length }
                         }));
@@ -383,7 +527,28 @@
 
                     if (response.ok) {
                         const json = await response.json();
-                        this.orders = json.data || [];
+                        const fetchedOrders = json.data || [];
+                        const currentIds = fetchedOrders.map(o => o.id);
+
+                        // Cek apakah ada pesanan baru masuk
+                        const newOrders = currentIds.filter(id => !this.knownOrderIds.has(id));
+
+                        if (this.isFirstFetch) {
+                            // Load pertama kali: catat order yang sudah ada tanpa membunyikan alarm
+                            currentIds.forEach(id => this.knownOrderIds.add(id));
+                            this.isFirstFetch = false;
+                        } else if (newOrders.length > 0) {
+                            // Pesanan baru terdeteksi!
+                            newOrders.forEach(id => this.knownOrderIds.add(id));
+                            this.triggerAlert();
+                        }
+
+                        this.orders = fetchedOrders;
+
+                        if (this.orders.length === 0) {
+                            this.stopReminder();
+                        }
+
                         const now = new Date();
                         this.lastChecked = now.getHours().toString().padStart(2, '0') + ':' + 
                                           now.getMinutes().toString().padStart(2, '0');
@@ -457,6 +622,9 @@
                 const previousInCart = [...this.inCartOrderIds];
                 this.orders = this.orders.filter(o => o.id !== numId);
                 this.inCartOrderIds = this.inCartOrderIds.filter(i => i !== numId);
+                if (this.orders.length === 0) {
+                    this.stopReminder();
+                }
 
                 if (window.aiOrdersInCart) {
                     window.aiOrdersInCart.delete(numId);
