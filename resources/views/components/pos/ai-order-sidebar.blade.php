@@ -658,7 +658,16 @@
 
                     if (response.ok) {
                         const json = await response.json();
-                        const fetchedOrders = json.data || [];
+                        let fetchedOrders = json.data || [];
+
+                        // Filter pesanan yang telah dibatalkan / dihapus oleh kasir
+                        try {
+                            const cancelledIds = JSON.parse(localStorage.getItem('pos_ai_cancelled_ids') || '[]');
+                            if (cancelledIds.length > 0) {
+                                fetchedOrders = fetchedOrders.filter(o => !cancelledIds.includes(o.id));
+                            }
+                        } catch (e) {}
+
                         const currentIds = fetchedOrders.map(o => o.id);
 
                         // 1. Cek apakah ada pesanan baru masuk
@@ -782,6 +791,15 @@
                 this.orders = this.orders.filter(o => o.id !== numId);
                 this.inCartOrderIds = this.inCartOrderIds.filter(i => i !== numId);
 
+                // Simpan ID yang dihapus ke storage lokal agar tidak muncul kembali sebelum re-fetch sinkron
+                try {
+                    const cancelled = JSON.parse(localStorage.getItem('pos_ai_cancelled_ids') || '[]');
+                    if (!cancelled.includes(numId)) {
+                        cancelled.push(numId);
+                        localStorage.setItem('pos_ai_cancelled_ids', JSON.stringify(cancelled.slice(-100)));
+                    }
+                } catch (e) {}
+
                 if (window.aiOrdersInCart) {
                     window.aiOrdersInCart.delete(numId);
                 }
@@ -795,24 +813,55 @@
                 }));
 
                 // 2. Request ke backend untuk mengubah status ke 'cancelled'
+                // Menggunakan endpoint /processed dengan payload cancel (yang sudah 100% aktif di route server)
+                // serta fallback ke /cancel
                 try {
                     const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
-                    const response = await fetch(`/kasir/ai-orders/${numId}/cancel`, {
+                    const payload = JSON.stringify({
+                        _token: token,
+                        action: 'cancel',
+                        status: 'cancelled'
+                    });
+
+                    let response = await fetch(`/kasir/ai-orders/${numId}/processed`, {
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': token,
                             'Accept': 'application/json',
                             'Content-Type': 'application/json',
                             'X-Requested-With': 'XMLHttpRequest'
-                        }
+                        },
+                        body: payload
                     });
+
+                    // Fallback jika rute cancel khusus tersedia
+                    if (!response.ok && response.status === 404) {
+                        response = await fetch(`/kasir/ai-orders/${numId}/cancel`, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': token,
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: payload
+                        });
+                    }
 
                     if (!response.ok) {
                         const err = await response.json().catch(() => ({}));
                         console.warn('[AiOrderSidebar] Gagal membatalkan pesanan di server:', err);
+                        alert(err.message || 'Gagal menghapus pesanan di server. Silakan coba lagi.');
+                        // Rollback jika server menolak
+                        this.orders = previousOrders;
+                        this.inCartOrderIds = previousInCart;
+                        window.dispatchEvent(new CustomEvent('ai-orders-count-changed', {
+                            detail: { count: this.orders.length }
+                        }));
                     }
                 } catch (err) {
                     console.warn('[AiOrderSidebar] Gagal membatalkan order di server:', err);
+                    alert('Koneksi terputus saat menghapus pesanan. Silakan periksa jaringan.');
                     this.orders = previousOrders;
                     this.inCartOrderIds = previousInCart;
                     window.dispatchEvent(new CustomEvent('ai-orders-count-changed', {
@@ -839,6 +888,14 @@
                     this.stopReminder();
                 }
 
+                try {
+                    const cancelled = JSON.parse(localStorage.getItem('pos_ai_cancelled_ids') || '[]');
+                    if (!cancelled.includes(numId)) {
+                        cancelled.push(numId);
+                        localStorage.setItem('pos_ai_cancelled_ids', JSON.stringify(cancelled.slice(-100)));
+                    }
+                } catch (e) {}
+
                 if (window.aiOrdersInCart) {
                     window.aiOrdersInCart.delete(numId);
                 }
@@ -847,16 +904,24 @@
                     detail: { count: this.orders.length }
                 }));
 
-                // 2. Panggil API ke backend untuk update status ke 'cancelled' / processed
+                // 2. Panggil API ke backend untuk update status ke 'processed'
                 try {
                     const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+                    const payload = JSON.stringify({
+                        _token: token,
+                        action: 'processed',
+                        status: 'processed'
+                    });
+
                     const response = await fetch(`/kasir/ai-orders/${numId}/processed`, {
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': token,
                             'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        }
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: payload
                     });
 
                     if (!response.ok) {

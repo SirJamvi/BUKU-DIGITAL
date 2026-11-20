@@ -35,6 +35,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'activity.logger' => \App\Http\Middleware\ActivityLogger::class,
             'branch.context' => \App\Http\Middleware\BranchContextMiddleware::class,
         ]);
+
+        $middleware->validateCsrfTokens(except: [
+            'api/*',
+            'kasir/ai-orders/*',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Tangani error '419 | Page Expired' (CSRF Token Mismatch) agar tidak memunculkan error mati

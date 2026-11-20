@@ -389,32 +389,11 @@ class AiOrderWebhookController extends Controller
 
     /**
      * Endpoint Kasir: Menandai pesanan telah selesai dipindahkan ke keranjang kasir
+     * atau dibatalkan/dihapus oleh kasir.
+     * POST /kasir/ai-orders/{id}/processed
      * POST /api/v1/kasir/ai-orders/{id}/processed
      */
-    public function markAsProcessed(int $id): JsonResponse
-    {
-        $order = TemporaryOrder::findOrFail($id);
-        $branchId = app(\App\Support\BranchContext::class)->getBranchId();
-
-        $updateData = ['status' => 'processed'];
-        if ($branchId) {
-            $updateData['branch_id'] = $branchId;
-        }
-
-        $order->update($updateData);
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => "Order #{$id} berhasil dipindahkan ke transaksi kasir.",
-        ]);
-    }
-
-    /**
-     * Endpoint Kasir: Menghapus / membatalkan pesanan dari antrean
-     * POST /kasir/ai-orders/{id}/cancel
-     * DELETE /kasir/ai-orders/{id}
-     */
-    public function cancelOrder(int $id): JsonResponse
+    public function markAsProcessed(Request $request, int $id): JsonResponse
     {
         $order = TemporaryOrder::withoutGlobalScopes()->find($id);
         if (!$order) {
@@ -424,14 +403,39 @@ class AiOrderWebhookController extends Controller
             ], 404);
         }
 
-        $order->update([
-            'status'    => 'cancelled',
-            'last_chat' => ($order->last_chat ? $order->last_chat . "\n" : '') . '[Dibatalkan/dihapus oleh kasir]',
-        ]);
+        $action = $request->input('action') ?? $request->input('status');
+        $isCancel = in_array(strtolower((string) $action), ['cancel', 'cancelled', 'batal', 'delete']);
+
+        $targetStatus = $isCancel ? 'cancelled' : 'processed';
+        $updateData = ['status' => $targetStatus];
+
+        $branchId = app(\App\Support\BranchContext::class)->getBranchId();
+        if ($branchId) {
+            $updateData['branch_id'] = $branchId;
+        }
+
+        if ($isCancel) {
+            $updateData['last_chat'] = ($order->last_chat ? $order->last_chat . "\n" : '') . '[Dibatalkan/dihapus oleh kasir]';
+        }
+
+        $order->update($updateData);
 
         return response()->json([
             'status'  => 'success',
-            'message' => "Order #{$id} berhasil dibatalkan dan dihapus dari antrean.",
+            'message' => $isCancel
+                ? "Order #{$id} berhasil dibatalkan dan dihapus dari antrean."
+                : "Order #{$id} berhasil dipindahkan ke transaksi kasir.",
         ]);
+    }
+
+    /**
+     * Endpoint Kasir: Menghapus / membatalkan pesanan dari antrean
+     * POST /kasir/ai-orders/{id}/cancel
+     * DELETE /kasir/ai-orders/{id}
+     */
+    public function cancelOrder(Request $request, int $id): JsonResponse
+    {
+        $request->merge(['action' => 'cancel', 'status' => 'cancelled']);
+        return $this->markAsProcessed($request, $id);
     }
 }

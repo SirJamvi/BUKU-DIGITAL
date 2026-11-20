@@ -42,6 +42,7 @@ Route::prefix('v1')->group(function () {
             // Antrean Pesanan AI Mobile (Tervalidasi per cabang aktif)
             Route::get('/ai-orders', [AiOrderWebhookController::class, 'getValidatedOrders'])->name('ai_orders');
             Route::post('/ai-orders/{id}/processed', [AiOrderWebhookController::class, 'markAsProcessed'])->name('ai_orders.processed');
+            Route::post('/ai-orders/{id}/cancel', [AiOrderWebhookController::class, 'cancelOrder'])->name('ai_orders.cancel');
 
             Route::get('/pos-data', [PosApiController::class, 'getPosData'])->name('pos_data');
             Route::post('/order', [PosApiController::class, 'storeOrder'])->name('store_order');
