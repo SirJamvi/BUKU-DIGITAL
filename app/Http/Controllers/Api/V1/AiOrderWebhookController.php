@@ -297,8 +297,8 @@ class AiOrderWebhookController extends Controller
         $businessId = $user?->business_id;
         $branchId = app(\App\Support\BranchContext::class)->getBranchId();
 
-        // Gunakan withoutGlobalScopes agar pesanan lama yang business_id/branch_id nya masih NULL
-        // (misal order #28) tetap berhasil diambil dan ditampilkan ke kasir.
+        // Gunakan withoutGlobalScopes agar seluruh pesanan WhatsApp berstatus 'validated'
+        // berhasil diambil dan ditampilkan ke semua kasir cabang (tanpa disekat per branch).
         $query = TemporaryOrder::withoutGlobalScopes()
             ->where('status', 'validated');
 
@@ -309,27 +309,19 @@ class AiOrderWebhookController extends Controller
             });
         }
 
-        if ($branchId) {
-            $query->where(function ($q) use ($branchId) {
-                $q->where('branch_id', $branchId)
-                  ->orWhereNull('branch_id');
-            });
-        }
+        // Catatan: Isolasi branch_id sengaja ditiadakan agar seluruh kasir di semua cabang
+        // dapat melihat antrean pesanan WhatsApp yang masuk tanpa terpisah-pisah.
 
         $rawOrders = $query
             ->with(['customer:id,name,phone,address,created_at'])
             ->latest('updated_at')
             ->get();
 
-        // Auto-heal: jika ada order dengan business_id / branch_id NULL, lengkapi otomatis
+        // Auto-heal: jika ada order dengan business_id NULL, lengkapi otomatis
         foreach ($rawOrders as $ord) {
             $needsSave = false;
             if ($businessId && empty($ord->business_id)) {
                 $ord->business_id = $businessId;
-                $needsSave = true;
-            }
-            if ($branchId && empty($ord->branch_id)) {
-                $ord->branch_id = $branchId;
                 $needsSave = true;
             }
             if ($needsSave) {
@@ -402,8 +394,14 @@ class AiOrderWebhookController extends Controller
     public function markAsProcessed(int $id): JsonResponse
     {
         $order = TemporaryOrder::findOrFail($id);
-        // Perbaikan: gunakan status 'processed' eksplisit
-        $order->update(['status' => 'processed']);
+        $branchId = app(\App\Support\BranchContext::class)->getBranchId();
+
+        $updateData = ['status' => 'processed'];
+        if ($branchId) {
+            $updateData['branch_id'] = $branchId;
+        }
+
+        $order->update($updateData);
 
         return response()->json([
             'status'  => 'success',

@@ -1131,18 +1131,8 @@ class AiOrderProcessor
                 ->value('branch_id');
         }
 
-        // 3. Fallback: Cabang utama (is_main = 1) atau cabang aktif pertama bisnis
-        if (!$branchId) {
-            $branchId = \App\Models\Branch::where('business_id', $businessId)
-                ->where('is_main', true)
-                ->value('id')
-                ?? \App\Models\Branch::where('business_id', $businessId)
-                ->where('is_active', true)
-                ->value('id')
-                ?? \App\Models\Branch::where('business_id', $businessId)
-                ->value('id');
-        }
-
+        // 3. Jangan mengunci otomatis ke Cabang Utama jika tidak terdeteksi,
+        // biarkan branch_id bernilai null agar fleksibel dan dapat dilihat oleh seluruh kasir cabang.
         return [(int) $businessId, $branchId ? (int) $branchId : null];
     }
 }
