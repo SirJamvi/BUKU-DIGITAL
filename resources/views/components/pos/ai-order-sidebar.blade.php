@@ -172,14 +172,22 @@
                                 <span class="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded"
                                       x-text="order.time_formatted || order.time_ago"
                                       title="Waktu pesanan masuk"></span>
-                                {{-- Tombol Buka Kunci --}}
+                                {{-- Tombol Buka Kunci (jika di keranjang) --}}
                                 <button type="button" 
                                         x-show="inCartOrderIds.includes(order.id)"
                                         @click.stop="unlockOrder(order.id, $event)"
-                                        class="inline-flex items-center space-x-1 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 bg-white hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 rounded border border-slate-300 transition shadow-2xs active:scale-95 cursor-pointer"
+                                        class="inline-flex items-center space-x-1 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 bg-white hover:bg-slate-100 rounded border border-slate-300 transition shadow-2xs active:scale-95 cursor-pointer"
                                         title="Buka kunci agar pesanan ini bisa di-drag ulang">
                                     <i class="fas fa-undo text-[9px]"></i>
-                                    <span>Batal</span>
+                                    <span>Lepas</span>
+                                </button>
+                                {{-- Tombol Hapus Pesanan --}}
+                                <button type="button" 
+                                        @click.stop="deleteOrder(order.id, $event)"
+                                        class="inline-flex items-center space-x-1 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 rounded transition shadow-2xs active:scale-95 cursor-pointer"
+                                        title="Hapus / Batalkan pesanan ini dari antrean WhatsApp">
+                                    <i class="fas fa-trash-alt text-[9px]"></i>
+                                    <span>Hapus</span>
                                 </button>
                                 {{-- Tombol Selesai --}}
                                 <button type="button" 
@@ -753,6 +761,64 @@
                 window.dispatchEvent(new CustomEvent('ai-order-unlocked', {
                     detail: { orderId: numId }
                 }));
+            },
+
+            // Kasir menghapus/membatalkan pesanan dari antrean
+            async deleteOrder(orderId, event) {
+                if (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+
+                if (!confirm('Hapus pesanan ini dari antrean WhatsApp?')) {
+                    return;
+                }
+
+                const numId = parseInt(orderId, 10);
+
+                // 1. Optimistic UI: langsung hapus dari state antrean lokal
+                const previousOrders = [...this.orders];
+                const previousInCart = [...this.inCartOrderIds];
+                this.orders = this.orders.filter(o => o.id !== numId);
+                this.inCartOrderIds = this.inCartOrderIds.filter(i => i !== numId);
+
+                if (window.aiOrdersInCart) {
+                    window.aiOrdersInCart.delete(numId);
+                }
+
+                if (!this.hasActiveUrgentOrders()) {
+                    this.stopReminder();
+                }
+
+                window.dispatchEvent(new CustomEvent('ai-orders-count-changed', {
+                    detail: { count: this.orders.length }
+                }));
+
+                // 2. Request ke backend untuk mengubah status ke 'cancelled'
+                try {
+                    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+                    const response = await fetch(`/kasir/ai-orders/${numId}/cancel`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': token,
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({}));
+                        console.warn('[AiOrderSidebar] Gagal membatalkan pesanan di server:', err);
+                    }
+                } catch (err) {
+                    console.warn('[AiOrderSidebar] Gagal membatalkan order di server:', err);
+                    this.orders = previousOrders;
+                    this.inCartOrderIds = previousInCart;
+                    window.dispatchEvent(new CustomEvent('ai-orders-count-changed', {
+                        detail: { count: this.orders.length }
+                    }));
+                }
             },
 
             // Kasir menandai pesanan selesai setelah checkout berhasil dilakukan di POS

@@ -408,4 +408,30 @@ class AiOrderWebhookController extends Controller
             'message' => "Order #{$id} berhasil dipindahkan ke transaksi kasir.",
         ]);
     }
+
+    /**
+     * Endpoint Kasir: Menghapus / membatalkan pesanan dari antrean
+     * POST /kasir/ai-orders/{id}/cancel
+     * DELETE /kasir/ai-orders/{id}
+     */
+    public function cancelOrder(int $id): JsonResponse
+    {
+        $order = TemporaryOrder::withoutGlobalScopes()->find($id);
+        if (!$order) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Pesanan tidak ditemukan.',
+            ], 404);
+        }
+
+        $order->update([
+            'status'    => 'cancelled',
+            'last_chat' => ($order->last_chat ? $order->last_chat . "\n" : '') . '[Dibatalkan/dihapus oleh kasir]',
+        ]);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Order #{$id} berhasil dibatalkan dan dihapus dari antrean.",
+        ]);
+    }
 }

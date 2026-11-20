@@ -81,6 +81,8 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
 // AI Orders Queue (Web Session + Branch Context Scoped)
 Route::get('/ai-orders', [\App\Http\Controllers\Api\V1\AiOrderWebhookController::class, 'getValidatedOrders'])->name('ai_orders');
 Route::post('/ai-orders/{id}/processed', [\App\Http\Controllers\Api\V1\AiOrderWebhookController::class, 'markAsProcessed'])->name('ai_orders.processed');
+Route::post('/ai-orders/{id}/cancel', [\App\Http\Controllers\Api\V1\AiOrderWebhookController::class, 'cancelOrder'])->name('ai_orders.cancel');
+Route::delete('/ai-orders/{id}', [\App\Http\Controllers\Api\V1\AiOrderWebhookController::class, 'cancelOrder'])->name('ai_orders.delete');
 
 // Heartbeat Ping untuk Sesi Kasir & Auto CSRF Refresh
 Route::get('/ping', function () {
