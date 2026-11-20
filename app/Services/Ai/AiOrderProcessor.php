@@ -442,57 +442,64 @@ class AiOrderProcessor
             $followup = $this->extractFollowupIntent($combinedMessage, (float) $latestOrder->jumlah_ball, (string) $latestOrder->ukuran_produk);
 
             if ($followup !== null) {
+                // Jika pesanan sebelumnya SUDAH diproses kasir:
+                // Hanya tolak jika pelanggan secara eksplisit ingin mengubah atau membatalkan pesanan tersebut
                 if ($latestOrder->status === 'processed') {
-                    $reply = ReplyTemplates::render('already_processed');
-                    $this->sendReply($canonicalSender, $reply);
-                    return ['status' => 'already_processed', 'order_id' => $latestOrder->id, 'reply' => $reply];
-                }
+                    $isExplicitModify = (bool) preg_match('/\b(?:ubah|ganti|batal|cancel|gak jadi|gajadi|kurang|kurangi|ralat|edit)\b/i', $textLower);
+                    if ($isExplicitModify) {
+                        $reply = ReplyTemplates::render('already_processed');
+                        $this->sendReply($canonicalSender, $reply);
+                        return ['status' => 'already_processed', 'order_id' => $latestOrder->id, 'reply' => $reply];
+                    }
+                    // Jika pelanggan TIDAK bermaksud mengubah/membatalkan (misal memesan lagi kuantitas es),
+                    // lewati blok update pesanan lama ini agar diproses sebagai PESANAN BARU di alur utama di bawah!
+                } else {
+                    if (!empty($followup['unknown_ukuran'])) {
+                        $reply = ReplyTemplates::render('unknown_ukuran');
+                        return $this->sendAdaptiveQuestion($draft, $canonicalSender, $customerName, $combinedMessage, 'unknown_ukuran', $reply);
+                    }
 
-                if (!empty($followup['unknown_ukuran'])) {
-                    $reply = ReplyTemplates::render('unknown_ukuran');
-                    return $this->sendAdaptiveQuestion($draft, $canonicalSender, $customerName, $combinedMessage, 'unknown_ukuran', $reply);
-                }
+                    $tVal = (float) $followup['qty'];
+                    $targetQty = (fmod($tVal, 1.0) === 0.0) ? (int) $tVal : round($tVal, 2);
+                    $targetUkuran = (string) $followup['ukuran'];
+                    $oVal = (float) $latestOrder->jumlah_ball;
+                    $oldQty = (fmod($oVal, 1.0) === 0.0) ? (int) $oVal : round($oVal, 2);
+                    $oldUkuran = (string) $latestOrder->ukuran_produk;
 
-                $tVal = (float) $followup['qty'];
-                $targetQty = (fmod($tVal, 1.0) === 0.0) ? (int) $tVal : round($tVal, 2);
-                $targetUkuran = (string) $followup['ukuran'];
-                $oVal = (float) $latestOrder->jumlah_ball;
-                $oldQty = (fmod($oVal, 1.0) === 0.0) ? (int) $oVal : round($oVal, 2);
-                $oldUkuran = (string) $latestOrder->ukuran_produk;
+                    if ($targetQty === $oldQty && $targetUkuran === $oldUkuran) {
+                        $reply = ReplyTemplates::render('followup_unchanged', [
+                            'qty'    => $targetQty,
+                            'ukuran' => $targetUkuran,
+                        ]);
+                        $this->sendReply($canonicalSender, $reply);
+                        Log::info("[AiOrderProcessor] Follow-up nilai sama untuk order #{$latestOrder->id} ({$targetQty} ball {$targetUkuran}). DB tidak diubah.");
+                        return ['status' => 'followup_unchanged', 'order_id' => $latestOrder->id, 'reply' => $reply];
+                    }
 
-                if ($targetQty === $oldQty && $targetUkuran === $oldUkuran) {
-                    $reply = ReplyTemplates::render('followup_unchanged', [
-                        'qty'    => $targetQty,
-                        'ukuran' => $targetUkuran,
+                    $stockData = $this->llmService->getAvailableStockWithReservation($targetUkuran);
+                    $currentReserved = ($latestOrder->ukuran_produk === $targetUkuran) ? $oldQty : 0;
+                    $effectiveAvailable = $stockData['available'] + $currentReserved;
+
+                    if ($targetQty > $effectiveAvailable) {
+                        $reply = ReplyTemplates::render('out_of_stock');
+                        $reply = $this->llmService->filterStockNumbers($reply, $effectiveAvailable);
+                        $this->sendReply($canonicalSender, $reply);
+                        $this->adminNotifier->notifyStockInsufficient($customerName, $canonicalSender, $targetQty, $targetUkuran);
+                        return ['status' => 'out_of_stock', 'reply' => $reply];
+                    }
+
+                    $latestOrder->update([
+                        'jumlah_ball'   => $targetQty,
+                        'ukuran_produk' => $targetUkuran,
+                        'last_chat'     => $combinedMessage,
                     ]);
+
+                    $reply = ReplyTemplates::renderOrderUpdated($latestOrder->id, $oldQty, $targetQty, $targetUkuran, $oldUkuran);
                     $this->sendReply($canonicalSender, $reply);
-                    Log::info("[AiOrderProcessor] Follow-up nilai sama untuk order #{$latestOrder->id} ({$targetQty} ball {$targetUkuran}). DB tidak diubah.");
-                    return ['status' => 'followup_unchanged', 'order_id' => $latestOrder->id, 'reply' => $reply];
+
+                    Log::info("[AiOrderProcessor] Follow-up memperbarui order #{$latestOrder->id} dari {$oldQty} ball {$oldUkuran} menjadi {$targetQty} ball {$targetUkuran}");
+                    return ['status' => 'followup_updated', 'order_id' => $latestOrder->id, 'reply' => $reply];
                 }
-
-                $stockData = $this->llmService->getAvailableStockWithReservation($targetUkuran);
-                $currentReserved = ($latestOrder->ukuran_produk === $targetUkuran) ? $oldQty : 0;
-                $effectiveAvailable = $stockData['available'] + $currentReserved;
-
-                if ($targetQty > $effectiveAvailable) {
-                    $reply = ReplyTemplates::render('out_of_stock');
-                    $reply = $this->llmService->filterStockNumbers($reply, $effectiveAvailable);
-                    $this->sendReply($canonicalSender, $reply);
-                    $this->adminNotifier->notifyStockInsufficient($customerName, $canonicalSender, $targetQty, $targetUkuran);
-                    return ['status' => 'out_of_stock', 'reply' => $reply];
-                }
-
-                $latestOrder->update([
-                    'jumlah_ball'   => $targetQty,
-                    'ukuran_produk' => $targetUkuran,
-                    'last_chat'     => $combinedMessage,
-                ]);
-
-                $reply = ReplyTemplates::renderOrderUpdated($latestOrder->id, $oldQty, $targetQty, $targetUkuran, $oldUkuran);
-                $this->sendReply($canonicalSender, $reply);
-
-                Log::info("[AiOrderProcessor] Follow-up memperbarui order #{$latestOrder->id} dari {$oldQty} ball {$oldUkuran} menjadi {$targetQty} ball {$targetUkuran}");
-                return ['status' => 'followup_updated', 'order_id' => $latestOrder->id, 'reply' => $reply];
             }
         }
 
