@@ -37,6 +37,20 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        // Tangani error '419 | Page Expired' (CSRF Token Mismatch) agar tidak memunculkan error mati
+        $exceptions->renderable(function (\Illuminate\Session\TokenMismatchException $e, $request) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'Sesi Anda sempat kedaluwarsa. Token keamanan telah diperbarui, silakan ulangi.',
+                    'csrf_expired' => true,
+                ], 419);
+            }
+
+            return redirect()->back()
+                ->withInput($request->except(['_token', 'password', 'password_confirmation']))
+                ->with('warning', 'Sesi halaman Anda sempat kedaluwarsa. Token keamanan telah otomatis diperbarui, silakan klik simpan kembali.');
+        });
+
         $exceptions->renderable(function (\App\Exceptions\InsufficientStockException $e, $request) {
             return $e->render($request);
         });

@@ -34,31 +34,9 @@ class TransactionController extends Controller
     public function index(): View
     {
         $kasirId = Auth::id();
-        $businessId = Auth::user()->business_id;
         $transactions = $this->transactionService->getTransactionsByKasir($kasirId);
 
-        // Ringkasan Transaksi Hari Ini Kasir (WIB / Asia/Jakarta)
-        $today = Carbon::today('Asia/Jakarta');
-        $todayStart = Carbon::today('Asia/Jakarta')->startOfDay();
-        $todayEnd = Carbon::today('Asia/Jakarta')->endOfDay();
-        $branchId = app(\App\Support\BranchContext::class)->getBranchId();
-
-        $todayTransactionsQuery = Transaction::where('business_id', $businessId)
-            ->where('created_by', $kasirId)
-            ->where('type', 'sale')
-            ->where(function ($q) use ($today, $todayStart, $todayEnd) {
-                $q->whereBetween('transaction_date', [$todayStart, $todayEnd])
-                  ->orWhereDate('transaction_date', $today->toDateString());
-            });
-
-        if ($branchId) {
-            $todayTransactionsQuery->where('branch_id', $branchId);
-        }
-
-        $todaySales = (float) $todayTransactionsQuery->sum('total_amount');
-        $todayTransactionsCount = $todayTransactionsQuery->count();
-
-        return view('kasir.transactions.index', compact('transactions', 'todaySales', 'todayTransactionsCount'));
+        return view('kasir.transactions.index', compact('transactions'));
     }
 
     /**

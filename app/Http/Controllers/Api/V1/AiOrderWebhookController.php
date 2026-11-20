@@ -293,11 +293,51 @@ class AiOrderWebhookController extends Controller
             Log::warning("[AiOrderWebhook] Gagal menjalankan lazyExpireOldOrders: " . $e->getMessage());
         }
 
-        $orders = TemporaryOrder::where('status', 'validated')
+        $user = $request->user() ?? \Illuminate\Support\Facades\Auth::user();
+        $businessId = $user?->business_id;
+        $branchId = app(\App\Support\BranchContext::class)->getBranchId();
+
+        // Gunakan withoutGlobalScopes agar pesanan lama yang business_id/branch_id nya masih NULL
+        // (misal order #28) tetap berhasil diambil dan ditampilkan ke kasir.
+        $query = TemporaryOrder::withoutGlobalScopes()
+            ->where('status', 'validated');
+
+        if ($businessId) {
+            $query->where(function ($q) use ($businessId) {
+                $q->where('business_id', $businessId)
+                  ->orWhereNull('business_id');
+            });
+        }
+
+        if ($branchId) {
+            $query->where(function ($q) use ($branchId) {
+                $q->where('branch_id', $branchId)
+                  ->orWhereNull('branch_id');
+            });
+        }
+
+        $rawOrders = $query
             ->with(['customer:id,name,phone,address,created_at'])
             ->latest('updated_at')
-            ->get()
-            ->map(function ($order) {
+            ->get();
+
+        // Auto-heal: jika ada order dengan business_id / branch_id NULL, lengkapi otomatis
+        foreach ($rawOrders as $ord) {
+            $needsSave = false;
+            if ($businessId && empty($ord->business_id)) {
+                $ord->business_id = $businessId;
+                $needsSave = true;
+            }
+            if ($branchId && empty($ord->branch_id)) {
+                $ord->branch_id = $branchId;
+                $needsSave = true;
+            }
+            if ($needsSave) {
+                $ord->saveQuietly();
+            }
+        }
+
+        $orders = $rawOrders->map(function ($order) {
                 $customerName = ($order->customer_id == 108 || !$order->customer)
                     ? 'Pelanggan Baru (' . $order->sender_phone . ')'
                     : $order->customer->name;

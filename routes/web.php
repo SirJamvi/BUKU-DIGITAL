@@ -20,6 +20,15 @@ Route::get('/', function () {
     return view('welcome');
 })->middleware('guest')->name('welcome');
 
+// Heartbeat Ping untuk menjaga sesi kasir & auto-refresh token CSRF
+Route::get('/ping', function () {
+    return response()->json([
+        'status' => 'ok',
+        'csrf_token' => csrf_token(),
+        'timestamp' => now()->toIso8601String(),
+    ]);
+})->middleware('web')->name('ping');
+
 // 2. Rute Otentikasi
 Route::get('login', [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest');
 Route::post('login', [LoginController::class, 'login']);

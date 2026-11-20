@@ -398,7 +398,11 @@ class AiOrderProcessor
                         return ['status' => 'out_of_stock', 'reply' => $reply];
                     }
 
+                    [$businessId, $branchId] = $this->resolveBusinessAndBranchId($customer, $payload);
+
                     $newOrder = TemporaryOrder::create([
+                        'business_id'     => $businessId,
+                        'branch_id'       => $branchId,
                         'customer_id'     => $customer ? $customer->id : 108,
                         'sender_phone'    => $canonicalSender,
                         'jumlah_ball'     => $newQty,
@@ -412,6 +416,18 @@ class AiOrderProcessor
                     $jamStr = $newTime ? Carbon::parse($newTime)->timezone('Asia/Jakarta')->format('H:i') : null;
                     $reply = ReplyTemplates::renderOrderInMultiple($newOrder->id, $latestOrder->id, $newQty, $newUkuran, $jamStr);
                     $this->sendReply($canonicalSender, $reply);
+
+                    // Notifikasi ke WhatsApp Group Admin
+                    $this->adminNotifier->notifyOrderValidated(
+                        $newOrder->id,
+                        $customerName,
+                        $canonicalSender,
+                        $newQty,
+                        $newUkuran,
+                        $jamStr,
+                        $customer?->address,
+                        false
+                    );
 
                     Log::info("[AiOrderProcessor] Pesanan baru (#{$newOrder->id}) tercatat terpisah untuk {$canonicalSender}");
                     return [
@@ -691,7 +707,11 @@ class AiOrderProcessor
             ];
         }
 
+        [$businessId, $branchId] = $this->resolveBusinessAndBranchId($customer, $payload);
+
         $order = TemporaryOrder::create([
+            'business_id'     => $businessId,
+            'branch_id'       => $branchId,
             'customer_id'     => $customer ? $customer->id : 108,
             'sender_phone'    => $canonicalSender,
             'jumlah_ball'     => $qty,
@@ -730,6 +750,18 @@ class AiOrderProcessor
                 $qty,
                 $ukuran,
                 $canonicalSender
+            );
+        } else {
+            // Notifikasi ke WhatsApp Group Admin untuk pelanggan lama
+            $this->adminNotifier->notifyOrderValidated(
+                $order->id,
+                $namaTokoFinal,
+                $canonicalSender,
+                $qty,
+                $ukuran,
+                $jamFormatted,
+                $alamatFinal,
+                false
             );
         }
 
@@ -1068,5 +1100,49 @@ class AiOrderProcessor
             return '10kg';
         }
         return null;
+    }
+
+    /**
+     * Tentukan business_id dan branch_id yang tepat untuk pesanan WhatsApp ini.
+     */
+    protected function resolveBusinessAndBranchId(?Customer $customer, array $payload = []): array
+    {
+        $defaultBusinessId = Customer::first()?->business_id ?? \App\Models\Business::first()?->id ?? 1;
+        $businessId = $customer?->business_id ?? $defaultBusinessId;
+
+        $branchId = null;
+
+        // 1. Cek dari device webhook Fonnte jika terhubung ke cabang tertentu
+        $device = $payload['device'] ?? null;
+        if (!empty($device)) {
+            $branchId = \App\Models\Branch::where('business_id', $businessId)
+                ->where(function ($q) use ($device) {
+                    $q->where('fonnte_device_id', $device)
+                      ->orWhere('phone', $device);
+                })
+                ->value('id');
+        }
+
+        // 2. Cek cabang dari transaksi terakhir pelanggan jika pelanggan sudah ada
+        if (!$branchId && $customer) {
+            $branchId = $customer->transactions()
+                ->whereNotNull('branch_id')
+                ->latest('id')
+                ->value('branch_id');
+        }
+
+        // 3. Fallback: Cabang utama (is_main = 1) atau cabang aktif pertama bisnis
+        if (!$branchId) {
+            $branchId = \App\Models\Branch::where('business_id', $businessId)
+                ->where('is_main', true)
+                ->value('id')
+                ?? \App\Models\Branch::where('business_id', $businessId)
+                ->where('is_active', true)
+                ->value('id')
+                ?? \App\Models\Branch::where('business_id', $businessId)
+                ->value('id');
+        }
+
+        return [(int) $businessId, $branchId ? (int) $branchId : null];
     }
 }

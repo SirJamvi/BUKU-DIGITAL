@@ -72,30 +72,40 @@ class ViewServiceProvider extends ServiceProvider
         });
 
         // View composer untuk layout kasir agar statistik harian selalu sinkron real-time (WIB)
+        // Dioptimalkan dengan memoization request & single SQL aggregate query untuk mencegah full table scan
         View::composer(['kasir.layouts.header', 'kasir.layouts.sidebar', 'kasir.layouts.app'], function ($view) {
+            static $kasirMetrics = null;
+
             $user = Auth::user();
             if ($user && $user->hasRole('kasir')) {
-                $today = \Carbon\Carbon::today('Asia/Jakarta');
-                $businessId = $user->business_id;
+                if ($kasirMetrics === null) {
+                    $todayStart = \Carbon\Carbon::today('Asia/Jakarta')->startOfDay();
+                    $todayEnd = \Carbon\Carbon::today('Asia/Jakarta')->endOfDay();
+                    $businessId = $user->business_id;
+                    $branchId = app(\App\Support\BranchContext::class)->getBranchId();
 
-                $todayQuery = \App\Models\Transaction::where('business_id', $businessId)
-                    ->where('created_by', $user->id)
-                    ->where('type', 'sale')
-                    ->where(function ($q) use ($today) {
-                        $q->whereDate('transaction_date', $today->toDateString())
-                          ->orWhereBetween('transaction_date', [
-                              $today->copy()->startOfDay(),
-                              $today->copy()->endOfDay()
-                          ]);
-                    });
+                    $todayQuery = \App\Models\Transaction::where('business_id', $businessId)
+                        ->where('created_by', $user->id)
+                        ->where('type', 'sale')
+                        ->whereBetween('transaction_date', [$todayStart, $todayEnd]);
 
-                $todaySales = (float) $todayQuery->sum('total_amount');
-                $todayCount = $todayQuery->count();
+                    if ($branchId) {
+                        $todayQuery->where('branch_id', $branchId);
+                    }
 
-                $view->with([
-                    'headerTodaySales' => 'Rp ' . number_format($todaySales, 0, ',', '.'),
-                    'headerTodayTransactions' => (string) $todayCount,
-                ]);
+                    // Gabungkan sum dan count dalam 1 query via selectRaw
+                    $stats = $todayQuery->selectRaw('COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as total_count')->first();
+
+                    $todaySales = (float) ($stats->total_sales ?? 0);
+                    $todayCount = (int) ($stats->total_count ?? 0);
+
+                    $kasirMetrics = [
+                        'headerTodaySales' => 'Rp ' . number_format($todaySales, 0, ',', '.'),
+                        'headerTodayTransactions' => (string) $todayCount,
+                    ];
+                }
+
+                $view->with($kasirMetrics);
             }
         });
     }

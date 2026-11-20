@@ -141,6 +141,27 @@ class AdminGroupNotifier
     }
 
     /**
+     * (b2) Pesanan Berhasil Divalidasi oleh AI (Untuk semua pelanggan, baik baru maupun lama).
+     */
+    public function notifyOrderValidated(int $orderId, string $customerName, string $sender, float|int $qty, string $ukuran, ?string $jamStr = null, ?string $alamat = null, bool $isNew = false): bool
+    {
+        $qtyStr = (fmod((float) $qty, 1.0) === 0.0) ? (string) (int) $qty : (string) $qty;
+        $title = $isNew ? "PESANAN BARU #{$orderId}" : "PESANAN MASUK #{$orderId}";
+
+        $details = ["Order: {$qtyStr} ball {$ukuran}"];
+        if ($jamStr) {
+            $details[] = "Kirim: {$jamStr}";
+        }
+        if ($alamat && $alamat !== 'Lokasi Terdaftar') {
+            $details[] = $alamat;
+        }
+        $body = implode(' | ', $details) . ". Siap di POS kasir.";
+
+        $text = $this->formatAdminMessage($title, $customerName, $sender, $body, null);
+        return $this->sendToAdminGroup($text, 'order_validated_' . $orderId, $sender, 5);
+    }
+
+    /**
      * (c) Stok Tidak Cukup (Dilarang sebutkan angka stok riil)
      */
     public function notifyStockInsufficient(string $customerName, string $sender, float|int $qty, string $ukuran): bool

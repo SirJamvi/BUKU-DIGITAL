@@ -30,10 +30,10 @@ class ExpenseController extends Controller
         
         // Filter tanggal
         if ($request->filled('start_date')) {
-            $query->whereDate('date', '>=', $request->start_date);
+            $query->where('date', '>=', $request->start_date);
         }
         if ($request->filled('end_date')) {
-            $query->whereDate('date', '<=', $request->end_date);
+            $query->where('date', '<=', $request->end_date);
         }
         
         $expenses = $query->latest('date')->paginate(10);

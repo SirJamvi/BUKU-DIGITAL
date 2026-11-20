@@ -19,13 +19,16 @@ class DashboardService
     {
         try {
             $today = Carbon::today('Asia/Jakarta');
+            $todayStart = $today->copy()->startOfDay();
+            $todayEnd = $today->copy()->endOfDay();
+            $todayDate = $today->toDateString();
             $businessId = Auth::user()->business_id;
             $branchId = app(\App\Support\BranchContext::class)->getBranchId();
 
             // Modal Awal Laci (Kas Kemarin)
             $openingQuery = CashierOpeningBalance::where('business_id', $businessId)
                 ->where('user_id', $kasirId)
-                ->whereDate('date', $today);
+                ->where('date', $todayDate);
             if ($branchId) {
                 $openingQuery->where('branch_id', $branchId);
             }
@@ -42,7 +45,7 @@ class DashboardService
                 ->where('type', 'sale')
                 ->where('payment_status', 'paid')
                 ->where('payment_method', 'cash')
-                ->whereDate('transaction_date', $today)
+                ->whereBetween('transaction_date', [$todayStart, $todayEnd])
                 ->whereNotExists(function ($query) {
                     $query->select(DB::raw(1))
                         ->from('cash_flow')
@@ -53,16 +56,14 @@ class DashboardService
             if ($branchId) {
                 $cashTxQuery->where('branch_id', $branchId);
             }
-            $cashTransactions = $cashTxQuery->get();
-
-            $cashSalesAmount = (float) $cashTransactions->sum('total_amount');
+            $cashSalesAmount = (float) $cashTxQuery->sum('total_amount');
 
             // B. Pelunasan Kasbon & Setoran Driver Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
             $pelunasanCashQuery = CashFlow::where('business_id', $businessId)
                 ->where('created_by', $kasirId)
                 ->where('type', 'income')
                 ->where('payment_method', 'cash')
-                ->whereDate('date', $today)
+                ->where('date', $todayDate)
                 ->where('description', 'LIKE', '%Pelunasan%');
 
             if ($branchId) {
@@ -84,7 +85,7 @@ class DashboardService
                     $q->where('payment_method', 'cash')
                       ->orWhereNull('payment_method');
                 })
-                ->whereDate('date', $today);
+                ->where('date', $todayDate);
 
             if ($branchId) {
                 $drawerCashExpensesQuery->where('branch_id', $branchId);
@@ -97,7 +98,7 @@ class DashboardService
             // E. Penerimaan Non-Tunai Hari Ini (Transfer & DANA - Masuk Rekening Owner)
             $allCashFlowsQuery = CashFlow::where('created_by', $kasirId)
                 ->whereIn('type', ['income', 'expense'])
-                ->whereDate('date', $today);
+                ->where('date', $todayDate);
 
             if ($branchId) {
                 $allCashFlowsQuery->where('branch_id', $branchId);
@@ -144,7 +145,7 @@ class DashboardService
                 ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
                 ->join('products', 'transaction_details.product_id', '=', 'products.id')
                 ->where('transactions.created_by', $kasirId)
-                ->whereDate('transactions.transaction_date', $today);
+                ->whereBetween('transactions.transaction_date', [$todayStart, $todayEnd]);
 
             app(\App\Support\BranchContext::class)->applyTo($soldQuery, 'transactions', 'branch_id');
 

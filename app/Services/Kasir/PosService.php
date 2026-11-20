@@ -44,6 +44,7 @@ class PosService
         $products = $productQuery->get();
 
         $customers = Customer::where('status', 'active')
+            ->select('id', 'name')
             ->orderBy('name', 'asc')
             ->get();
 

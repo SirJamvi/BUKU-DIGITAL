@@ -290,6 +290,15 @@
             isFirstFetch: true,
             audioCtx: null,
             reminderTimer: null,
+            burstTimer: null,
+
+            // Hentikan dering 5 detik jika kasir merespons lebih awal
+            stopBurst() {
+                if (this.burstTimer) {
+                    clearInterval(this.burstTimer);
+                    this.burstTimer = null;
+                }
+            },
 
             // Unlock AudioContext browser (kebijakan Autoplay Chrome/Edge)
             unlockAudio() {
@@ -365,17 +374,30 @@
             toggleOpen(targetState = null) {
                 this.isOpen = (targetState !== null) ? targetState : !this.isOpen;
                 if (this.isOpen) {
-                    // Kasir sudah membuka antrean -> hentikan bunyi alarm berulang
+                    // Kasir sudah membuka antrean -> hentikan bunyi alarm
+                    this.stopBurst();
                     this.stopReminder();
                 }
             },
 
-            // Picu notifikasi saat order baru datang
+            // Picu notifikasi saat order baru datang: berdering ritmis selama 5 detik
             triggerAlert() {
                 if (!this.soundEnabled) return;
+                this.stopBurst();
                 this.playChime();
 
-                // Jika popup drawer belum dibuka kasir, aktifkan alarm berulang tiap 20 detik
+                // Dering ritmis selama rentang 5 detik (tiap 1.25 detik = 4x bunyi nada bel)
+                let elapsed = 0;
+                this.burstTimer = setInterval(() => {
+                    elapsed += 1250;
+                    if (elapsed >= 5000 || this.isOpen || !this.soundEnabled) {
+                        this.stopBurst();
+                        return;
+                    }
+                    this.playChime();
+                }, 1250);
+
+                // Jika popup drawer belum dibuka kasir, aktifkan alarm pengingat berulang tiap 20 detik
                 if (!this.isOpen) {
                     this.startReminder();
                 }
@@ -397,6 +419,7 @@
 
             // Hentikan loop pengingat berulang
             stopReminder() {
+                this.stopBurst();
                 this.hasPendingAlert = false;
                 if (this.reminderTimer) {
                     clearInterval(this.reminderTimer);

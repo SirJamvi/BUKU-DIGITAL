@@ -657,7 +657,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
         // Enhanced Mobile Menu Toggle
@@ -811,6 +810,24 @@
                 });
             });
         });
+
+        // Auto Keep-Alive: Menjaga sesi kasir & auto-refresh token CSRF selama tab browser terbuka (mencegah error 419 Page Expired)
+        setInterval(function() {
+            fetch('{{ route("ping") }}', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data && data.csrf_token) {
+                    const metaToken = document.querySelector('meta[name="csrf-token"]');
+                    if (metaToken) metaToken.setAttribute('content', data.csrf_token);
+                    document.querySelectorAll('input[name="_token"]').forEach(function(el) {
+                        el.value = data.csrf_token;
+                    });
+                }
+            })
+            .catch(function() {});
+        }, 10 * 60 * 1000); // Heartbeat setiap 10 menit
     </script>
 
     @stack('scripts')
