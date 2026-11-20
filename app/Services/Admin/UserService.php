@@ -24,6 +24,38 @@ class UserService
     }
 
     /**
+     * Normalisasi & bersihkan array secondary_roles:
+     * - Lowercase & trim
+     * - Hanya izinkan opsi valid pada User::SECONDARY_ROLES
+     * - Hapus role yang sama dengan Role Utama
+     * - Kembalikan null jika kosong agar perilaku default tetap bersih
+     */
+    protected function sanitizeSecondaryRoles(mixed $secondaryRoles, string $primaryRole): ?array
+    {
+        if (!is_array($secondaryRoles)) {
+            return null;
+        }
+
+        $allowed = array_keys(User::SECONDARY_ROLES);
+        $normalizedPrimary = strtolower(trim($primaryRole));
+
+        $cleaned = [];
+        foreach ($secondaryRoles as $role) {
+            if (!is_string($role)) {
+                continue;
+            }
+            $r = strtolower(trim($role));
+            if ($r !== '' && $r !== $normalizedPrimary && in_array($r, $allowed, true)) {
+                $cleaned[] = $r;
+            }
+        }
+
+        $cleaned = array_values(array_unique($cleaned));
+
+        return empty($cleaned) ? null : $cleaned;
+    }
+
+    /**
      * Membuat user baru.
      */
     public function createUser(array $data): User
@@ -35,18 +67,27 @@ class UserService
             $data['role'] = 'kasir';
         }
 
+        $data['secondary_roles'] = $this->sanitizeSecondaryRoles(
+            $data['secondary_roles'] ?? null,
+            $data['role']
+        );
+        unset($data['secondary_roles_submitted']);
+
         $branchIdsSubmitted = !empty($data['branch_ids_submitted']);
         $branchIds = $data['branch_ids'] ?? (!empty($data['branch_id']) ? [$data['branch_id']] : []);
         $defaultBranchId = $data['default_branch_id'] ?? (!empty($data['branch_id']) ? (int) $data['branch_id'] : null);
         unset($data['branch_ids'], $data['default_branch_id'], $data['branch_ids_submitted']);
 
-        if ($data['role'] === 'admin') {
+        $hasAdminRole = $data['role'] === 'admin'
+            || (is_array($data['secondary_roles']) && in_array('admin', $data['secondary_roles'], true));
+
+        if ($hasAdminRole) {
             $data['branch_id'] = null;
         }
 
         $user = User::create($data);
 
-        if ($user->role !== 'admin') {
+        if (!$user->isAdmin()) {
             if ($branchIdsSubmitted || !empty($branchIds)) {
                 if (empty($branchIds) && ($activeBranchId = Auth::user()->getActiveBranchId())) {
                     $branchIds = [$activeBranchId];
@@ -67,10 +108,11 @@ class UserService
             abort(403, 'AKSES DITOLAK.');
         }
 
+        $secondaryRolesSubmitted = !empty($data['secondary_roles_submitted']);
         $branchIdsSubmitted = !empty($data['branch_ids_submitted']);
         $branchIds = $data['branch_ids'] ?? [];
         $defaultBranchId = $data['default_branch_id'] ?? (!empty($data['branch_id']) ? (int) $data['branch_id'] : null);
-        unset($data['branch_ids'], $data['default_branch_id'], $data['branch_ids_submitted']);
+        unset($data['branch_ids'], $data['default_branch_id'], $data['branch_ids_submitted'], $data['secondary_roles_submitted']);
 
         if (!empty($data['password'])) {
             $data['password'] = Hash::make($data['password']);
@@ -79,13 +121,32 @@ class UserService
         }
 
         $targetRole = $data['role'] ?? $user->role;
-        if ($targetRole === 'admin') {
+
+        if ($secondaryRolesSubmitted || array_key_exists('secondary_roles', $data)) {
+            $data['secondary_roles'] = $this->sanitizeSecondaryRoles(
+                $data['secondary_roles'] ?? [],
+                $targetRole
+            );
+        } elseif (is_array($user->secondary_roles)) {
+            $data['secondary_roles'] = $this->sanitizeSecondaryRoles(
+                $user->secondary_roles,
+                $targetRole
+            );
+        }
+
+        $effectiveSecondary = array_key_exists('secondary_roles', $data)
+            ? $data['secondary_roles']
+            : $user->secondary_roles;
+        $hasAdminRole = $targetRole === 'admin'
+            || (is_array($effectiveSecondary) && in_array('admin', $effectiveSecondary, true));
+
+        if ($hasAdminRole) {
             $data['branch_id'] = null;
         }
 
         $user->update($data);
 
-        if ($user->role === 'admin') {
+        if ($user->isAdmin()) {
             $user->syncBranches([]);
         } elseif ($branchIdsSubmitted) {
             $user->syncBranches($branchIds, $defaultBranchId);
@@ -135,6 +196,7 @@ class UserService
         return User::where('business_id', $businessId)
             ->where(function ($q) use ($businessId) {
                 $q->where('role', 'driver')
+                  ->orWhereJsonContains('secondary_roles', 'driver')
                   ->orWhereIn('id', function ($sub) use ($businessId) {
                       $sub->select('driver_id')
                           ->from('transactions')

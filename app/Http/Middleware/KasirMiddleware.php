@@ -18,8 +18,8 @@ class KasirMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (Auth::check() && in_array(Auth::user()->role, ['kasir', 'admin'])) {
-            // Admin juga memiliki akses ke fitur kasir
+        if (Auth::check() && Auth::user()->hasRole(['kasir', 'admin'])) {
+            // Admin dan user yang merangkap kasir juga memiliki akses ke fitur kasir
             return $next($request);
         }
 

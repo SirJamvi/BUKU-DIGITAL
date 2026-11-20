@@ -58,7 +58,10 @@ class PosApiController extends Controller
             ->get();
 
         $driverQuery = User::where('business_id', $businessId)
-            ->where('role', 'driver')
+            ->where(function ($q) {
+                $q->where('role', 'driver')
+                  ->orWhereJsonContains('secondary_roles', 'driver');
+            })
             ->where('is_active', true);
 
         if ($branchId) {

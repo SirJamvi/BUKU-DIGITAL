@@ -44,6 +44,9 @@ class UpdateUserRequest extends FormRequest
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($userId)],
             'password' => ['nullable', 'confirmed', Password::defaults()], // Password opsional saat update
             'role' => ['required', 'in:admin,kasir,driver,ko'],
+            'secondary_roles' => ['nullable', 'array'],
+            'secondary_roles.*' => ['string', 'in:admin,ko,kasir,driver,sales'],
+            'secondary_roles_submitted' => ['nullable'],
             'phone' => ['nullable', 'string', 'max:20'],
             'address' => ['nullable', 'string'],
             // Kata 'sometimes' bisa dihapus karena nilainya sudah pasti ada berkat prepareForValidation

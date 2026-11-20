@@ -35,10 +35,9 @@
 
         <div class="row">
             <div class="col-md-6">
-                {{-- PERBAIKAN DI SINI: Menambahkan opsi Driver --}}
                 <x-select
                     name="role"
-                    label="Role Pengguna"
+                    label="Role Utama"
                     :options="['admin' => 'Admin', 'kasir' => 'Kasir', 'driver' => 'Driver', 'ko' => 'KO']"
                     :selected="$user->role"
                     required />
@@ -57,11 +56,56 @@
             </div>
         </div>
 
-        {{-- Penugasan Cabang (Khusus Kasir / Driver) --}}
+        {{-- Role Tambahan / Rangkap Jabatan --}}
+        @php
+            $secondaryRoleOptions = \App\Models\User::SECONDARY_ROLES;
+            $selectedSecondaryRoles = old('secondary_roles', is_array($user->secondary_roles) ? $user->secondary_roles : []);
+            if (!is_array($selectedSecondaryRoles)) {
+                $selectedSecondaryRoles = [];
+            }
+            $selectedSecondaryRoles = array_map('strtolower', $selectedSecondaryRoles);
+        @endphp
+        <input type="hidden" name="secondary_roles_submitted" value="1">
+        <div class="row mt-2">
+            <div class="col-12">
+                <label class="form-label fw-bold">Role Tambahan / Rangkap Jabatan <span class="text-muted fw-normal">(Opsional)</span></label>
+                <p class="text-muted small mb-2">Centang jabatan tambahan jika karyawan ini merangkap tugas (misal: KO merangkap Kasir, atau Kasir merangkap Driver). Opsi yang sama dengan Role Utama otomatis disembunyikan.</p>
+                <div class="d-flex flex-wrap gap-2" id="secondary-roles-wrapper">
+                    @foreach($secondaryRoleOptions as $roleValue => $roleLabel)
+                        @php
+                            $isChecked = in_array($roleValue, $selectedSecondaryRoles, true);
+                        @endphp
+                        <div class="secondary-role-item" data-role-option="{{ $roleValue }}">
+                            <div class="form-check border px-3 py-2 rounded {{ $isChecked ? 'bg-primary bg-opacity-10 border-primary' : 'bg-light' }}">
+                                <input
+                                    class="form-check-input secondary-role-checkbox"
+                                    type="checkbox"
+                                    name="secondary_roles[]"
+                                    value="{{ $roleValue }}"
+                                    id="secondary_role_{{ $roleValue }}"
+                                    {{ $isChecked ? 'checked' : '' }}
+                                >
+                                <label class="form-check-label ms-1 fw-semibold" for="secondary_role_{{ $roleValue }}">
+                                    {{ $roleLabel }}
+                                </label>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+                @error('secondary_roles')
+                    <div class="text-danger small mt-1">{{ $message }}</div>
+                @enderror
+                @error('secondary_roles.*')
+                    <div class="text-danger small mt-1">{{ $message }}</div>
+                @enderror
+            </div>
+        </div>
+
+        {{-- Penugasan Cabang (Khusus Staf Non-Admin) --}}
         <input type="hidden" name="branch_ids_submitted" value="1">
         <div class="row mt-3">
             <div class="col-12">
-                <label class="form-label fw-bold">Penugasan Cabang (Kasir / Driver)</label>
+                <label class="form-label fw-bold">Penugasan Cabang (Kasir / Driver / KO)</label>
                 <p class="text-muted small mb-2">Pilih cabang yang dapat diakses oleh pengguna ini. Pengguna Admin/Owner secara otomatis memiliki akses ke seluruh cabang.</p>
                 <div class="row">
                     @foreach($branches ?? [] as $branch)
@@ -89,3 +133,37 @@
     </form>
 </x-card>
 @endsection
+
+@push('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const primaryRoleSelect = document.getElementById('role');
+        const secondaryItems = document.querySelectorAll('.secondary-role-item');
+
+        function syncSecondaryRoleOptions() {
+            const primaryRole = (primaryRoleSelect?.value || '').trim().toLowerCase();
+            secondaryItems.forEach(function (item) {
+                const optionValue = (item.dataset.roleOption || '').toLowerCase();
+                const checkbox = item.querySelector('.secondary-role-checkbox');
+                if (primaryRole !== '' && optionValue === primaryRole) {
+                    item.classList.add('d-none');
+                    if (checkbox) {
+                        checkbox.checked = false;
+                        checkbox.disabled = true;
+                    }
+                } else {
+                    item.classList.remove('d-none');
+                    if (checkbox) {
+                        checkbox.disabled = false;
+                    }
+                }
+            });
+        }
+
+        if (primaryRoleSelect) {
+            primaryRoleSelect.addEventListener('change', syncSecondaryRoleOptions);
+            syncSecondaryRoleOptions();
+        }
+    });
+</script>
+@endpush

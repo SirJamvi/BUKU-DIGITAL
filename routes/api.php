@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ExpenseSyncController;
+use App\Http\Controllers\Api\V1\AcsCashDrawerSyncController;
 use App\Http\Controllers\Api\V1\WhatsappReportController;
 use App\Http\Controllers\Api\V1\Kasir\PosApiController;
 use App\Http\Controllers\Api\V1\Auth\LoginApiController; // [TAMBAHAN BARU]
@@ -14,8 +15,9 @@ Route::prefix('v1')->group(function () {
     // ==============================================================
     Route::post('/webhook/fonnte', [AiOrderWebhookController::class, 'handle'])->name('webhook.fonnte');
 
-    // Rute Publik (Tidak butuh token)
+    // Rute Publik / Shared Secret Sync (Tidak butuh Sanctum session, diamankan token)
     Route::post('/sync/salary', [ExpenseSyncController::class, 'storeFromAttendance']);
+    Route::get('/sync/acs/drawer-summary', [AcsCashDrawerSyncController::class, 'getDrawerSummary'])->name('sync.acs.drawer_summary');
     Route::get('/whatsapp-report', [WhatsappReportController::class, 'generateDailyReport']);
 
     // [RUTE BARU UNTUK SHORTCUT PENGINGAT KASBON]

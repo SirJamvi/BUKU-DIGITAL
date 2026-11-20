@@ -11,7 +11,7 @@ class ReportPolicy
      */
     public function before(User $user, string $ability): bool|null
     {
-        if ($user->role === 'admin') {
+        if ($user->hasRole('admin')) {
             return true;
         }
         return null;
@@ -22,8 +22,8 @@ class ReportPolicy
      */
     public function viewSales(User $user): bool
     {
-        // Kasir boleh melihat laporan penjualan mereka sendiri.
-        return $user->role === 'kasir';
+        // Kasir (termasuk yang merangkap kasir) boleh melihat laporan penjualan mereka sendiri.
+        return $user->hasRole('kasir');
     }
 
     /**

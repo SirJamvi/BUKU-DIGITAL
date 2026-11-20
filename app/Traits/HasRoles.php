@@ -17,22 +17,37 @@ trait HasRoles
      * @param string|array $roleName
      * @return bool
      */
-    public function hasRole($roleName): bool
+    public function hasRole(string|array $roleName): bool
     {
-        if (is_string($roleName)) {
-            // Cek dari field 'role' langsung
-            if ($this->role === $roleName) {
-                return true;
+        $requested = is_array($roleName) ? $roleName : [$roleName];
+
+        if (method_exists($this, 'allRoles')) {
+            $userRoles = $this->allRoles();
+            foreach ($requested as $role) {
+                if (is_string($role) && in_array(strtolower(trim($role)), $userRoles, true)) {
+                    return true;
+                }
             }
-            
-            // Cek dari relasi roles
-            return $this->roles()->where('name', $roleName)->exists();
+            return false;
         }
 
-        // Jika array, cek salah satu
-        if (is_array($roleName)) {
-            foreach ($roleName as $r) {
-                if ($this->hasRole($r)) {
+        foreach ($requested as $role) {
+            if (!is_string($role) || trim($role) === '') {
+                continue;
+            }
+
+            $normalized = strtolower(trim($role));
+
+            if (is_string($this->role) && strtolower(trim($this->role)) === $normalized) {
+                return true;
+            }
+
+            if (is_array($this->secondary_roles)) {
+                $secondaryNormalized = array_map(
+                    fn ($r) => is_string($r) ? strtolower(trim($r)) : '',
+                    $this->secondary_roles
+                );
+                if (in_array($normalized, $secondaryNormalized, true)) {
                     return true;
                 }
             }

@@ -13,8 +13,8 @@ class TransactionPolicy
      */
     public function update(User $user, Transaction $transaction): bool
     {
-        // PERBAIKAN: Jika pengguna adalah admin, selalu izinkan.
-        if ($user->role === 'admin') {
+        // PERBAIKAN: Jika pengguna adalah admin (role utama maupun rangkap), selalu izinkan.
+        if ($user->hasRole('admin')) {
             return true;
         }
 

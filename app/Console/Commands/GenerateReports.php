@@ -55,8 +55,8 @@ class GenerateReports extends Command
                 $salesReport = $this->reportService->getSalesReport($filters);
                 $financialReport = $this->reportService->getFinancialReport($filters);
 
-                // Kirim laporan ke semua admin
-                $admins = User::where('role', 'admin')->where('is_active', true)->get();
+                // Kirim laporan ke semua admin (role utama maupun rangkap)
+                $admins = User::withRole('admin')->where('is_active', true)->get();
                 if ($admins->isEmpty()) {
                     $this->warn('Tidak ada admin aktif yang ditemukan untuk dikirimi laporan.');
                     return 1;

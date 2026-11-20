@@ -23,7 +23,7 @@ class NotificationService
      */
     public function sendNewTransactionNotification(Transaction $transaction): void
     {
-        $admins = User::where('role', 'admin')->where('is_active', true)->get();
+        $admins = User::withRole('admin')->where('is_active', true)->get();
 
         if ($admins->isNotEmpty()) {
             SendNotification::dispatch($admins, new NewTransaction($transaction));
@@ -40,7 +40,7 @@ class NotificationService
      */
     public function sendLowStockAlert(Product $product, ?Inventory $inventory = null, ?Branch $branch = null): void
     {
-        $admins = User::where('role', 'admin')->where('is_active', true)->get();
+        $admins = User::withRole('admin')->where('is_active', true)->get();
 
         if ($admins->isNotEmpty()) {
             SendNotification::dispatch($admins, new LowStockAlert($product, $inventory, $branch));

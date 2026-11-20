@@ -387,9 +387,12 @@ class DashboardService
      */
     public function getCashierCashOnHandData(int $businessId, Carbon $filterDate): array
     {
-        // Ambil HANYA user role 'kasir' yang aktif atau memiliki aktivitas transaksi / kas masuk-keluar di tanggal ini
+        // Ambil user yang memiliki role 'kasir' (role utama maupun rangkap) yang aktif atau memiliki aktivitas transaksi / kas masuk-keluar di tanggal ini
         $users = User::where('business_id', $businessId)
-            ->where('role', 'kasir')
+            ->where(function ($q) {
+                $q->where('role', 'kasir')
+                  ->orWhereJsonContains('secondary_roles', 'kasir');
+            })
             ->where(function ($q) use ($filterDate) {
                 $q->where('is_active', true)
                   ->orWhereHas('transactions', function ($tq) use ($filterDate) {
@@ -406,7 +409,7 @@ class DashboardService
 
         foreach ($users as $user) {
             // Validasi ketat: Abaikan akun non-kasir
-            if ($user->role !== 'kasir') {
+            if (!$user->hasRole('kasir')) {
                 continue;
             }
 

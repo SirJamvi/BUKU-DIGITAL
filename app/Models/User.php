@@ -13,7 +13,7 @@ use App\Traits\HasPermissions;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
- * @method bool hasRole(string|array $roleName)
+ * @method bool hasRole(string|array $roles)
  * @method bool hasPermission(string $permissionName)
  * @method bool isAdmin()
  * @method bool isKasir()
@@ -23,11 +23,104 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, HasRoles, HasPermissions;
 
     /**
+     * Daftar opsi Role Utama (sesuai ENUM users.role).
+     */
+    public const PRIMARY_ROLES = [
+        'admin'  => 'Admin',
+        'kasir'  => 'Kasir',
+        'driver' => 'Driver',
+        'ko'     => 'KO',
+    ];
+
+    /**
+     * Daftar opsi Role Tambahan / Rangkap Jabatan (users.secondary_roles).
+     */
+    public const SECONDARY_ROLES = [
+        'admin'  => 'Admin',
+        'ko'     => 'KO',
+        'kasir'  => 'Kasir',
+        'driver' => 'Driver',
+        'sales'  => 'Sales',
+    ];
+
+    /**
+     * Mengembalikan seluruh role user (Role Utama + Role Tambahan) secara unik dalam huruf kecil.
+     *
+     * @return array<int, string>
+     */
+    public function allRoles(): array
+    {
+        $roles = [];
+
+        if (is_string($this->role) && trim($this->role) !== '') {
+            $roles[] = strtolower(trim($this->role));
+        }
+
+        if (is_array($this->secondary_roles)) {
+            foreach ($this->secondary_roles as $secondaryRole) {
+                if (is_string($secondaryRole) && trim($secondaryRole) !== '') {
+                    $roles[] = strtolower(trim($secondaryRole));
+                }
+            }
+        }
+
+        return array_values(array_unique($roles));
+    }
+
+    /**
+     * Cek apakah user memiliki salah satu role yang diminta (baik Role Utama maupun Role Tambahan).
+     *
+     * @param string|array<int, string> $roles
+     */
+    public function hasRole(string|array $roles): bool
+    {
+        $userRoles = $this->allRoles();
+        $requestedRoles = is_array($roles) ? $roles : [$roles];
+
+        foreach ($requestedRoles as $requested) {
+            if (!is_string($requested) || trim($requested) === '') {
+                continue;
+            }
+
+            if (in_array(strtolower(trim($requested)), $userRoles, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Scope query untuk memfilter user yang memiliki salah satu role di `role` utama atau `secondary_roles` JSON.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param string|array<int, string> $roles
+     */
+    public function scopeWithRole($query, string|array $roles)
+    {
+        $roleList = array_values(array_unique(array_filter(array_map(
+            fn ($r) => is_string($r) ? strtolower(trim($r)) : '',
+            (array) $roles
+        ))));
+
+        if (empty($roleList)) {
+            return $query;
+        }
+
+        return $query->where(function ($q) use ($roleList) {
+            $q->whereIn('role', $roleList);
+            foreach ($roleList as $role) {
+                $q->orWhereJsonContains('secondary_roles', $role);
+            }
+        });
+    }
+
+    /**
      * Cek apakah user adalah admin atau owner.
      */
     public function isAdmin(): bool
     {
-        return in_array($this->role, ['admin', 'owner']) || $this->hasRole('admin');
+        return $this->hasRole(['admin', 'owner']);
     }
 
     /**
@@ -35,7 +128,7 @@ class User extends Authenticatable
      */
     public function isKasir(): bool
     {
-        return $this->role === 'kasir' || $this->hasRole('kasir');
+        return $this->hasRole('kasir');
     }
 
     protected $fillable = [
@@ -47,6 +140,7 @@ class User extends Authenticatable
         'phone',
         'address',
         'role',
+        'secondary_roles',
         'permissions',
         'created_by',
         'is_active',
@@ -61,6 +155,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'secondary_roles' => 'array',
         'permissions' => 'json',
         'is_active' => 'boolean',
     ];

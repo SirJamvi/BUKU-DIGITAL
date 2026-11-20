@@ -288,6 +288,8 @@ class TransactionController extends Controller
                     'type'           => 'income',
                     'category_id'    => 1,
                     'payment_method' => $request->payment_method,
+                    'funding_source' => $isCash ? 'drawer' : 'owner',
+                    'affects_drawer' => $isCash ? 1 : 0,
                     'amount'         => $transaction->total_amount,
                     'description'    => $desc,
                     'date'           => $settlementDate,
@@ -373,6 +375,8 @@ class TransactionController extends Controller
                         $desc .= ' [Koreksi Nota Tgl ' . \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') . ']';
                     }
 
+                    $isCashChosen = strtolower($methodSlug) === 'cash';
+
                     // Catat ke CashFlow secara dinamis dengan metode pembayaran riil & alokasi tanggal
                     \App\Models\CashFlow::create([
                         'business_id'    => $transaction->business_id,
@@ -380,6 +384,8 @@ class TransactionController extends Controller
                         'type'           => 'income',
                         'category_id'    => 1,
                         'payment_method' => $methodSlug,
+                        'funding_source' => $isCashChosen ? 'drawer' : 'owner',
+                        'affects_drawer' => $isCashChosen ? 1 : 0,
                         'amount'         => $transaction->total_amount,
                         'description'    => $desc,
                         'date'           => $settlementDate,

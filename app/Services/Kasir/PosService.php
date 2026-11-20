@@ -53,9 +53,12 @@ class PosService
             ->orderBy('name', 'asc')
             ->get();
 
-        // Ambil Driver Dinamis (utamakan driver di cabang aktif jika ada)
+        // Ambil Driver Dinamis (termasuk user rangkap jabatan driver; utamakan driver di cabang aktif jika ada)
         $driverQuery = User::where('business_id', $businessId)
-            ->where('role', 'driver')
+            ->where(function ($q) {
+                $q->where('role', 'driver')
+                  ->orWhereJsonContains('secondary_roles', 'driver');
+            })
             ->where('is_active', true);
 
         if ($branchId) {
@@ -388,6 +391,7 @@ class PosService
 
             // 4. Catat ke Cash Flow HANYA JIKA LUNAS
             if (!$isKasbon) {
+                $isCash = strtolower($transaction->payment_method ?? '') === 'cash';
                 CashFlow::create([
                     'business_id'    => $transaction->business_id,
                     'branch_id'      => $branchId,
@@ -395,6 +399,8 @@ class PosService
                     'category_id'    => 1,
                     'amount'         => $transaction->total_amount,
                     'payment_method' => $transaction->payment_method,
+                    'funding_source' => $isCash ? 'drawer' : 'owner',
+                    'affects_drawer' => $isCash ? 1 : 0,
                     'description'    => 'Pendapatan dari penjualan #' . $transaction->id,
                     'date'           => $transaction->transaction_date,
                     'reference_id'   => $transaction->id,

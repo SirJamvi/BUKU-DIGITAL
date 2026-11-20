@@ -95,7 +95,7 @@ class BranchSwitchController extends Controller
         $redirect = redirect()->intended(route('redirect.dashboard'))->with('success', "Cabang aktif: {$branch->name} ({$branch->code}).");
 
         // Cek apakah kasir belum menginput modal awal hari ini di cabang tujuan
-        if ($user->role === 'kasir') {
+        if ($user->hasRole('kasir')) {
             $today = \Carbon\Carbon::today('Asia/Jakarta')->toDateString();
             $hasOpeningInTarget = \App\Models\CashierOpeningBalance::where('user_id', $user->id)
                 ->where('branch_id', $branch->id)

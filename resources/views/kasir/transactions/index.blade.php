@@ -148,7 +148,7 @@
                             </div>
                         </div>
 
-                        @if(in_array(auth()->user()->role ?? '', ['admin', 'owner']))
+                        @if(auth()->check() && auth()->user()->isAdmin())
                         <div class="mb-3 p-3 bg-light rounded border">
                             <label class="form-label fw-bold text-dark small mb-2"><i class="fas fa-user-shield text-primary me-1"></i> Alokasi Fisik Kas Tunai (Role Admin):</label>
                             <div class="form-check mb-1">

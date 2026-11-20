@@ -1,4 +1,4 @@
-﻿{{-- resources/views/admin/users/index.blade.php --}}
+{{-- resources/views/admin/users/index.blade.php --}}
 @extends('admin.layouts.app')
 
 @section('title', 'Manajemen Pengguna & Driver')
@@ -111,15 +111,45 @@
                         </td>
                         <td>{{ $user->email }}</td>
                         <td>
-                            @if ($user->role == 'admin')
-                            <span class="badge bg-danger">{{ $user->role === 'ko' ? 'KO' : ucfirst($user->role) }}</span>
-                            @elseif ($user->role == 'driver')
-                            <span class="badge bg-warning text-dark"><i class="fas fa-motorcycle me-1"></i>Driver</span>
-                            @elseif ($user->role == 'kasir')
-                            <span class="badge bg-success">Kasir</span>
-                            @else
-                            <span class="badge bg-info">{{ $user->role === 'ko' ? 'KO' : ucfirst($user->role) }}</span>
-                            @endif
+                            <div class="d-flex flex-wrap align-items-center gap-1">
+                                {{-- Badge Role Utama --}}
+                                @if ($user->role == 'admin')
+                                <span class="badge bg-danger">Admin</span>
+                                @elseif ($user->role == 'driver')
+                                <span class="badge bg-warning text-dark"><i class="fas fa-motorcycle me-1"></i>Driver</span>
+                                @elseif ($user->role == 'kasir')
+                                <span class="badge bg-success">Kasir</span>
+                                @else
+                                <span class="badge bg-info">{{ $user->role === 'ko' ? 'KO' : ucfirst($user->role) }}</span>
+                                @endif
+
+                                {{-- Badge Kecil Role Tambahan / Rangkap Jabatan --}}
+                                @php
+                                    $primaryRoleLower = strtolower((string) $user->role);
+                                    $secondaryRoles = is_array($user->secondary_roles)
+                                        ? array_values(array_unique(array_filter(
+                                            array_map(fn ($r) => is_string($r) ? strtolower(trim($r)) : '', $user->secondary_roles),
+                                            fn ($r) => $r !== '' && $r !== $primaryRoleLower
+                                        )))
+                                        : [];
+                                @endphp
+                                @foreach ($secondaryRoles as $secRole)
+                                    @php
+                                        $secLabel = \App\Models\User::SECONDARY_ROLES[$secRole] ?? ($secRole === 'ko' ? 'KO' : ucfirst($secRole));
+                                        $secBadgeClass = match ($secRole) {
+                                            'admin'  => 'bg-danger bg-opacity-10 text-danger border border-danger-subtle',
+                                            'driver' => 'bg-warning bg-opacity-25 text-dark border border-warning-subtle',
+                                            'kasir'  => 'bg-success bg-opacity-10 text-success border border-success-subtle',
+                                            'ko'     => 'bg-info bg-opacity-10 text-info border border-info-subtle',
+                                            'sales'  => 'bg-primary bg-opacity-10 text-primary border border-primary-subtle',
+                                            default  => 'bg-secondary bg-opacity-10 text-secondary border',
+                                        };
+                                    @endphp
+                                    <span class="badge rounded-pill {{ $secBadgeClass }}" style="font-size: 0.7rem;" title="Role Tambahan / Rangkap Jabatan">
+                                        + {{ $secLabel }}
+                                    </span>
+                                @endforeach
+                            </div>
                         </td>
                         <td>
                             {{-- Mencegah user menonaktifkan dirinya sendiri --}}

@@ -12,7 +12,7 @@ class ProductPolicy
      */
     public function before(User $user, string $ability): bool|null
     {
-        if ($user->role === 'admin') {
+        if ($user->hasRole('admin')) {
             return true;
         }
         return null;

@@ -59,12 +59,12 @@ class RoleMiddleware
         $user = Auth::user();
 
         // Admin memiliki akses ke semua role
-        if ($user->role === 'admin') {
+        if ($user->hasRole('admin')) {
             return $next($request);
         }
 
-        // Cek apakah user memiliki role yang diperlukan
-        if (in_array($user->role, $roles)) {
+        // Cek apakah user memiliki role yang diperlukan (role utama maupun role tambahan)
+        if ($user->hasRole($roles)) {
             return $next($request);
         }
 

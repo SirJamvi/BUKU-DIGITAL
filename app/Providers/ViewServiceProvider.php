@@ -74,7 +74,7 @@ class ViewServiceProvider extends ServiceProvider
         // View composer untuk layout kasir agar statistik harian selalu sinkron real-time (WIB)
         View::composer(['kasir.layouts.header', 'kasir.layouts.sidebar', 'kasir.layouts.app'], function ($view) {
             $user = Auth::user();
-            if ($user && $user->role === 'kasir') {
+            if ($user && $user->hasRole('kasir')) {
                 $today = \Carbon\Carbon::today('Asia/Jakarta');
                 $businessId = $user->business_id;
 

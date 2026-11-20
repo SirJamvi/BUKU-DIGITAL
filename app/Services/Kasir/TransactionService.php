@@ -196,18 +196,24 @@ class TransactionService
                     ->where('type', 'income')
                     ->first();
 
+                $isCash = strtolower($transaction->payment_method ?? '') === 'cash';
                 if ($cashFlow) {
                     $cashFlow->update([
                         'amount'         => $transaction->total_amount,
                         'payment_method' => $transaction->payment_method,
+                        'funding_source' => $isCash ? 'drawer' : 'owner',
+                        'affects_drawer' => $isCash ? 1 : 0,
                     ]);
                 } else {
                     // Jika sebelumnya pending lalu diubah menjadi lunas, buatkan cash_flow
                     CashFlow::create([
                         'business_id'    => $transaction->business_id,
+                        'branch_id'      => $transaction->branch_id,
                         'type'           => 'income',
                         'category_id'    => 1,
                         'payment_method' => $transaction->payment_method,
+                        'funding_source' => $isCash ? 'drawer' : 'owner',
+                        'affects_drawer' => $isCash ? 1 : 0,
                         'amount'         => $transaction->total_amount,
                         'description'    => 'Pendapatan dari penjualan #' . $transaction->id,
                         'date'           => $transaction->transaction_date ?? now(),
