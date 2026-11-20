@@ -81,3 +81,12 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
 // AI Orders Queue (Web Session + Branch Context Scoped)
 Route::get('/ai-orders', [\App\Http\Controllers\Api\V1\AiOrderWebhookController::class, 'getValidatedOrders'])->name('ai_orders');
 Route::post('/ai-orders/{id}/processed', [\App\Http\Controllers\Api\V1\AiOrderWebhookController::class, 'markAsProcessed'])->name('ai_orders.processed');
+
+// Heartbeat Ping untuk Sesi Kasir & Auto CSRF Refresh
+Route::get('/ping', function () {
+    return response()->json([
+        'status' => 'ok',
+        'csrf_token' => csrf_token(),
+        'timestamp' => now()->toIso8601String(),
+    ]);
+})->name('ping');

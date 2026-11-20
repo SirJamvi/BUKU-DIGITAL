@@ -813,10 +813,13 @@
 
         // Auto Keep-Alive: Menjaga sesi kasir & auto-refresh token CSRF selama tab browser terbuka (mencegah error 419 Page Expired)
         setInterval(function() {
-            fetch('{{ route("ping") }}', {
+            fetch('{{ url("/ping") }}', {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
-            .then(function(res) { return res.json(); })
+            .then(function(res) {
+                if (!res.ok) return null;
+                return res.json();
+            })
             .then(function(data) {
                 if (data && data.csrf_token) {
                     const metaToken = document.querySelector('meta[name="csrf-token"]');
