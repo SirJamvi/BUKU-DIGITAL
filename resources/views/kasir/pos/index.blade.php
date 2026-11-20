@@ -1223,15 +1223,20 @@
                 }
 
                 // 3. Pemetaan & Penambahan Produk Sesuai Ukuran (20kg / 15kg / 10kg)
-                // Parsing angka dari ukuran_produk (misal: '15kg', '15 kg', '15', '10kg', '20kg')
+                // Parsing angka dari ukuran_produk (misal: '15kg', '15 kg', '15', '10kg', '20kg', 'setengah ball')
                 let targetNum = '';
-                const numMatch = rawUkuran.match(/\d+/);
-                if (numMatch) {
-                    targetNum = numMatch[0];
-                }
-                // Jika mengandung 19 / 19rb -> standarkan ke 20
-                if (targetNum === '19') {
-                    targetNum = '20';
+                const lowerUkuran = rawUkuran.toLowerCase();
+                if (lowerUkuran.includes('setengah') || lowerUkuran.includes('separuh') || lowerUkuran.includes('1/2')) {
+                    targetNum = '10';
+                } else {
+                    const numMatch = rawUkuran.match(/\d+/);
+                    if (numMatch) {
+                        targetNum = numMatch[0];
+                    }
+                    // Jika mengandung 19 / 19rb -> standarkan ke 20
+                    if (targetNum === '19') {
+                        targetNum = '20';
+                    }
                 }
 
                 const productCards = Array.from(document.querySelectorAll('.product-card'));
@@ -1289,21 +1294,27 @@
                 const key = vId ? `${pId}-${vId}` : `${pId}`;
                 const targetOrder = orders[activeOrderIndex];
 
+                let addQty = jumlahBall;
+                // Jika pesanan lama tercatat 0.5 ball tapi ukuran 10kg, normalkan minimal 1 ball
+                if (addQty === 0.5 && targetNum === '10') {
+                    addQty = 1;
+                }
+
                 if (targetOrder.items[key]) {
-                    targetOrder.items[key].quantity += jumlahBall;
+                    targetOrder.items[key].quantity += addQty;
                 } else {
                     targetOrder.items[key] = {
                         productId: pId,
                         variantId: vId,
                         name: pName,
                         price: pPrice,
-                        quantity: jumlahBall
+                        quantity: addQty
                     };
                 }
 
                 posLog("✅ PRODUK ES KRISTAL DITAMBAHKAN", {
                     produk: pName,
-                    qty: jumlahBall,
+                    qty: addQty,
                     targetOrder: `Pesanan ${activeOrderIndex + 1}`
                 });
 

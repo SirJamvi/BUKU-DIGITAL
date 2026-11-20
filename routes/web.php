@@ -27,7 +27,15 @@ Route::get('/ping', function () {
         'csrf_token' => csrf_token(),
         'timestamp' => now()->toIso8601String(),
     ]);
-})->middleware('web')->name('ping');
+})->name('ping');
+
+Route::get('/heartbeat', function () {
+    return response()->json([
+        'status' => 'ok',
+        'csrf_token' => csrf_token(),
+        'timestamp' => now()->toIso8601String(),
+    ]);
+})->name('heartbeat');
 
 // 2. Rute Otentikasi
 Route::get('login', [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest');

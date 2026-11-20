@@ -811,23 +811,14 @@
             });
         });
 
-        // Auto Keep-Alive: Menjaga sesi kasir & auto-refresh token CSRF selama tab browser terbuka (mencegah error 419 Page Expired)
+        // Auto Keep-Alive: Menjaga koneksi kasir aktif selama tab browser terbuka (mencegah timeout sesi)
         setInterval(function() {
-            fetch('{{ url("/ping") }}', {
+            fetch('{{ url("/up") }}', {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
             .then(function(res) {
                 if (!res.ok) return null;
-                return res.json();
-            })
-            .then(function(data) {
-                if (data && data.csrf_token) {
-                    const metaToken = document.querySelector('meta[name="csrf-token"]');
-                    if (metaToken) metaToken.setAttribute('content', data.csrf_token);
-                    document.querySelectorAll('input[name="_token"]').forEach(function(el) {
-                        el.value = data.csrf_token;
-                    });
-                }
+                return res.text();
             })
             .catch(function() {});
         }, 10 * 60 * 1000); // Heartbeat setiap 10 menit

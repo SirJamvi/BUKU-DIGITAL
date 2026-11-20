@@ -1043,7 +1043,8 @@ class AiOrderSystemTest extends TestCase
     }
 
 
-     * Skenario 23: Ekstraksi "setengah ball" ("setengah", "1/2", "separuh") menghasilkan jumlah_ball 0.5
+    /**
+     * Skenario 23: Ekstraksi "setengah ball" ("setengah", "1/2", "separuh") menghasilkan ukuran_produk 10kg dan jumlah_ball 1
      */
     public function test_scenario_23_setengah_ball_extraction(): void
     {
@@ -1063,27 +1064,27 @@ class AiOrderSystemTest extends TestCase
             return ['status' => true];
         });
 
-        // 1. Ekstraksi langsung via processor
+        // 1. Ekstraksi langsung via processor ("setengah ball" -> 10kg, 1 ball)
         $processor = app(\App\Services\Ai\AiOrderProcessor::class);
-        $result = $processor->process($sender, 'kirim setengah ball yang 20kg ya');
+        $result = $processor->process($sender, 'kirim setengah ball ya');
 
         $this->assertEquals('order_validated', $result['status']);
-        $this->assertStringContainsString('0.5 ball 20kg', $capturedReply);
+        $this->assertStringContainsString('1 ball 10kg', $capturedReply);
 
         $order = TemporaryOrder::where('sender_phone', $sender)->latest('id')->first();
         $this->assertNotNull($order);
-        $this->assertEquals(0.5, (float) $order->jumlah_ball);
-        $this->assertEquals('20kg', $order->ukuran_produk);
+        $this->assertEquals(1, (float) $order->jumlah_ball);
+        $this->assertEquals('10kg', $order->ukuran_produk);
 
         // 2. Ekstraksi via variasi '1/2' pada LlmOrderService
         $llmService = app(\App\Services\Ai\LlmOrderService::class);
-        $parsed = $llmService->heuristicFallbackParser('pesan 1/2 ball 15kg');
-        $this->assertEquals(0.5, (float) $parsed['jumlah_ball']);
-        $this->assertEquals('15kg', $parsed['ukuran_produk']);
+        $parsed = $llmService->heuristicFallbackParser('pesan 1/2 ball');
+        $this->assertEquals(1, (float) $parsed['jumlah_ball']);
+        $this->assertEquals('10kg', $parsed['ukuran_produk']);
 
         // 3. Ekstraksi via variasi 'separuh'
-        $parsed2 = $llmService->heuristicFallbackParser('minta separuh karung yang 10kg');
-        $this->assertEquals(0.5, (float) $parsed2['jumlah_ball']);
+        $parsed2 = $llmService->heuristicFallbackParser('minta separuh karung');
+        $this->assertEquals(1, (float) $parsed2['jumlah_ball']);
         $this->assertEquals('10kg', $parsed2['ukuran_produk']);
     }
 

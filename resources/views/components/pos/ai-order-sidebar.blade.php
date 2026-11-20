@@ -128,8 +128,9 @@
                      class="group relative rounded-xl p-3.5 shadow-sm transition-all duration-200 select-none"
                      :class="{
                          'bg-emerald-50/80 border-2 border-emerald-400 ring-2 ring-emerald-200/60': inCartOrderIds.includes(order.id),
-                         'bg-amber-50/70 border-2 border-amber-400 ring-2 ring-amber-200/60 shadow-md hover:border-amber-500 cursor-grab active:cursor-grabbing': !inCartOrderIds.includes(order.id) && isFutureDelivery(order),
-                         'bg-white border border-slate-200 hover:shadow-md hover:border-emerald-400 cursor-grab active:cursor-grabbing': !inCartOrderIds.includes(order.id) && !isFutureDelivery(order),
+                         'bg-rose-50/90 border-2 border-rose-400 ring-2 ring-rose-200/70 shadow-md animate-pulse cursor-grab active:cursor-grabbing': !inCartOrderIds.includes(order.id) && isDueSoonDelivery(order),
+                         'bg-amber-50/70 border-2 border-amber-300 ring-1 ring-amber-200/60 shadow-xs cursor-grab active:cursor-grabbing': !inCartOrderIds.includes(order.id) && isFarFutureDelivery(order),
+                         'bg-white border border-slate-200 hover:shadow-md hover:border-emerald-400 cursor-grab active:cursor-grabbing': !inCartOrderIds.includes(order.id) && !order.delivery_time,
                          'opacity-50 ring-2 ring-emerald-500 ring-offset-1': draggedOrderId === order.id
                      }">
                     
@@ -192,12 +193,23 @@
                             </div>
                         </div>
 
-                        {{-- Peringatan Jadwal Kirim Belum Tiba (Jika delivery_time > waktu sekarang) --}}
-                        <template x-if="isFutureDelivery(order)">
+                        {{-- Peringatan Jadwal Kirim (Mendekati Waktu Kirim vs Masih Lama) --}}
+                        <template x-if="!inCartOrderIds.includes(order.id) && isDueSoonDelivery(order)">
+                            <div class="mb-2 px-2.5 py-1.5 bg-rose-100 border border-rose-300 rounded-lg flex items-center justify-between text-rose-900 text-xs font-extrabold shadow-2xs">
+                                <span class="flex items-center space-x-1.5">
+                                    <span class="text-sm">⏰</span>
+                                    <span>Segera Siapkan! Waktu Kirim Mendekat</span>
+                                </span>
+                                <span class="text-[11px] font-extrabold text-white bg-rose-600 px-2 py-0.5 rounded shadow-xs"
+                                      x-text="'Kirim: ' + getDeliveryTimeBadge(order)"></span>
+                            </div>
+                        </template>
+
+                        <template x-if="!inCartOrderIds.includes(order.id) && isFarFutureDelivery(order)">
                             <div class="mb-2 px-2.5 py-1.5 bg-amber-100/90 border border-amber-300 rounded-lg flex items-center justify-between text-amber-900 text-xs font-bold shadow-2xs">
                                 <span class="flex items-center space-x-1.5">
-                                    <span class="text-sm">⚠️</span>
-                                    <span>Jadwal Kirim Belum Tiba</span>
+                                    <span class="text-sm">📅</span>
+                                    <span>Pesanan Terjadwal (Belum Waktunya)</span>
                                 </span>
                                 <span class="text-[11px] font-extrabold text-amber-900 bg-amber-200/90 px-1.5 py-0.5 rounded border border-amber-300"
                                       x-text="'Kirim: ' + getDeliveryTimeBadge(order)"></span>
@@ -287,10 +299,24 @@
             soundEnabled: localStorage.getItem('pos_ai_sound_enabled') !== '0',
             hasPendingAlert: false,
             knownOrderIds: new Set(),
+            dueSoonAlertedIds: new Set(),
             isFirstFetch: true,
             audioCtx: null,
+            customAudio: null,
             reminderTimer: null,
             burstTimer: null,
+
+            // Inisialisasi audio kustom WAV
+            initCustomAudio() {
+                try {
+                    // Mendukung file suara di public/sounds/notification.wav (atau notification.mp3)
+                    const audio = new Audio('{{ asset("sounds/notification.wav") }}');
+                    audio.preload = 'auto';
+                    this.customAudio = audio;
+                } catch (e) {
+                    this.customAudio = null;
+                }
+            },
 
             // Hentikan dering 5 detik jika kasir merespons lebih awal
             stopBurst() {
@@ -315,9 +341,36 @@
                 }
             },
 
-            // Generator nada bel "Ting-Tung" kasir menggunakan Web Audio API murni (tanpa perlu unduh file mp3)
+            // Pemutar suara bel notifikasi pesanan masuk
             playChime() {
                 if (!this.soundEnabled) return;
+
+                // 1. Coba putar file WAV kustom jika kasir memasukkan file di /public/sounds/notification.wav
+                if (this.customAudio) {
+                    try {
+                        this.customAudio.currentTime = 0;
+                        const p = this.customAudio.play();
+                        if (p !== undefined) {
+                            p.then(() => {
+                                // Berhasil memutar file WAV
+                            }).catch(() => {
+                                // Fallback otomatis ke bel sintetis bawaan jika file belum diunggah atau belum diizinkan
+                                this.playSynthChime();
+                            });
+                            return;
+                        }
+                    } catch (e) {
+                        this.playSynthChime();
+                        return;
+                    }
+                }
+
+                // 2. Fallback ke generator nada bel sintetis
+                this.playSynthChime();
+            },
+
+            // Generator nada bel "Ting-Tung" sintetis murni (cadangan otomatis jika file belum ada)
+            playSynthChime() {
                 try {
                     this.unlockAudio();
                     if (!this.audioCtx) return;
@@ -351,7 +404,7 @@
                     osc2.start(now + 0.16);
                     osc2.stop(now + 0.85);
                 } catch (e) {
-                    console.warn('[AiOrderSidebar] Gagal memutar nada bel:', e);
+                    console.warn('[AiOrderSidebar] Gagal memutar nada bel sintetis:', e);
                 }
             },
 
@@ -374,9 +427,12 @@
             toggleOpen(targetState = null) {
                 this.isOpen = (targetState !== null) ? targetState : !this.isOpen;
                 if (this.isOpen) {
-                    // Kasir sudah membuka antrean -> hentikan bunyi alarm
+                    // Kasir sudah membuka antrean -> hentikan dering cepat awal 5 detik
                     this.stopBurst();
-                    this.stopReminder();
+                    // JANGAN hentikan loop pengingat 15 detik jika masih ada pesanan yang belum di-drag ke keranjang!
+                    if (this.hasActiveUrgentOrders() && !this.reminderTimer) {
+                        this.startReminder();
+                    }
                 }
             },
 
@@ -390,31 +446,30 @@
                 let elapsed = 0;
                 this.burstTimer = setInterval(() => {
                     elapsed += 1250;
-                    if (elapsed >= 5000 || this.isOpen || !this.soundEnabled) {
+                    if (elapsed >= 5000 || !this.soundEnabled) {
                         this.stopBurst();
                         return;
                     }
                     this.playChime();
                 }, 1250);
 
-                // Jika popup drawer belum dibuka kasir, aktifkan alarm pengingat berulang tiap 20 detik
-                if (!this.isOpen) {
-                    this.startReminder();
-                }
+                // Aktifkan loop pengingat berulang setiap 15 detik sampai pesanan di-drag ke keranjang
+                this.startReminder();
             },
 
-            // Mulai loop pengingat berulang (tiap 20 detik)
+            // Mulai loop pengingat berulang (setiap 15 detik sampai semua pesanan urgent di-drag ke keranjang)
             startReminder() {
                 this.stopReminder();
                 this.hasPendingAlert = true;
 
                 this.reminderTimer = setInterval(() => {
-                    if (!this.soundEnabled || this.isOpen || this.orders.length === 0) {
+                    // Berhenti jika suara hening, antrean kosong, atau semua pesanan urgent sudah di keranjang
+                    if (!this.soundEnabled || this.orders.length === 0 || !this.hasActiveUrgentOrders()) {
                         this.stopReminder();
                         return;
                     }
                     this.playChime();
-                }, 20000);
+                }, 15000); // Tepat setiap 15 detik
             },
 
             // Hentikan loop pengingat berulang
@@ -437,16 +492,46 @@
                 );
             },
 
-            // Helper pengecekan apakah waktu pengiriman di masa mendatang (belum waktunya dikirim)
-            isFutureDelivery(order) {
-                if (!order || !order.delivery_time) return false;
+            // Selisih menit ke waktu pengiriman (positif = menit tersisa, negatif = sudah lewat)
+            getDeliveryDiffMinutes(order) {
+                if (!order || !order.delivery_time) return null;
                 try {
                     const dTime = new Date(order.delivery_time.replace(/-/g, '/'));
                     const now = new Date();
-                    return dTime > now;
+                    return (dTime.getTime() - now.getTime()) / (60 * 1000);
                 } catch (e) {
-                    return false;
+                    return null;
                 }
+            },
+
+            // Pesanan terjadwal masih lama (> 15 menit ke depan)
+            isFarFutureDelivery(order) {
+                const diff = this.getDeliveryDiffMinutes(order);
+                return diff !== null && diff > 15;
+            },
+
+            // Pesanan sudah mendekati waktu pengiriman (<= 15 menit ke depan s/d lewat)
+            isDueSoonDelivery(order) {
+                const diff = this.getDeliveryDiffMinutes(order);
+                return diff !== null && diff <= 15;
+            },
+
+            // Helper pengecekan apakah waktu pengiriman di masa mendatang (belum waktunya dikirim)
+            isFutureDelivery(order) {
+                const diff = this.getDeliveryDiffMinutes(order);
+                return diff !== null && diff > 0;
+            },
+
+            // Cek apakah ada pesanan yang butuh perhatian kasir saat ini (belum di-drag & sudah/mendekati waktu kirim)
+            hasActiveUrgentOrders() {
+                return this.orders.some(order => {
+                    const inCart = this.inCartOrderIds.includes(order.id);
+                    if (inCart) return false;
+                    // Pesanan langsung (tanpa waktu kirim spesifik) -> butuh diproses sekarang
+                    if (!order.delivery_time) return true;
+                    // Pesanan terjadwal -> hanya jika waktunya sudah dekat (<= 15 menit)
+                    return this.isDueSoonDelivery(order);
+                });
             },
 
             // Helper format jam pengiriman (hari ini: 'H:i', besok: 'Besok, H:i', lainnya: 'd M H:i')
@@ -482,9 +567,16 @@
             },
 
             init() {
-                // Unlock Web Audio otomatis pada interaksi pertama (klik/keyboard/touch) di halaman
+                this.initCustomAudio();
+
+                // Unlock Web Audio & Audio element otomatis pada interaksi pertama (klik/keyboard/touch) di halaman
                 const unlock = () => {
                     this.unlockAudio();
+                    if (this.customAudio) {
+                        try {
+                            this.customAudio.load();
+                        } catch (e) {}
+                    }
                     window.removeEventListener('click', unlock);
                     window.removeEventListener('keydown', unlock);
                     window.removeEventListener('touchstart', unlock);
@@ -511,6 +603,10 @@
                         if (!this.inCartOrderIds.includes(id)) {
                             this.inCartOrderIds.push(id);
                         }
+                        // Jika seluruh pesanan yang butuh dikerjakan sudah masuk ke keranjang -> HENTIKAN dering seketika!
+                        if (!this.hasActiveUrgentOrders()) {
+                            this.stopReminder();
+                        }
                     }
                 });
 
@@ -519,6 +615,10 @@
                     if (e.detail && e.detail.orderId) {
                         const id = parseInt(e.detail.orderId, 10);
                         this.inCartOrderIds = this.inCartOrderIds.filter(i => i !== id);
+                        // Jika ada pesanan urgent yang dikeluarkan dari keranjang, aktifkan kembali alarm pengingat 15 detik
+                        if (this.hasActiveUrgentOrders() && !this.reminderTimer) {
+                            this.startReminder();
+                        }
                     }
                 });
 
@@ -528,7 +628,7 @@
                         const id = parseInt(e.detail.orderId, 10);
                         this.orders = this.orders.filter(o => o.id !== id);
                         this.inCartOrderIds = this.inCartOrderIds.filter(i => i !== id);
-                        if (this.orders.length === 0) {
+                        if (!this.hasActiveUrgentOrders()) {
                             this.stopReminder();
                         }
                         window.dispatchEvent(new CustomEvent('ai-orders-count-changed', {
@@ -553,22 +653,46 @@
                         const fetchedOrders = json.data || [];
                         const currentIds = fetchedOrders.map(o => o.id);
 
-                        // Cek apakah ada pesanan baru masuk
+                        // 1. Cek apakah ada pesanan baru masuk
                         const newOrders = currentIds.filter(id => !this.knownOrderIds.has(id));
 
                         if (this.isFirstFetch) {
                             // Load pertama kali: catat order yang sudah ada tanpa membunyikan alarm
                             currentIds.forEach(id => this.knownOrderIds.add(id));
+                            fetchedOrders.forEach(o => {
+                                if (this.isDueSoonDelivery(o)) this.dueSoonAlertedIds.add(o.id);
+                            });
                             this.isFirstFetch = false;
                         } else if (newOrders.length > 0) {
                             // Pesanan baru terdeteksi!
                             newOrders.forEach(id => this.knownOrderIds.add(id));
+                            
+                            // Cek apakah pesanan baru ini urgent (pesanan langsung atau waktu kirim sudah dekat <= 15 menit)
+                            const hasUrgentNew = fetchedOrders.some(o => newOrders.includes(o.id) && (!o.delivery_time || this.isDueSoonDelivery(o)));
+                            if (hasUrgentNew) {
+                                this.triggerAlert();
+                            } else {
+                                // Jika pesanan terjadwal masih jauh (> 15 menit), bunyikan bel 1x saja tanpa alarm berulang
+                                this.playChime();
+                            }
+                        }
+
+                        // 2. Cek apakah ada pesanan terjadwal lama yang SEKARANG memasuki batas waktu kirim (<= 15 menit)
+                        const newlyDueOrders = fetchedOrders.filter(o => 
+                            !this.inCartOrderIds.includes(o.id) &&
+                            this.isDueSoonDelivery(o) &&
+                            !this.dueSoonAlertedIds.has(o.id)
+                        );
+
+                        if (newlyDueOrders.length > 0) {
+                            newlyDueOrders.forEach(o => this.dueSoonAlertedIds.add(o.id));
+                            // Bunyikan alarm bel urgent untuk mengingatkan kasir agar segera menyiapkan es!
                             this.triggerAlert();
                         }
 
                         this.orders = fetchedOrders;
 
-                        if (this.orders.length === 0) {
+                        if (this.orders.length === 0 || !this.hasActiveUrgentOrders()) {
                             this.stopReminder();
                         }
 

@@ -902,8 +902,18 @@ class AiOrderProcessor
         $newQty = $currentQty;
         $newUkuran = $currentUkuran;
 
-        if (preg_match('/(?:^|\b)(?:jadi|jadinya|ganti)?\s*(?:setengah|separuh|1\/2|0[,.]5)\s*(?:ball|bal|sak|karung|biji|bungkus)?(?:\b|$)/i', $clean)) {
-            $newQty = 0.5;
+        if (preg_match('/(?:^|\b)(?:jadi|jadinya|ganti)?\s*(?:setengah|separuh|1\/2)\s*(?:ball|bal|sak|karung|biji|bungkus)?(?:\b|$)/i', $clean)) {
+            $newUkuran = '10kg';
+            $hasUkuran = true;
+            if (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:setengah|separuh|1\/2)/i', $clean, $m)) {
+                $val = (float) str_replace(',', '.', $m[1]);
+                $newQty = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+            } elseif (preg_match('/(?:setengah|separuh|1\/2)\s*(?:ball|bal|sak|karung|biji|bungkus)?\s*(\d+(?:[.,]\d+)?)/i', $clean, $m)) {
+                $val = (float) str_replace(',', '.', $m[1]);
+                $newQty = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+            } else {
+                $newQty = 1;
+            }
             $hasQty = true;
         } elseif (preg_match('/(?:tambah|nambah|plus|\+)\s*(\d+(?:[.,]\d+)?)/i', $clean, $m)) {
             $add = (float) str_replace(',', '.', $m[1]);
@@ -1102,6 +1112,8 @@ class AiOrderProcessor
         } elseif (
             str_contains($clean, 'yang 10') || str_contains($clean, 'yg 10') ||
             str_contains($clean, '10kg') || str_contains($clean, '10 kg') ||
+            str_contains($clean, 'setengah') || str_contains($clean, 'separuh') ||
+            str_contains($clean, '1/2') ||
             preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b10(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $clean)
         ) {
             return '10kg';

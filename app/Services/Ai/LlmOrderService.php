@@ -151,15 +151,16 @@ ATURAN EKSTRAKSI SLOT:
    - "unknown_ukuran": boolean true jika pelanggan menyebutkan ukuran es selain 20kg/15kg/10kg (misalnya "yang 5", "5kg", "ukuran 5").
 
 2. Aturan Angka & Ukuran:
-   - Jika pelanggan menyebut jumlah 'setengah', '1/2', atau 'separuh', tetapkan nilai jumlah_ball menjadi 0.5.
-   - Jika AWAITING = "qty", angka tunggal (contoh: "3", "lima", "setengah", "0.5") = jumlah_ball.
+   - Istilah "setengah ball", "separuh ball", "1/2 ball" MERUJUK PADA PRODUK UKURAN "10kg" (karena 1 ball standar pabrik = 20kg, sehingga setengah ball adalah karung ukuran 10kg). Set "ukuran_produk": "10kg".
+   - Kuantitas jumlah_ball untuk "setengah ball": default 1 (contoh: "pesan setengah ball" = 1 ball ukuran 10kg). Jika ada angka pengali (contoh: "setengah ball 2" atau "2 setengah ball"), set "jumlah_ball": 2 dan "ukuran_produk": "10kg".
+   - Jika AWAITING = "qty", angka tunggal (contoh: "3", "lima", "setengah") = kuantitas.
    - Jika AWAITING = "ukuran", angka (contoh: "20", "15", "10", "19") = ukuran_produk.
    - Pola "N ball/karung/sak/biji" = jumlah_ball.
    - PENTING (KUANTITAS): DILARANG mengasumsikan jumlah_ball = 1 jika pelanggan tidak menyebutkan angka atau kata kuantitas ("1", "satu", "sebiji", "setengah", "0.5"). Jika pelanggan hanya menyebut ukuran (contoh: "es 20kg", "yg 19rb", "pesan es 10"), tetapkan "jumlah_ball": null.
    - Pemetaan ukuran resmi:
      * "19", "19rb", "19k", "yang 19", "20kg", "20", "20rb", "20ribu", "yang 20", "yang 20ribu" -> "20kg".
      * "15", "15rb", "15k", "yang 15", "15kg", "15rb", "15ribu" -> "15kg".
-     * "10", "10rb", "10k", "yang 10", "10kg", "10rb", "10ribu" -> "10kg".
+     * "10", "10rb", "10k", "yang 10", "10kg", "10rb", "10ribu", "setengah", "setengah ball", "1/2 ball", "separuh" -> "10kg".
      * Jika ukuran tidak disebut sama sekali dan pelanggan memesan es, default "20kg".
      * Jika pelanggan menyebut ukuran di luar 20/15/10 (contoh: "yang 5"), set "ukuran_produk": null dan "unknown_ukuran": true. JANGAN PERNAH memetakan ukuran 5kg!
 
@@ -263,6 +264,8 @@ PROMPT;
         // Penegakan ukuran produk: HANYA 20kg, 15kg, 10kg
         $ukuran = null;
         if (!$unknownUkuran) {
+            $isSetengah = (bool) preg_match('/(?:^|\b)(?:setengah|separuh|1\/2)\b/i', $textLower);
+
             if (
                 preg_match('/(?:^|\D)(?:20|19)(?:rb|k|ribu)?(?:\D|$)/i', $textLower) ||
                 str_contains($textLower, 'yang 20') || str_contains($textLower, 'yg 20') ||
@@ -279,7 +282,8 @@ PROMPT;
             } elseif (
                 preg_match('/(?:^|\D)10(?:rb|k|ribu)?(?:\D|$)/i', $textLower) ||
                 str_contains($textLower, 'yang 10') || str_contains($textLower, 'yg 10') ||
-                str_contains($textLower, '10kg') || str_contains($textLower, '10 kg')
+                str_contains($textLower, '10kg') || str_contains($textLower, '10 kg') ||
+                $isSetengah
             ) {
                 $ukuran = '10kg';
             } else {
@@ -290,13 +294,24 @@ PROMPT;
             }
         }
 
-        // Jumlah ball (mendukung bilangan bulat dan desimal seperti 0.5 untuk setengah ball)
+        // Jumlah ball: Untuk 'setengah ball', 1 ball = 1 karung 10kg
         $jumlahBall = null;
-        if (preg_match('/(?:^|\b)(?:setengah|separuh|1\/2|0[,.]5)\s*(?:ball|karung|sak|bungkus|pack|biji)?(?:\b|$)/i', $textLower)) {
-            $jumlahBall = 0.5;
+        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:setengah|separuh|1\/2)\s*(?:ball|karung|sak|bungkus|pack|biji)?/i', $textLower, $sm)) {
+            $val = (float) str_replace(',', '.', $sm[1]);
+            $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+        } elseif (preg_match('/(?:setengah|separuh|1\/2)\s*(?:ball|karung|sak|bungkus|pack|biji)?\s*(\d+(?:[.,]\d+)?)/i', $textLower, $sm)) {
+            $val = (float) str_replace(',', '.', $sm[1]);
+            $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+        } elseif (preg_match('/(?:^|\b)(?:setengah|separuh|1\/2)\s*(?:ball|karung|sak|bungkus|pack|biji)?(?:\b|$)/i', $textLower)) {
+            $jumlahBall = 1;
         } elseif (!empty($parsed['jumlah_ball']) && (float) $parsed['jumlah_ball'] > 0) {
             $val = (float) $parsed['jumlah_ball'];
-            $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+            // Jika LLM mengekstrak 0.5 untuk setengah ball, normalkan ke 1 karung
+            if ($val == 0.5 && $ukuran === '10kg') {
+                $jumlahBall = 1;
+            } else {
+                $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+            }
         } elseif ($awaiting === 'qty' && preg_match('/^\s*(\d+(?:[.,]\d+)?)\s*$/', $textLower, $qm)) {
             $val = (float) str_replace(',', '.', $qm[1]);
             $jumlahBall = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
@@ -356,12 +371,13 @@ PROMPT;
         // HATI-HATI: Angka 10/15/19 yang didahului kata "jam" atau diikuti "ball/karung/sak" BUKAN ukuran!
         $ukuran = null;
         if (!$unknownUkuran) {
+            $isSetengah = (bool) preg_match('/(?:^|\b)(?:setengah|separuh|1\/2)\b/i', $text);
             if ($awaiting === 'ukuran') {
                 if (preg_match('/(?:20|19)/', $text)) {
                     $ukuran = '20kg';
                 } elseif (str_contains($text, '15')) {
                     $ukuran = '15kg';
-                } elseif (str_contains($text, '10')) {
+                } elseif (str_contains($text, '10') || $isSetengah) {
                     $ukuran = '10kg';
                 }
             } else {
@@ -381,17 +397,24 @@ PROMPT;
                 } elseif (
                     str_contains($text, 'yang 10') || str_contains($text, 'yg 10') ||
                     str_contains($text, '10kg') || str_contains($text, '10 kg') ||
-                    preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b10(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $text)
+                    preg_match('/(?<!jam\s)(?<!jam\s0)(?<!jam\s1)\b10(?:rb|k|ribu)?\b(?!\s*(?:ball|karung|sak))/i', $text) ||
+                    $isSetengah
                 ) {
                     $ukuran = '10kg';
                 }
             }
         }
 
-        // 3. Deteksi Jumlah Ball (mendukung desimal dan setengah ball)
+        // 3. Deteksi Jumlah Ball (mendukung setengah ball = 10kg)
         $jumlah = null;
-        if (preg_match('/(?:^|\b)(?:setengah|separuh|1\/2|0[,.]5)\s*(?:ball|karung|sak|bungkus|pack|biji)?(?:\b|$)/i', $text)) {
-            $jumlah = 0.5;
+        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:setengah|separuh|1\/2)\s*(?:ball|karung|sak|bungkus|pack|biji)?/i', $text, $sm)) {
+            $val = (float) str_replace(',', '.', $sm[1]);
+            $jumlah = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+        } elseif (preg_match('/(?:setengah|separuh|1\/2)\s*(?:ball|karung|sak|bungkus|pack|biji)?\s*(\d+(?:[.,]\d+)?)/i', $text, $sm)) {
+            $val = (float) str_replace(',', '.', $sm[1]);
+            $jumlah = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
+        } elseif (preg_match('/(?:^|\b)(?:setengah|separuh|1\/2)\s*(?:ball|karung|sak|bungkus|pack|biji)?(?:\b|$)/i', $text)) {
+            $jumlah = 1;
         } elseif ($awaiting === 'qty' && preg_match('/^\s*(\d+(?:[.,]\d+)?)\s*$/', $text, $qm)) {
             $val = (float) str_replace(',', '.', $qm[1]);
             $jumlah = (fmod($val, 1.0) === 0.0) ? (int) $val : round($val, 2);
