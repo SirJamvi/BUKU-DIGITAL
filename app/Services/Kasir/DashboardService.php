@@ -22,7 +22,7 @@ class DashboardService
             $todayStart = $today->copy()->startOfDay();
             $todayEnd = $today->copy()->endOfDay();
             $todayDate = $today->toDateString();
-            $businessId = Auth::user()->business_id;
+            $businessId = Auth::user()?->business_id ?? (\App\Models\User::find($kasirId)?->business_id);
             $branchId = app(\App\Support\BranchContext::class)->getBranchId();
 
             // Modal Awal Laci (Kas Kemarin)

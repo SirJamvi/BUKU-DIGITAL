@@ -1,4 +1,4 @@
-@if ($errors->any())
+@if (isset($errors) && $errors->any())
     <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <div class="fw-bold mb-1"><i class="fas fa-exclamation-triangle me-1"></i> Perhatian:</div>
         <ul class="mb-0 ps-3">

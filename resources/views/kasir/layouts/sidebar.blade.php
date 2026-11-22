@@ -27,7 +27,7 @@
                 <i class="fas fa-user-circle"></i>
             </div>
             <div class="user-details">
-                <div class="user-name">{{ Auth::user()->name }}</div>
+                <div class="user-name">{{ Auth::user()->name ?? 'Kasir' }}</div>
                 <div class="user-role">Kasir</div>
             </div>
         </div>

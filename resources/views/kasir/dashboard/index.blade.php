@@ -10,7 +10,7 @@
 <div class="container-fluid">
     {{-- Salam Pembuka --}}
     <div class="mb-4">
-        <h3 class="fw-bold">Selamat Datang, {{ Auth::user()->name }}!</h3>
+        <h3 class="fw-bold">Selamat Datang, {{ Auth::user()->name ?? 'Kasir' }}!</h3>
         <p class="text-muted">Berikut adalah ringkasan aktivitas penjualan Anda hari ini.</p>
     </div>
 
