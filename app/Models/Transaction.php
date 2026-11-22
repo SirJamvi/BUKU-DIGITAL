@@ -113,4 +113,12 @@ class Transaction extends Model
     {
         return $this->belongsTo(User::class, 'proof_verified_by');
     }
+
+    /**
+     * Izinkan penemuan model transaksi lintas cabang dalam 1 tenant bisnis pada route model binding.
+     */
+    public function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        return $query->withoutGlobalScope('branch')->where($field ?? $this->getRouteKeyName(), $value);
+    }
 }

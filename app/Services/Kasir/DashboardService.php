@@ -182,7 +182,9 @@ class DashboardService
                 ->get();
 
             // 5. Ambil Kasbon yang Belum Lunas & Grouping Berdasarkan Pelanggan (Kecualikan yang sedang dibawa driver)
-            $pendingKasbonQuery = Transaction::with(['customer', 'createdBy', 'driver', 'details.product'])
+            // Kasbon disatukan untuk semua cabang dalam 1 bisnis (lintas cabang) dengan eager load 'branch'
+            $pendingKasbonQuery = Transaction::withoutGlobalScope('branch')
+                ->with(['customer', 'createdBy', 'driver', 'details.product', 'branch'])
                 ->where('business_id', $businessId)
                 ->where('type', 'sale')
                 ->where('payment_status', 'pending')
@@ -196,9 +198,6 @@ class DashboardService
                 })
                 ->orderBy('transaction_date', 'asc');
 
-            if ($branchId) {
-                $pendingKasbonQuery->where('branch_id', $branchId);
-            }
             $pendingKasbonRaw = $pendingKasbonQuery->get();
 
             $kasbonByCustomer = $pendingKasbonRaw->groupBy(function ($item) {

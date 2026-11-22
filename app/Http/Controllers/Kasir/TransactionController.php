@@ -64,10 +64,6 @@ class TransactionController extends Controller
         }
 
         $activeBranchId = app(\App\Support\BranchContext::class)->requireBranchId();
-        if ((int) $transaction->branch_id !== (int) $activeBranchId) {
-            abort(404, 'Transaksi ini bukan milik cabang aktif Anda.');
-        }
-
         $isCash = strtolower($request->payment_method ?? '') === 'cash';
 
         $request->validate([
@@ -96,6 +92,9 @@ class TransactionController extends Controller
                 ? \Carbon\Carbon::parse($transaction->transaction_date)->startOfDay()
                 : now();
 
+            $originBranchName = $transaction->branch ? $transaction->branch->name : 'Cabang Asal';
+            $isCrossBranch = ((int) $transaction->branch_id !== (int) $activeBranchId);
+
             // 1. Update status transaksi
             $txUpdate = [
                 'payment_status' => 'paid',
@@ -106,14 +105,24 @@ class TransactionController extends Controller
             }
             $transaction->update($txUpdate);
 
-            if ($request->filled('settlement_notes')) {
-                $transaction->update([
-                    'notes' => ($transaction->notes ? $transaction->notes . ' | ' : '') . '[Pelunasan: ' . $request->settlement_notes . ']'
-                ]);
+            $notesPrefix = '[Pelunasan di ' . ($user->branch->name ?? 'Cabang Kasir');
+            if ($isCrossBranch) {
+                $notesPrefix .= ' (Nota Asal: ' . $originBranchName . ')';
             }
+            if ($request->filled('settlement_notes')) {
+                $notesPrefix .= ' - ' . $request->settlement_notes;
+            }
+            $notesPrefix .= ']';
+
+            $transaction->update([
+                'notes' => ($transaction->notes ? $transaction->notes . ' | ' : '') . $notesPrefix
+            ]);
 
             // 2. Catat ke CashFlow (dengan alokasi tanggal pembukuan yang dipilih kasir)
             $desc = 'Pelunasan Transaksi Kasbon #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT);
+            if ($isCrossBranch) {
+                $desc .= ' [Asal: ' . $originBranchName . ']';
+            }
             if ($request->filled('settlement_notes')) {
                 $desc .= ' (' . $request->settlement_notes . ')';
             }
@@ -133,7 +142,7 @@ class TransactionController extends Controller
 
             \App\Models\CashFlow::create([
                 'business_id'    => $transaction->business_id,
-                'branch_id'      => $activeBranchId,
+                'branch_id'      => $activeBranchId, // Dicatat pada cabang kasir penerima dana
                 'type'           => 'income',
                 'category_id'    => 1,
                 'payment_method' => $request->payment_method,
@@ -145,6 +154,14 @@ class TransactionController extends Controller
                 'reference_id'   => $transaction->id,
                 'created_by'     => $creatorId,
             ]);
+
+            // Tambahkan akumulasi belanja customer
+            if ($transaction->customer_id) {
+                $customer = \App\Models\Customer::find($transaction->customer_id);
+                if ($customer) {
+                    $customer->increment('total_purchases', $transaction->total_amount);
+                }
+            }
 
             \App\Support\BranchCache::flush($transaction->business_id);
 
@@ -208,15 +225,16 @@ class TransactionController extends Controller
         $businessId = Auth::user()->business_id;
         $transactionIds = $request->transaction_ids;
 
-        // Pastikan transaksi yang diubah benar-benar milik toko dan cabang aktif ini dan statusnya masih pending
-        $transactions = Transaction::whereIn('id', $transactionIds)
+        // Pastikan transaksi yang diubah benar-benar milik bisnis ini dan statusnya masih pending (lintas cabang diizinkan)
+        $transactions = Transaction::withoutGlobalScope('branch')
+            ->with(['branch', 'customer'])
+            ->whereIn('id', $transactionIds)
             ->where('business_id', $businessId)
-            ->where('branch_id', $activeBranchId)
             ->where('payment_status', 'pending')
             ->get();
 
         if ($transactions->count() !== count($transactionIds)) {
-            abort(404, 'Satu atau lebih transaksi bukan milik cabang aktif Anda atau sudah lunas.');
+            abort(404, 'Satu atau lebih transaksi bukan milik bisnis Anda atau sudah lunas.');
         }
 
         try {
@@ -245,14 +263,30 @@ class TransactionController extends Controller
                 }
                 $transaction->update($txUpdate);
 
-                if ($request->filled('settlement_notes')) {
-                    $transaction->update([
-                        'notes' => ($transaction->notes ? $transaction->notes . ' | ' : '') . '[Pelunasan: ' . $request->settlement_notes . ']'
-                    ]);
+                $originBranchName = $transaction->branch ? $transaction->branch->name : 'Cabang Asal';
+                $isCrossBranch = ((int) $transaction->branch_id !== (int) $activeBranchId);
+
+                // Keterangan audit trail pelunasan
+                $notesPrefix = '[Pelunasan di ' . (Auth::user()->branch->name ?? 'Cabang Kasir');
+                if ($isCrossBranch) {
+                    $notesPrefix .= ' (Nota Asal: ' . $originBranchName . ')';
                 }
+                if ($request->filled('settlement_notes')) {
+                    $notesPrefix .= ' - ' . $request->settlement_notes;
+                }
+                $notesPrefix .= ']';
+
+                $transaction->update([
+                    'notes' => ($transaction->notes ? $transaction->notes . ' | ' : '') . $notesPrefix
+                ]);
 
                 // 2. Catat ke CashFlow untuk setiap transaksi agar laporan tercatat rapi
+                // PENTING: Dicatat di branch_id kasir aktif yang menerima pembayaran ($activeBranchId)
+                // sehingga uang fisik laci kasir (myNetCashToday) bertambah di kasir penerima!
                 $desc = 'Pelunasan Kasbon (Bulk) #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT);
+                if ($isCrossBranch) {
+                    $desc .= ' [Asal: ' . $originBranchName . ']';
+                }
                 if ($request->filled('settlement_notes')) {
                     $desc .= ' (' . $request->settlement_notes . ')';
                 }
@@ -262,7 +296,7 @@ class TransactionController extends Controller
 
                 \App\Models\CashFlow::create([
                     'business_id'    => $transaction->business_id,
-                    'branch_id'      => $activeBranchId,
+                    'branch_id'      => $activeBranchId, // Laci kasir penerima
                     'type'           => 'income',
                     'category_id'    => 1,
                     'payment_method' => $request->payment_method,
@@ -274,6 +308,14 @@ class TransactionController extends Controller
                     'reference_id'   => $transaction->id,
                     'created_by'     => Auth::id(),
                 ]);
+
+                // Tambahkan akumulasi belanja customer
+                if ($transaction->customer_id) {
+                    $customer = \App\Models\Customer::find($transaction->customer_id);
+                    if ($customer) {
+                        $customer->increment('total_purchases', $transaction->total_amount);
+                    }
+                }
             }
 
             DB::commit();

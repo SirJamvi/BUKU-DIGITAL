@@ -106,10 +106,13 @@
     <div class="card border-danger mb-4 shadow-sm">
         <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center py-3">
             <div>
-                <h6 class="mb-0 fw-bold">
-                    <i class="fas fa-exclamation-triangle me-2"></i> RINGKASAN PIUTANG KASBON AKTIF
+                <h6 class="mb-0 fw-bold d-flex align-items-center flex-wrap gap-2">
+                    <span><i class="fas fa-exclamation-triangle me-1"></i> RINGKASAN PIUTANG KASBON AKTIF</span>
+                    <span class="badge bg-white text-danger fw-bold shadow-sm" style="font-size: 0.75rem;">
+                        <i class="fas fa-store me-1"></i>Gabungan Semua Cabang
+                    </span>
                 </h6>
-                <small class="opacity-75">Terdapat {{ $totalKasbonCount }} struk tertunda dari {{ $kasbonByCustomer->count() }} pelanggan / mitra.</small>
+                <small class="opacity-75">Terdapat {{ $totalKasbonCount }} struk tertunda dari {{ $kasbonByCustomer->count() }} pelanggan / mitra dalam bisnis ini.</small>
             </div>
             <div class="text-end">
                 <span class="d-block text-white-50 small" style="font-size: 0.75rem;">Total Seluruh Tagihan:</span>
@@ -136,12 +139,22 @@
                         $totalTagihanCust = $transactions->sum('total_amount');
                         $oldestDate = $firstTx->transaction_date;
                         $modalId = 'modalGroup_' . $groupKey;
+                        $branchesInGroup = $transactions->pluck('branch.name')->filter()->unique();
                         @endphp
                         <tr>
                             <td class="ps-3">
                                 <span class="fw-bold fs-6 text-dark">{{ $customerName }}</span>
                                 @if($firstTx->customer && $firstTx->customer->phone)
                                 <br><small class="text-muted"><i class="fab fa-whatsapp text-success small me-1"></i>{{ $firstTx->customer->phone }}</small>
+                                @endif
+                                @if($branchesInGroup->isNotEmpty())
+                                <div class="mt-1 d-flex flex-wrap gap-1">
+                                    @foreach($branchesInGroup as $bName)
+                                    <span class="badge bg-light text-dark border" style="font-size: 0.68rem;">
+                                        <i class="fas fa-building text-primary me-1"></i>{{ $bName }}
+                                    </span>
+                                    @endforeach
+                                </div>
                                 @endif
                             </td>
                             <td class="text-center">
@@ -532,6 +545,7 @@ $modalId = 'modalGroup_' . $groupKey;
                                         <input class="form-check-input select-all-btn" type="checkbox" data-target=".chk-{{ $groupKey }}" style="transform: scale(1.2);">
                                     </th>
                                     <th>No. Struk</th>
+                                    <th>Cabang</th>
                                     <th>Tanggal Order</th>
                                     <th>Kasir</th>
                                     <th>Catatan</th>
@@ -540,6 +554,9 @@ $modalId = 'modalGroup_' . $groupKey;
                             </thead>
                             <tbody>
                                 @foreach($transactions as $kasbon)
+                                @php
+                                    $isMyBranch = (int) $kasbon->branch_id === (int) (auth()->user()->branch_id ?? 0);
+                                @endphp
                                 <tr>
                                     <td class="ps-3">
                                         {{-- Checkbox Individual --}}
@@ -547,6 +564,11 @@ $modalId = 'modalGroup_' . $groupKey;
                                     </td>
                                     <td class="fw-bold text-primary">
                                         #{{ str_pad($kasbon->id, 6, '0', STR_PAD_LEFT) }}
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ $isMyBranch ? 'bg-primary-subtle text-primary border border-primary' : 'bg-warning-subtle text-dark border border-warning' }}" style="font-size: 0.72rem;">
+                                            <i class="fas fa-store me-1"></i>{{ $kasbon->branch->name ?? 'Cabang Asal' }}
+                                        </span>
                                     </td>
                                     <td>
                                         <span>{{ $kasbon->transaction_date->format('d/m/Y') }}</span><br>
@@ -845,7 +867,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <span>{{ $t->transaction_date->format('d/m/Y H:i') }}</span>
                             </div>
                             <div class="text-muted" style="font-size: 8pt; padding-left: 10px;">
-                                Kasir: <strong>{{ $t->createdBy->name ?? 'Kasir' }}</strong>
+                                @if($t->branch) Cabang: <strong>{{ $t->branch->name }}</strong> | @endif Kasir: <strong>{{ $t->createdBy->name ?? 'Kasir' }}</strong>
                                 @if($t->driver) | Driver: {{ $t->driver->name }} @endif
                             </div>
                             @if($t->details && $t->details->isNotEmpty())
@@ -929,6 +951,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 {
                     id: '{{ str_pad($tx->id, 6, "0", STR_PAD_LEFT) }}',
                     date: '{{ $tx->transaction_date->format("d/m/Y H:i") }}',
+                    branch: @json($tx->branch->name ?? ''),
                     cashier: @json($tx->createdBy->name ?? 'Kasir'),
                     amount: {{ $tx->total_amount }},
                     notes: @json($tx->notes ?? ''),
@@ -1130,6 +1153,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         data.items.forEach((item, idx) => {
             msg += `${idx + 1}. *Struk #${item.id}* (${item.date})\n`;
+            if (item.branch) {
+                msg += `   Cabang: ${item.branch}\n`;
+            }
             if (item.cashier) {
                 msg += `   Kasir: ${item.cashier}\n`;
             }
