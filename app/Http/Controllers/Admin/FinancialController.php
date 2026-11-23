@@ -103,6 +103,7 @@ class FinancialController extends Controller
             
             // [BARU] Validasi Payment Method: Wajib diisi & harus ada di kolom 'slug' tabel payment_methods
             'payment_method' => 'required|exists:payment_methods,slug',
+            'funding_source' => 'nullable|string|in:drawer,external',
             'receipt_image'  => 'nullable|file|mimes:jpeg,png,jpg,webp,pdf|max:10240',
         ]);
         
@@ -383,6 +384,7 @@ class FinancialController extends Controller
             
             // [BARU] Validasi Payment Method: Wajib diisi & harus ada di kolom 'slug' tabel payment_methods
             'payment_method' => 'required|exists:payment_methods,slug',
+            'funding_source' => 'nullable|string|in:drawer,external',
         ]);
 
         $this->financialService->updateExpense($expense, $request->all());

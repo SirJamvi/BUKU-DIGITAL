@@ -84,12 +84,20 @@ class TransactionService
     }
 
     /**
-     * Menghapus transaksi secara permanen beserta pengembalian stok, kas, dan poin.
+     * Membatalkan transaksi (Soft Void) beserta pemulihan stok dan pencatatan contra-entry pada cash flow.
+     * Mencegah pembatalan destruktif dan mengunci transaksi jika periode bulanan sudah ditutup.
      */
-    public function deleteTransaction(Transaction $transaction): bool
+    public function deleteTransaction(Transaction $transaction, ?string $reason = null): bool
     {
-        return DB::transaction(function () use ($transaction) {
-            // 1. Rollback Stok (Kembalikan stok ke inventori)
+        // Kunci periode pembukuan bulanan
+        \App\Services\Accounting\AccountingPeriodGuard::ensurePeriodOpen(
+            (int) $transaction->business_id,
+            $transaction->branch_id ? (int) $transaction->branch_id : null,
+            $transaction->transaction_date
+        );
+
+        return DB::transaction(function () use ($transaction, $reason) {
+            // 1. Rollback Stok (Kembalikan stok ke inventori dengan tipe void_return)
             foreach ($transaction->details as $detail) {
                 $inventoryQuery = Inventory::where('product_id', $detail->product_id)
                     ->where('business_id', $transaction->business_id);
@@ -104,15 +112,14 @@ class TransactionService
                     $inventory->current_stock += $qtyModifier;
                     $inventory->save();
 
-                    // Perbaikan: Gunakan Auth::id() menggantikan auth()->id()
                     StockMovement::create([
                         'business_id'  => $transaction->business_id,
                         'branch_id'    => $transaction->branch_id,
                         'product_id'   => $detail->product_id,
-                        'type'         => 'adjustment',
+                        'type'         => 'void_return',
                         'quantity'     => $qtyModifier,
-                        'reference_id' => 'CANCEL-TX-' . $transaction->id,
-                        'notes'        => 'Pembatalan & Hapus transaksi #' . $transaction->id,
+                        'reference_id' => 'VOID-TX-' . $transaction->id,
+                        'notes'        => 'Pembatalan & Void transaksi #' . $transaction->id . ($reason ? ": {$reason}" : ''),
                         'created_by'   => Auth::id(), 
                     ]);
                 }
@@ -126,23 +133,52 @@ class TransactionService
                     if ($customer->loyalty_points < 0) $customer->loyalty_points = 0; 
                     $customer->save();
 
-                    // Perbaikan: Gunakan DB::table karena model PointLog belum ada
                     DB::table('point_logs')
                         ->where('transaction_id', $transaction->id)
                         ->delete();
                 }
             }
 
-            // 3. Hapus Arus Kas (Cash Flow) yang terikat dengan transaksi ini
-            CashFlow::where('business_id', $transaction->business_id)
-                ->where(function ($q) use ($transaction) {
-                    $q->where('reference_id', (string) $transaction->id)
-                      ->orWhere('reference_id', 'TX-' . $transaction->id);
-                })
-                ->delete();
+            // 3. JANGAN HAPUS record cash_flow lama!
+            // Jika transaksi pernah menghasilkan penerimaan kas / non-tunai, buat jurnal pembalik (contra-entry)
+            $isPaid = $transaction->payment_status === 'paid';
+            if ($isPaid && (float) $transaction->total_amount > 0) {
+                $isCash = strtolower($transaction->payment_method ?? '') === 'cash';
+                $refundCategory = \App\Models\ExpenseCategory::where('business_id', $transaction->business_id)
+                    ->where(function ($q) {
+                        $q->where('name', 'LIKE', '%Refund%')
+                          ->orWhere('name', 'LIKE', '%Retur%')
+                          ->orWhere('name', 'LIKE', '%Pembatalan%');
+                    })
+                    ->first();
 
-            // 4. Hapus Data Transaksi
-            $transaction->delete();
+                $categoryId = $refundCategory?->id ?? 1;
+
+                CashFlow::create([
+                    'business_id'    => $transaction->business_id,
+                    'branch_id'      => $transaction->branch_id,
+                    'type'           => 'expense',
+                    'flow_type'      => 'cash_refund',
+                    'reference_type' => 'transaction',
+                    'reference_id'   => (string) $transaction->id,
+                    'category_id'    => $categoryId,
+                    'amount'         => $transaction->total_amount,
+                    'payment_method' => $transaction->payment_method ?: 'cash',
+                    'funding_source' => $isCash ? 'drawer' : 'owner',
+                    'affects_drawer' => $isCash ? 1 : 0,
+                    'description'    => "Pembatalan / Void Transaksi #{$transaction->id}" . ($reason ? ": {$reason}" : ''),
+                    'date'           => now()->toDateString(),
+                    'created_by'     => Auth::id(),
+                ]);
+            }
+
+            // 4. Soft Void: Set status cancelled dan isi audit trail
+            $transaction->update([
+                'status'      => 'cancelled',
+                'void_reason' => $reason ?: 'Dibatalkan oleh Admin',
+                'voided_by'   => Auth::id(),
+                'voided_at'   => now(),
+            ]);
 
             return true;
         });

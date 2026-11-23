@@ -85,6 +85,29 @@
 
 
             
+            {{-- ======================================================= --}}
+            {{-- SUMBER DANA PENGELUARAN --}}
+            {{-- ======================================================= --}}
+            <div class="form-group mb-3">
+                <label class="form-label d-block fw-bold">Sumber Dana Pengeluaran <span class="text-danger">*</span></label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_drawer" value="drawer" {{ old('funding_source', 'drawer') === 'drawer' ? 'checked' : '' }}>
+                    <label class="form-check-label text-danger fw-semibold" for="exp_funding_drawer">
+                        <i class="bi bi-wallet2 me-1"></i> Kas Laci Kasir (Potong Fisik Laci)
+                    </label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_external" value="external" {{ old('funding_source') === 'external' ? 'checked' : '' }}>
+                    <label class="form-check-label text-success fw-semibold" for="exp_funding_external">
+                        <i class="bi bi-bank me-1"></i> Uang Bos / Eksternal (Tidak Potong Laci)
+                    </label>
+                </div>
+                <div class="form-text text-muted" id="funding_source_hint">
+                    Gunakan <strong>Uang Bos / Eksternal</strong> untuk gaji karyawan atau operasional yang tidak diambil dari uang kas fisik laci kasir.
+                </div>
+            </div>
+            {{-- ======================================================= --}}
+
             <x-input type="number" name="amount" label="Jumlah (Rp)" placeholder="Masukkan jumlah pengeluaran" required />
             <x-input type="date" name="date" label="Tanggal Pengeluaran" :value="now()->toDateString()" required />
             <x-input type="textarea" name="description" label="Deskripsi" placeholder="Contoh: Pembelian bahan baku dari Supplier X" required />
@@ -103,6 +126,21 @@
         const newCategoryName = document.getElementById('new_category_name');
         const form = document.querySelector('form');
 
+        function checkSalaryCategory(categoryText) {
+            const isSalary = /gaji|salary|payroll/i.test(categoryText || '');
+            const externalRadio = document.getElementById('exp_funding_external');
+            const drawerRadio = document.getElementById('exp_funding_drawer');
+            const hint = document.getElementById('funding_source_hint');
+            if (isSalary && externalRadio) {
+                externalRadio.checked = true;
+                if (hint) {
+                    hint.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-info-circle me-1"></i>Kategori Gaji otomatis dialokasikan ke Uang Bos / Eksternal (tidak memotong kas laci kasir).</span>';
+                }
+            } else if (hint) {
+                hint.innerHTML = 'Gunakan <strong>Uang Bos / Eksternal</strong> untuk gaji karyawan atau operasional yang tidak diambil dari uang kas fisik laci kasir.';
+            }
+        }
+
         // 1. Event ketika select kategori berubah
         categorySelect.addEventListener('change', function() {
             if (this.value === 'new') {
@@ -117,8 +155,15 @@
                 newCategoryInput.style.display = 'none';
                 newCategoryName.required = false;
                 newCategoryName.value = '';
+                checkSalaryCategory(this.value);
             }
         });
+
+        if (newCategoryName) {
+            newCategoryName.addEventListener('input', function() {
+                checkSalaryCategory(this.value);
+            });
+        }
 
         // 2. Event ketika form di-submit
         form.addEventListener('submit', function(e) {

@@ -145,13 +145,15 @@ class InventoryController extends Controller
 
                 // Catat ke Cash Flow jika dicentang
                 if ($request->has('record_expense') && $request->record_expense == 1) {
+                    \App\Services\Accounting\AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, now());
+
                     $expenseCategory = ExpenseCategory::firstOrCreate(
                         ['business_id' => $businessId, 'name' => 'Refill Es Batu'],
-                        ['type' => 'Operasional', 'is_cogs' => 1, 'is_active' => 1]
+                        ['type' => 'Operasional', 'category_type' => 'HPP', 'is_cogs' => 1, 'is_active' => 1]
                     );
 
                     if (!$expenseCategory->is_cogs) {
-                        $expenseCategory->update(['is_cogs' => 1]);
+                        $expenseCategory->update(['is_cogs' => 1, 'category_type' => 'HPP']);
                     }
 
                     $fundingSource = $request->input('funding_source', 'drawer');
@@ -161,6 +163,8 @@ class InventoryController extends Controller
                         'business_id'    => $businessId,
                         'branch_id'      => $branchId,
                         'type'           => 'expense',
+                        'flow_type'      => 'stock_purchase',
+                        'reference_type' => 'manual',
                         'category_id'    => $expenseCategory->id, 
                         'amount'         => $grandTotalExpense,
                         'payment_method' => $request->payment_method,

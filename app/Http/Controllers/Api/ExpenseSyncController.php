@@ -82,18 +82,25 @@ class ExpenseSyncController extends Controller
             }
 
             // 6. Siapkan Payload Insert
+            // Kebijakan Operasional: Gaji karyawan dibayarkan menggunakan dana eksternal / rekening bos setiap tgl 15 dan 30,
+            // sehingga tetap tercatat sebagai beban operasional di laporan keuangan, namun TIDAK MEMOTONG uang fisik kas di laci kasir real-time.
             $insertData = [
-                'business_id'  => $businessId,
-                'branch_id'    => $branchId,
-                'type'         => 'expense',
-                'category_id'  => $categoryId,
-                'amount'       => $request->amount,
-                'description'  => $request->description,
-                'date'         => $request->date,
-                'reference_id' => $referenceId,
-                'created_by'   => $request->user_id,
-                'created_at'   => now(),
-                'updated_at'   => now(),
+                'business_id'    => $businessId,
+                'branch_id'      => $branchId,
+                'type'           => 'expense',
+                'flow_type'      => 'salary_external',
+                'category_id'    => $categoryId,
+                'amount'         => $request->amount,
+                'description'    => $request->description,
+                'date'           => $request->date,
+                'reference_id'   => $referenceId,
+                'reference_type' => 'attendance_salary',
+                'payment_method' => 'transfer',
+                'funding_source' => 'external',
+                'affects_drawer' => 0,
+                'created_by'     => $request->user_id,
+                'created_at'     => now(),
+                'updated_at'     => now(),
             ];
 
             // Tulis is_cogs jika kolom sudah ada di database

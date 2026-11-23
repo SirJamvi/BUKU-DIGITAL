@@ -23,6 +23,9 @@ class Transaction extends Model
         'delivery_trip_code',
         'total_amount',
         'payment_method',
+        'initial_payment_method',
+        'settlement_payment_method',
+        'settled_at',
         'payment_status',
         'delivery_status',
         'order_status',
@@ -30,6 +33,9 @@ class Transaction extends Model
         'delivered_at',
         'transaction_date',
         'notes',
+        'void_reason',
+        'voided_by',
+        'voided_at',
         'created_by',
         'payment_proof',
         'proof_verified_at',
@@ -39,6 +45,8 @@ class Transaction extends Model
     protected $casts = [
         'transaction_date' => 'datetime',
         'delivered_at' => 'datetime',
+        'settled_at' => 'datetime',
+        'voided_at' => 'datetime',
         'proof_verified_at' => 'datetime',
     ];
 

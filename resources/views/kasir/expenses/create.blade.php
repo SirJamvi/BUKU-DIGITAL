@@ -245,6 +245,13 @@
             }
         }
 
+        function checkSalaryForKasir(text) {
+            if (/gaji|salary|payroll/i.test(text || '')) {
+                const ext = document.getElementById('exp_funding_external');
+                if (ext) ext.checked = true;
+            }
+        }
+
         if (categorySelect && newCatSection) {
             categorySelect.addEventListener('change', function() {
                 if (this.value === '__NEW__') {
@@ -260,12 +267,16 @@
                         newCatName.removeAttribute('required');
                     }
                     if (categoryFeedback) categoryFeedback.innerHTML = '';
+                    checkSalaryForKasir(this.options[this.selectedIndex]?.text || this.value);
                 }
             });
         }
 
         if (newCatName) {
-            newCatName.addEventListener('input', checkCategoryAnomaly);
+            newCatName.addEventListener('input', function() {
+                checkCategoryAnomaly();
+                checkSalaryForKasir(this.value);
+            });
         }
 
         const displayInput = document.getElementById('amount_display');

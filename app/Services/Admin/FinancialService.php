@@ -149,16 +149,21 @@ class FinancialService
         $this->applyDateFilters($cashFlowQuery, $filters, 'date');
         $cashFlows = $cashFlowQuery->latest('date')->get();
 
-        // Total beban operasional murni (is_cogs = 0)
+        // Total beban operasional murni (is_cogs = 0 & category_type = Operasional)
         $useCashflowIsCogs = (bool) config('accounting.use_cashflow_is_cogs', false);
         $totalExpense = $cashFlows->filter(function ($flow) use ($useCashflowIsCogs) {
             if ($flow->type !== 'expense') {
                 return false;
             }
-            if ($useCashflowIsCogs) {
-                return (int) ($flow->is_cogs ?? 0) === 0;
+            if (in_array($flow->flow_type, ['cash_handover', 'cash_refund', 'stock_purchase'])) {
+                return false;
             }
-            return $flow->category && (int) $flow->category->is_cogs === 0;
+            if ($useCashflowIsCogs && (int) ($flow->is_cogs ?? 0) !== 0) {
+                return false;
+            }
+            return $flow->category 
+                && (int) $flow->category->is_cogs === 0 
+                && ($flow->category->category_type ?? 'Operasional') === 'Operasional';
         })->sum('amount');
 
         $netProfit = $totalGrossProfit - $totalExpense;
@@ -311,20 +316,22 @@ class FinancialService
             $monthlyCogs = (float) $cogsResult['total_cogs'];
             $grossProfit = (float) $cogsResult['total_gross_profit'];
 
-            // Beban operasional murni (is_cogs = 0) cabang ini
+            // Beban operasional murni (is_cogs = 0 & category_type = Operasional) cabang ini
             $monthlyOpexQuery = CashFlow::withoutGlobalScope('branch')
                 ->where('business_id', $businessId)
                 ->where('branch_id', $branchId)
                 ->where('type', 'expense')
+                ->whereNotIn('flow_type', ['cash_handover', 'cash_refund', 'stock_purchase'])
                 ->whereBetween('date', [$startOfMonth, $endOfMonth]);
 
             if (config('accounting.use_cashflow_is_cogs', false)) {
                 $monthlyOpexQuery->where('is_cogs', 0);
-            } else {
-                $monthlyOpexQuery->whereHas('category', function ($q) {
-                    $q->where('is_cogs', 0);
-                });
             }
+
+            $monthlyOpexQuery->whereHas('category', function ($q) {
+                $q->where('is_cogs', 0)
+                  ->where('category_type', 'Operasional');
+            });
 
             $monthlyExpense = (float) $monthlyOpexQuery->sum('amount');
             $netProfit = $grossProfit - $monthlyExpense;
@@ -759,7 +766,15 @@ class FinancialService
             ]);
         }
 
-        $fundingSource = $data['funding_source'] ?? 'drawer';
+        $isSalary = (bool) preg_match('/gaji|salary|payroll/i', $rawCategoryName . ' ' . ($data['description'] ?? ''));
+
+        // SOP Operasional: Pengeluaran gaji karyawan dikeluarkan menggunakan dana bos/eksternal setiap tgl 15 dan 30,
+        // sehingga tetap tercatat sebagai beban operasional tetapi TIDAK MEMOTONG uang fisik kas di laci kasir secara real-time.
+        if ($isSalary && empty($data['funding_source'])) {
+            $fundingSource = 'external';
+        } else {
+            $fundingSource = $data['funding_source'] ?? 'drawer';
+        }
         $affectsDrawer = ($fundingSource === 'drawer');
 
         $expensePayload = [
@@ -817,9 +832,14 @@ class FinancialService
             'date'           => $data['date'],
         ];
 
+        $isSalary = (bool) preg_match('/gaji|salary|payroll/i', $rawCategoryName . ' ' . ($data['description'] ?? ''));
+
         if (isset($data['funding_source'])) {
             $updateData['funding_source'] = $data['funding_source'];
             $updateData['affects_drawer'] = ($data['funding_source'] === 'drawer');
+        } elseif ($isSalary) {
+            $updateData['funding_source'] = 'external';
+            $updateData['affects_drawer'] = false;
         }
 
         if (!empty($data['receipt_image'])) {
@@ -940,21 +960,40 @@ class FinancialService
     }
 
     /**
-     * Membangun base query beban operasional murni (is_cogs = 0).
+     * Membangun base query beban operasional murni (is_cogs = 0 & category_type = Operasional).
+     * Mengecualikan mutasi kas internal (cash_handover, cash_refund, stock_purchase).
      * Jika accounting.use_cashflow_is_cogs aktif, membaca langsung kolom cash_flow.is_cogs.
      * Jika tidak aktif (default), membaca relasi category.is_cogs.
      */
     private function basePureExpenseQuery(int $businessId)
     {
-        $query = CashFlow::where('business_id', $businessId)->where('type', 'expense');
+        $query = CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->whereNotIn('flow_type', ['cash_handover', 'cash_refund', 'stock_purchase']);
 
         if (config('accounting.use_cashflow_is_cogs', false)) {
-            return $query->where('is_cogs', 0);
+            $query->where('is_cogs', 0);
         }
 
         return $query->whereHas('category', function ($q) {
-            $q->where('is_cogs', 0);
+            $q->where('is_cogs', 0)
+              ->where('category_type', 'Operasional');
         });
+    }
+
+    /**
+     * Membuka kembali periode tutup buku bulanan cabang yang sudah selesai.
+     */
+    public function reopenBranchClosing(int $closingId, string $reason, int $reopenedBy): BranchMonthlyClosing
+    {
+        $closing = BranchMonthlyClosing::findOrFail($closingId);
+
+        $closing->update([
+            'status' => 'draft',
+            'notes'  => ($closing->notes ? $closing->notes . ' | ' : '') . "Reopened by User #{$reopenedBy} on " . now()->format('Y-m-d H:i:s') . ": {$reason}",
+        ]);
+
+        return $closing;
     }
 
     private function applyDateFilters($query, array $filters, string $dateColumn): void

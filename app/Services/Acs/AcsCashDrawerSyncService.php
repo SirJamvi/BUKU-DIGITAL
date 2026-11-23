@@ -54,80 +54,51 @@ class AcsCashDrawerSyncService
                 $openingCash = (float) $openingCashQuery->sum('amount');
                 $openingRecordsCount = $openingCashQuery->count();
 
-                // 2. PENJUALAN TUNAI LANGSUNG (Cash Sales)
-                // Filter: Transaksi penjualan lunas dengan metode tunai/cash, tidak termasuk pelunasan kasbon
-                $cashSalesQuery = Transaction::where('branch_id', $branch->id)
-                    ->where('type', 'sale')
-                    ->where('payment_status', 'paid')
-                    ->whereRaw('LOWER(payment_method) = ?', ['cash']);
+                // 2. PENJUALAN TUNAI LANGSUNG (Cash Sales - SSOT 100% dari tabel cash_flow)
+                $cashSalesQuery = CashFlow::where('branch_id', $branch->id)
+                    ->where('type', 'income')
+                    ->where('flow_type', 'sale_direct')
+                    ->where('affects_drawer', 1)
+                    ->whereRaw('LOWER(payment_method) = ?', ['cash'])
+                    ->whereDate('date', $targetDate);
 
                 if ($shiftTimeFilter) {
-                    $cashSalesQuery->whereBetween('transaction_date', [$shiftStart, $shiftEnd]);
-                } else {
-                    $cashSalesQuery->whereDate('transaction_date', $targetDate);
+                    $cashSalesQuery->whereBetween('created_at', [$shiftStart, $shiftEnd]);
                 }
 
-                // Dikecualikan transaksi yang ber-pelunasan (karena pelunasan masuk kategori Debt Collection)
-                $cashSalesQuery->whereNotExists(function ($query) {
-                    $query->select(DB::raw(1))
-                        ->from('cash_flow')
-                        ->whereColumn('cash_flow.reference_id', 'transactions.id')
-                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
-                });
-
-                $cashSalesAmount = (float) $cashSalesQuery->sum('total_amount');
+                $cashSalesAmount = (float) $cashSalesQuery->sum('amount');
                 $cashSalesCount = $cashSalesQuery->count();
 
                 // 3. PELUNASAN KASBON / PIUTANG TUNAI HARI INI (Cash Debt Collection)
-                // Filter: Pemasukan cash_flow bertipe 'income' dengan metode 'cash' & keterangan 'Pelunasan'
+                // Filter: Pemasukan cash_flow bertipe 'income' dengan metode 'cash' & flow_type debt_settlement
                 $debtCollectionQuery = CashFlow::where('branch_id', $branch->id)
                     ->where('type', 'income')
                     ->whereRaw('LOWER(payment_method) = ?', ['cash'])
-                    ->where('description', 'LIKE', '%Pelunasan%')
+                    ->where('affects_drawer', 1)
                     ->where(function ($q) {
-                        $q->where('affects_drawer', 1)
-                          ->orWhereNull('affects_drawer');
-                    });
+                        $q->where('flow_type', 'debt_settlement')
+                          ->orWhere('description', 'LIKE', '%Pelunasan%');
+                    })
+                    ->whereDate('date', $targetDate);
 
                 if ($shiftTimeFilter) {
-                    $debtCollectionQuery->where(function ($q) use ($targetDate, $shiftStart, $shiftEnd) {
-                        $q->whereBetween('created_at', [$shiftStart, $shiftEnd])
-                          ->orWhere(function ($sub) use ($targetDate, $shiftStart, $shiftEnd) {
-                              $sub->whereDate('date', $targetDate)
-                                  ->whereBetween('created_at', [$shiftStart, $shiftEnd]);
-                          });
-                    });
-                } else {
-                    $debtCollectionQuery->whereDate('date', $targetDate);
+                    $debtCollectionQuery->whereBetween('created_at', [$shiftStart, $shiftEnd]);
                 }
 
                 $debtCollectionAmount = (float) $debtCollectionQuery->sum('amount');
                 $debtCollectionCount = $debtCollectionQuery->count();
 
                 // 4. PENGELUARAN KAS DARI LACI KASIR (Cash Expenses from Drawer)
-                // Filter: Pengeluaran cash_flow bertipe 'expense' yang memotong laci kasir (bensin, makan, galon)
+                // Filter: Pengeluaran cash_flow bertipe 'expense' yang memotong laci kasir (bensin, makan, galon, dll)
                 $expensesQuery = CashFlow::where('branch_id', $branch->id)
                     ->where('type', 'expense')
-                    ->where(function ($q) {
-                        $q->whereRaw('LOWER(payment_method) = ?', ['cash'])
-                          ->orWhereNull('payment_method');
-                    })
-                    ->where(function ($q) {
-                        $q->where('affects_drawer', 1)
-                          ->orWhere('funding_source', 'drawer')
-                          ->orWhereNull('affects_drawer');
-                    });
+                    ->whereRaw('LOWER(payment_method) = ?', ['cash'])
+                    ->where('affects_drawer', 1)
+                    ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund'])
+                    ->whereDate('date', $targetDate);
 
                 if ($shiftTimeFilter) {
-                    $expensesQuery->where(function ($q) use ($targetDate, $shiftStart, $shiftEnd) {
-                        $q->whereBetween('created_at', [$shiftStart, $shiftEnd])
-                          ->orWhere(function ($sub) use ($targetDate, $shiftStart, $shiftEnd) {
-                              $sub->whereDate('date', $targetDate)
-                                  ->whereBetween('created_at', [$shiftStart, $shiftEnd]);
-                          });
-                    });
-                } else {
-                    $expensesQuery->whereDate('date', $targetDate);
+                    $expensesQuery->whereBetween('created_at', [$shiftStart, $shiftEnd]);
                 }
 
                 $expensesAmount = (float) $expensesQuery->sum('amount');

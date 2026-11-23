@@ -97,13 +97,23 @@ class TransactionController extends Controller
 
             // 1. Update status transaksi
             $txUpdate = [
-                'payment_status' => 'paid',
-                'payment_method' => $request->payment_method
+                'payment_status'            => 'paid',
+                'initial_payment_method'    => $transaction->initial_payment_method ?: ($transaction->payment_method ?: 'kasbon'),
+                'settlement_payment_method' => $request->payment_method,
+                'settled_at'                => now(),
+                'payment_method'            => $request->payment_method,
             ];
             if ($proofPath) {
                 $txUpdate['payment_proof'] = $proofPath;
             }
             $transaction->update($txUpdate);
+
+            // Kunci periode pembukuan bulanan
+            \App\Services\Accounting\AccountingPeriodGuard::ensurePeriodOpen(
+                (int) $transaction->business_id,
+                $activeBranchId ? (int) $activeBranchId : null,
+                $settlementDate
+            );
 
             $notesPrefix = '[Pelunasan di ' . ($user->branch->name ?? 'Cabang Kasir');
             if ($isCrossBranch) {
@@ -140,11 +150,18 @@ class TransactionController extends Controller
                 $creatorId = Auth::id();
             }
 
+            $incomeCat = \App\Models\ExpenseCategory::where('business_id', $transaction->business_id)
+                ->where('type', 'income')
+                ->first();
+            $categoryId = $incomeCat ? $incomeCat->id : 1;
+
             \App\Models\CashFlow::create([
                 'business_id'    => $transaction->business_id,
                 'branch_id'      => $activeBranchId, // Dicatat pada cabang kasir penerima dana
                 'type'           => 'income',
-                'category_id'    => 1,
+                'flow_type'      => 'debt_settlement',
+                'reference_type' => 'transaction',
+                'category_id'    => $categoryId,
                 'payment_method' => $request->payment_method,
                 'funding_source' => $affectsDrawer ? 'drawer' : 'owner',
                 'affects_drawer' => $affectsDrawer,
@@ -255,13 +272,23 @@ class TransactionController extends Controller
 
                 // 1. Update status masing-masing transaksi beserta bukti pembayaran
                 $txUpdate = [
-                    'payment_status' => 'paid',
-                    'payment_method' => $request->payment_method
+                    'payment_status'            => 'paid',
+                    'initial_payment_method'    => $transaction->initial_payment_method ?: ($transaction->payment_method ?: 'kasbon'),
+                    'settlement_payment_method' => $request->payment_method,
+                    'settled_at'                => now(),
+                    'payment_method'            => $request->payment_method,
                 ];
                 if ($proofPath) {
                     $txUpdate['payment_proof'] = $proofPath;
                 }
                 $transaction->update($txUpdate);
+
+                // Kunci periode pembukuan bulanan
+                \App\Services\Accounting\AccountingPeriodGuard::ensurePeriodOpen(
+                    (int) $transaction->business_id,
+                    $activeBranchId ? (int) $activeBranchId : null,
+                    $settlementDate
+                );
 
                 $originBranchName = $transaction->branch ? $transaction->branch->name : 'Cabang Asal';
                 $isCrossBranch = ((int) $transaction->branch_id !== (int) $activeBranchId);
@@ -294,11 +321,18 @@ class TransactionController extends Controller
                     $desc .= ' [Koreksi Nota Tgl ' . \Carbon\Carbon::parse($transaction->transaction_date)->format('d/m/Y') . ']';
                 }
 
+                $incomeCat = \App\Models\ExpenseCategory::where('business_id', $transaction->business_id)
+                    ->where('type', 'income')
+                    ->first();
+                $categoryId = $incomeCat ? $incomeCat->id : 1;
+
                 \App\Models\CashFlow::create([
                     'business_id'    => $transaction->business_id,
                     'branch_id'      => $activeBranchId, // Laci kasir penerima
                     'type'           => 'income',
-                    'category_id'    => 1,
+                    'flow_type'      => 'debt_settlement',
+                    'reference_type' => 'transaction',
+                    'category_id'    => $categoryId,
                     'payment_method' => $request->payment_method,
                     'funding_source' => $isCash ? 'drawer' : 'owner',
                     'affects_drawer' => $isCash ? 1 : 0,
@@ -366,11 +400,14 @@ class TransactionController extends Controller
                 $methodSlug = $isKasbon ? 'kasbon' : \Illuminate\Support\Str::slug($chosenMethod);
 
                 $updateData = [
-                    'payment_method' => $methodSlug,
-                    'payment_status' => $isKasbon ? 'pending' : 'paid',
-                    'order_status'   => 'delivered',
-                    'delivery_status'=> 'delivered',
-                    'delivered_at'   => now(),
+                    'payment_method'            => $methodSlug,
+                    'initial_payment_method'    => $transaction->initial_payment_method ?: ($transaction->payment_method ?: 'kasbon'),
+                    'settlement_payment_method' => $isKasbon ? null : $methodSlug,
+                    'settled_at'                => $isKasbon ? null : now(),
+                    'payment_status'            => $isKasbon ? 'pending' : 'paid',
+                    'order_status'              => 'delivered',
+                    'delivery_status'           => 'delivered',
+                    'delivered_at'              => now(),
                 ];
 
                 if (!empty($orderNote)) {
@@ -387,6 +424,12 @@ class TransactionController extends Controller
                         ? \Carbon\Carbon::parse($transaction->transaction_date)->startOfDay()
                         : now();
 
+                    \App\Services\Accounting\AccountingPeriodGuard::ensurePeriodOpen(
+                        (int) $transaction->business_id,
+                        $transaction->branch_id ? (int) $transaction->branch_id : null,
+                        $settlementDate
+                    );
+
                     $desc = 'Pelunasan Pengiriman ' . $tripCode . ' #' . str_pad($transaction->id, 6, '0', STR_PAD_LEFT) . ' (' . ($transaction->customer->name ?? 'Pelanggan Umum') . ')';
                     if (!empty($orderNote)) {
                         $desc .= ' - ' . $orderNote;
@@ -397,12 +440,19 @@ class TransactionController extends Controller
 
                     $isCashChosen = strtolower($methodSlug) === 'cash';
 
+                    $incomeCat = \App\Models\ExpenseCategory::where('business_id', $transaction->business_id)
+                        ->where('type', 'income')
+                        ->first();
+                    $categoryId = $incomeCat ? $incomeCat->id : 1;
+
                     // Catat ke CashFlow secara dinamis dengan metode pembayaran riil & alokasi tanggal
                     \App\Models\CashFlow::create([
                         'business_id'    => $transaction->business_id,
                         'branch_id'      => $transaction->branch_id,
                         'type'           => 'income',
-                        'category_id'    => 1,
+                        'flow_type'      => 'debt_settlement',
+                        'reference_type' => 'transaction',
+                        'category_id'    => $categoryId,
                         'payment_method' => $methodSlug,
                         'funding_source' => $isCashChosen ? 'drawer' : 'owner',
                         'affects_drawer' => $isCashChosen ? 1 : 0,

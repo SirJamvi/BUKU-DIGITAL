@@ -152,12 +152,13 @@ class TransactionController extends Controller
             $txId = $transaction->id;
             $bizId = $transaction->business_id;
 
-            $this->transactionService->deleteTransaction($transaction);
+            $reason = request('void_reason') ?? request('reason') ?? 'Dibatalkan oleh Admin';
+            $this->transactionService->deleteTransaction($transaction, $reason);
             \App\Support\BranchCache::flush($bizId);
 
             return redirect()
                 ->route('admin.transactions.index')
-                ->with('success', "Transaksi #{$txId} berhasil dihapus. Stok, Poin, dan Arus Kas telah dikembalikan.");
+                ->with('success', "Transaksi #{$txId} berhasil dibatalkan (Void). Stok dikembalikan dan jurnal contra-entry telah dicatat.");
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal menghapus transaksi: ' . $e->getMessage());
         }

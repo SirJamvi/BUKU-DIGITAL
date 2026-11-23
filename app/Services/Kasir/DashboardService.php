@@ -39,32 +39,31 @@ class DashboardService
             // ==========================================================
             // [SINKRONISASI] 1. Hitung Saldo Kas Fisik Laci (100% SAMA DENGAN ADMIN)
             // ==========================================================
-            // A. Penjualan Tunai Meja Langsung Lunas Hari Ini (dikecualikan transaksi yang ber-pelunasan)
-            $cashTxQuery = Transaction::where('business_id', $businessId)
+            // A. Penjualan Tunai Meja Langsung Lunas Hari Ini (SSOT 100% dari tabel cash_flow)
+            $cashSalesQuery = CashFlow::where('business_id', $businessId)
                 ->where('created_by', $kasirId)
-                ->where('type', 'sale')
-                ->where('payment_status', 'paid')
-                ->where('payment_method', 'cash')
-                ->whereBetween('transaction_date', [$todayStart, $todayEnd])
-                ->whereNotExists(function ($query) {
-                    $query->select(DB::raw(1))
-                        ->from('cash_flow')
-                        ->whereColumn('cash_flow.reference_id', 'transactions.id')
-                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
-                });
+                ->where('type', 'income')
+                ->where('flow_type', 'sale_direct')
+                ->where('affects_drawer', 1)
+                ->where('date', $todayDate)
+                ->whereRaw('LOWER(payment_method) = ?', ['cash']);
 
             if ($branchId) {
-                $cashTxQuery->where('branch_id', $branchId);
+                $cashSalesQuery->where('branch_id', $branchId);
             }
-            $cashSalesAmount = (float) $cashTxQuery->sum('total_amount');
+            $cashSalesAmount = (float) $cashSalesQuery->sum('amount');
 
             // B. Pelunasan Kasbon & Setoran Driver Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
             $pelunasanCashQuery = CashFlow::where('business_id', $businessId)
                 ->where('created_by', $kasirId)
                 ->where('type', 'income')
                 ->where('payment_method', 'cash')
+                ->where('affects_drawer', 1)
                 ->where('date', $todayDate)
-                ->where('description', 'LIKE', '%Pelunasan%');
+                ->where(function ($q) {
+                    $q->where('flow_type', 'debt_settlement')
+                      ->orWhere('description', 'LIKE', '%Pelunasan%');
+                });
 
             if ($branchId) {
                 $pelunasanCashQuery->where('branch_id', $branchId);
@@ -77,14 +76,9 @@ class DashboardService
             $drawerCashExpensesQuery = CashFlow::where('business_id', $businessId)
                 ->where('created_by', $kasirId)
                 ->where('type', 'expense')
-                ->where(function ($q) {
-                    $q->where('affects_drawer', 1)
-                      ->orWhereNull('affects_drawer');
-                })
-                ->where(function ($q) {
-                    $q->where('payment_method', 'cash')
-                      ->orWhereNull('payment_method');
-                })
+                ->where('affects_drawer', 1)
+                ->where('payment_method', 'cash')
+                ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund'])
                 ->where('date', $todayDate);
 
             if ($branchId) {
@@ -114,6 +108,16 @@ class DashboardService
                 return str_contains($pm, 'transfer') || in_array($pm, ['bca', 'bri', 'mandiri', 'bank']);
             })->sum('amount');
             $nonCashTotal = (float) $incomesToday->where('payment_method', '!=', 'cash')->sum('amount');
+
+            $nonCashSalesAmount = (float) $incomesToday
+                ->where('payment_method', '!=', 'cash')
+                ->where('flow_type', 'sale_direct')
+                ->sum('amount');
+
+            $nonCashDebtCollectionAmount = (float) $incomesToday
+                ->where('payment_method', '!=', 'cash')
+                ->where('flow_type', 'debt_settlement')
+                ->sum('amount');
 
             // Hitung Jumlah Struk Masuk
             $myTransactionsToday = $incomesToday->count();
@@ -213,9 +217,11 @@ class DashboardService
                 'mySalesToday'             => $totalCashInToday, // Alias kompatibilitas laci kasir
                 'myExpensesToday'          => $drawerCashExpensesAmount,
                 'myNetCashToday'           => $myNetCashToday,  // Murni Uang Fisik di Laci Real-Time
-                'nonCashDana'              => $nonCashDana,
-                'nonCashTransfer'          => $nonCashTransfer,
-                'nonCashTotal'             => $nonCashTotal,
+                'nonCashDana'                  => $nonCashDana,
+                'nonCashTransfer'              => $nonCashTransfer,
+                'nonCashTotal'                 => $nonCashTotal,
+                'nonCashSalesAmount'           => $nonCashSalesAmount,
+                'nonCashDebtCollectionAmount'  => $nonCashDebtCollectionAmount,
                 'myTransactionsToday'      => $myTransactionsToday,
                 'lowStockItems'            => $lowStockItems,
                 'balancesByMethod'         => $balancesByMethod,

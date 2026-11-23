@@ -33,6 +33,25 @@
         <x-input type="number" name="amount" label="Jumlah (Rp)" :value="old('amount', $expense->amount)" required />
 
         <div class="mb-3">
+            <label class="form-label d-block fw-bold">Sumber Dana Pengeluaran <span class="text-danger">*</span></label>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_drawer" value="drawer" {{ old('funding_source', $expense->funding_source ?? 'drawer') === 'drawer' ? 'checked' : '' }}>
+                <label class="form-check-label text-danger fw-semibold" for="exp_funding_drawer">
+                    <i class="bi bi-wallet2 me-1"></i> Kas Laci Kasir (Potong Fisik Laci)
+                </label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_external" value="external" {{ old('funding_source', $expense->funding_source ?? 'drawer') === 'external' ? 'checked' : '' }}>
+                <label class="form-check-label text-success fw-semibold" for="exp_funding_external">
+                    <i class="bi bi-bank me-1"></i> Uang Bos / Eksternal (Tidak Potong Laci)
+                </label>
+            </div>
+            <div class="form-text text-muted">
+                Pilih <strong>Uang Bos / Eksternal</strong> agar pengeluaran tidak mengurangi uang fisik kas di laci kasir.
+            </div>
+        </div>
+
+        <div class="mb-3">
             <label class="form-label fw-bold">Metode Pembayaran <span class="text-danger">*</span></label>
             <select name="payment_method" class="form-select" required>
                 <option value="">-- Pilih Metode Pembayaran --</option>

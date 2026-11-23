@@ -103,20 +103,14 @@ class DashboardService
             ->sum('total_amount');
 
         // Rincian Saluran Pembayaran Hari Ini:
-        // A. Penjualan Langsung Lunas di Kasir (Cash, DANA, Transfer)
-        $todaySalesCash = (float) Transaction::where('business_id', $businessId)
-            ->where('type', 'sale')
-            ->where('payment_status', 'paid')
-            ->where('payment_method', 'cash')
-            ->where('status', 'completed')
-            ->whereDate('transaction_date', $today)
-            ->whereNotExists(function ($query) {
-                $query->select(DB::raw(1))
-                    ->from('cash_flow')
-                    ->whereColumn('cash_flow.reference_id', 'transactions.id')
-                    ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
-            })
-            ->sum('total_amount');
+        // A. Penjualan Langsung Lunas di Kasir (Cash SSOT dari cash_flow, DANA, Transfer)
+        $todaySalesCash = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'income')
+            ->where('flow_type', 'sale_direct')
+            ->where('affects_drawer', 1)
+            ->whereDate('date', $today)
+            ->whereRaw('LOWER(payment_method) = ?', ['cash'])
+            ->sum('amount');
 
         $todaySalesDana = (float) Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
@@ -128,7 +122,10 @@ class DashboardService
                 $query->select(DB::raw(1))
                     ->from('cash_flow')
                     ->whereColumn('cash_flow.reference_id', 'transactions.id')
-                    ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                    ->where(function ($sub) {
+                        $sub->where('cash_flow.flow_type', 'debt_settlement')
+                            ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                    });
             })
             ->sum('total_amount');
 
@@ -142,7 +139,10 @@ class DashboardService
                 $query->select(DB::raw(1))
                     ->from('cash_flow')
                     ->whereColumn('cash_flow.reference_id', 'transactions.id')
-                    ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                    ->where(function ($sub) {
+                        $sub->where('cash_flow.flow_type', 'debt_settlement')
+                            ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                    });
             })
             ->sum('total_amount');
 
@@ -151,21 +151,30 @@ class DashboardService
             ->where('type', 'income')
             ->where('payment_method', 'cash')
             ->whereDate('date', $today)
-            ->where('description', 'LIKE', '%Pelunasan%')
+            ->where(function ($q) {
+                $q->where('flow_type', 'debt_settlement')
+                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+            })
             ->sum('amount');
 
         $pelunasanDanaToday = (float) CashFlow::where('business_id', $businessId)
             ->where('type', 'income')
             ->where('payment_method', 'dana')
             ->whereDate('date', $today)
-            ->where('description', 'LIKE', '%Pelunasan%')
+            ->where(function ($q) {
+                $q->where('flow_type', 'debt_settlement')
+                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+            })
             ->sum('amount');
 
         $pelunasanTransferToday = (float) CashFlow::where('business_id', $businessId)
             ->where('type', 'income')
             ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
             ->whereDate('date', $today)
-            ->where('description', 'LIKE', '%Pelunasan%')
+            ->where(function ($q) {
+                $q->where('flow_type', 'debt_settlement')
+                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+            })
             ->sum('amount');
 
         // Total per saluran masuk uang hari ini
@@ -418,24 +427,17 @@ class DashboardService
             // Mengecualikan transaksi yang dilunasi lewat proses pelunasan kasbon/pengiriman driver agar:
             // - Mencegah double-counting
             // - Mencegah uang pelunasan shift sore (Kasir B) salah masuk ke laci pembuat nota shift pagi (Kasir A)
-            $cashTransactions = Transaction::with(['details.product'])
-                ->where('business_id', $businessId)
+            // Penjualan Tunai Meja Langsung Lunas (SSOT 100% dari tabel cash_flow)
+            $cashSalesQuery = CashFlow::where('business_id', $businessId)
                 ->where('created_by', $user->id)
-                ->where('type', 'sale')
-                ->where('payment_status', 'paid')
-                ->where('payment_method', 'cash')
-                ->where('status', 'completed')
-                ->whereDate('transaction_date', $filterDate)
-                ->whereNotExists(function ($query) {
-                    $query->select(DB::raw(1))
-                        ->from('cash_flow')
-                        ->whereColumn('cash_flow.reference_id', 'transactions.id')
-                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
-                })
-                ->get();
+                ->where('type', 'income')
+                ->where('flow_type', 'sale_direct')
+                ->where('affects_drawer', 1)
+                ->whereDate('date', $filterDate)
+                ->whereRaw('LOWER(payment_method) = ?', ['cash']);
 
-            $cashSalesAmount = (float) $cashTransactions->sum('total_amount');
-            $cashOrdersCount = $cashTransactions->count();
+            $cashSalesAmount = (float) $cashSalesQuery->sum('amount');
+            $cashOrdersCount = $cashSalesQuery->count();
 
             // 2. Pelunasan Kasbon & Setoran Driver Tunai yang Diterima Kasir Ini (dari tabel cash_flow)
             // Uang kas fisik masuk 100% ke kasir yang menerima uang & menekan tombol pelunasan/selesaikan pengiriman
@@ -444,12 +446,12 @@ class DashboardService
                 ->where('cash_flow.created_by', $user->id)
                 ->where('cash_flow.type', 'income')
                 ->where('cash_flow.payment_method', 'cash')
-                ->where(function ($q) {
-                    $q->where('cash_flow.affects_drawer', 1)
-                      ->orWhereNull('cash_flow.affects_drawer');
-                })
+                ->where('cash_flow.affects_drawer', 1)
                 ->whereDate('cash_flow.date', $filterDate)
-                ->where('cash_flow.description', 'LIKE', '%Pelunasan%')
+                ->where(function ($q) {
+                    $q->where('cash_flow.flow_type', 'debt_settlement')
+                      ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                })
                 ->sum('amount');
 
             $totalCashIn = $cashSalesAmount + $pelunasanCashAmount;
@@ -530,14 +532,9 @@ class DashboardService
                 ->where('business_id', $businessId)
                 ->where('created_by', $user->id)
                 ->where('type', 'expense')
-                ->where(function ($q) {
-                    $q->where('affects_drawer', 1)
-                      ->orWhereNull('affects_drawer');
-                })
-                ->where(function ($q) {
-                    $q->where('payment_method', 'cash')
-                      ->orWhereNull('payment_method');
-                })
+                ->where('affects_drawer', 1)
+                ->where('payment_method', 'cash')
+                ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund'])
                 ->whereDate('date', $filterDate);
 
             $allCashExpensesAmount = (float) $drawerCashExpensesQuery->sum('amount');
@@ -553,12 +550,16 @@ class DashboardService
             $physicalCashDrawer = $openingCash + $cashSalesAmount + $pelunasanCashAmount - $allCashExpensesAmount;
 
             // 6. METRIK 2: Estimasi Laba Bersih Shift ($shiftNetProfit)
-            // Hanya memperhitungkan beban operasional murni (is_cogs = 0) agar tidak double-counting dengan COGS
+            // Hanya memperhitungkan beban operasional murni (is_cogs = 0 & category_type = Operasional) agar tidak double-counting dengan COGS
+            // Serta mengecualikan gaji eksternal (funding_source = external) dan mutasi internal
             $operationalExpensesAmount = (float) CashFlow::where('business_id', $businessId)
                 ->where('created_by', $user->id)
                 ->where('type', 'expense')
+                ->where('funding_source', '!=', 'external')
+                ->where('flow_type', 'expense')
                 ->whereHas('category', function ($q) {
-                    $q->where('is_cogs', 0);
+                    $q->where('is_cogs', 0)
+                      ->where('category_type', 'Operasional');
                 })
                 ->whereDate('date', $filterDate)
                 ->sum('amount');
@@ -578,7 +579,10 @@ class DashboardService
                     $query->select(DB::raw(1))
                         ->from('cash_flow')
                         ->whereColumn('cash_flow.reference_id', 'transactions.id')
-                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                        ->where(function ($sub) {
+                            $sub->where('cash_flow.flow_type', 'debt_settlement')
+                                ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                        });
                 })
                 ->sum('total_amount');
 
@@ -593,7 +597,10 @@ class DashboardService
                     $query->select(DB::raw(1))
                         ->from('cash_flow')
                         ->whereColumn('cash_flow.reference_id', 'transactions.id')
-                        ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                        ->where(function ($sub) {
+                            $sub->where('cash_flow.flow_type', 'debt_settlement')
+                                ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                        });
                 })
                 ->sum('total_amount');
 
@@ -605,7 +612,10 @@ class DashboardService
                 ->where('cash_flow.type', 'income')
                 ->where('cash_flow.payment_method', 'dana')
                 ->whereDate('cash_flow.date', $filterDate)
-                ->where('cash_flow.description', 'LIKE', '%Pelunasan%')
+                ->where(function ($q) {
+                    $q->where('cash_flow.flow_type', 'debt_settlement')
+                      ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                })
                 ->sum('amount');
 
             $pelunasanTransferAmount = (float) CashFlow::where('cash_flow.business_id', $businessId)
@@ -613,7 +623,10 @@ class DashboardService
                 ->where('cash_flow.type', 'income')
                 ->whereIn('cash_flow.payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
                 ->whereDate('cash_flow.date', $filterDate)
-                ->where('cash_flow.description', 'LIKE', '%Pelunasan%')
+                ->where(function ($q) {
+                    $q->where('cash_flow.flow_type', 'debt_settlement')
+                      ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                })
                 ->sum('amount');
 
             $pelunasanNonCashTotal = $pelunasanDanaAmount + $pelunasanTransferAmount;
@@ -690,7 +703,10 @@ class DashboardService
         return CashFlow::with(['createdBy', 'transaction.customer', 'transaction.driver'])
             ->where('business_id', $businessId)
             ->where('type', 'income')
-            ->where('description', 'LIKE', '%Pelunasan%')
+            ->where(function ($q) {
+                $q->where('flow_type', 'debt_settlement')
+                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+            })
             ->whereDate('created_at', $filterDate)
             ->orderBy('created_at', 'desc')
             ->get();

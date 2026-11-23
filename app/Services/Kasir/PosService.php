@@ -153,6 +153,8 @@ class PosService
 
         $tripCode = $this->generateTripCode($businessId, $branchId);
 
+        \App\Services\Accounting\AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, now());
+
         return DB::transaction(function () use ($data, $businessId, $branchId, $tripCode) {
             $createdTransactions = [];
             $driverId = $data['driver_id'] ?? null;
@@ -161,22 +163,23 @@ class PosService
                 $orderTotal = $order['total_amount'] ?? 0;
 
                 $transaction = Transaction::create([
-                    'business_id'          => $businessId,
-                    'branch_id'            => $branchId,
-                    'type'                 => 'sale',
-                    'customer_id'          => $order['customer_id'] ?? null,
-                    'driver_id'            => $driverId,
-                    'claimed_by_driver_id' => $driverId,
-                    'delivery_trip_code'   => $tripCode,
-                    'total_amount'         => $orderTotal,
-                    'payment_method'       => 'kasbon',
-                    'payment_status'       => 'pending',
-                    'order_status'         => 'delivering',
-                    'delivery_status'      => 'delivering',
-                    'status'               => 'completed',
-                    'transaction_date'     => now(),
-                    'notes'                => $order['notes'] ?? ("Pengiriman {$tripCode}"),
-                    'created_by'           => Auth::id(),
+                    'business_id'            => $businessId,
+                    'branch_id'              => $branchId,
+                    'type'                   => 'sale',
+                    'customer_id'            => $order['customer_id'] ?? null,
+                    'driver_id'              => $driverId,
+                    'claimed_by_driver_id'   => $driverId,
+                    'delivery_trip_code'     => $tripCode,
+                    'total_amount'           => $orderTotal,
+                    'payment_method'         => 'kasbon',
+                    'initial_payment_method' => 'kasbon',
+                    'payment_status'         => 'pending',
+                    'order_status'           => 'delivering',
+                    'delivery_status'        => 'delivering',
+                    'status'                 => 'completed',
+                    'transaction_date'       => now(),
+                    'notes'                  => $order['notes'] ?? ("Pengiriman {$tripCode}"),
+                    'created_by'             => Auth::id(),
                 ]);
 
                 foreach ($order['items'] as $item) {
@@ -275,6 +278,8 @@ class PosService
             $branchId = app(BranchContext::class)->requireBranchId();
             $businessId = (int) Auth::user()->business_id;
 
+            \App\Services\Accounting\AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, now());
+
             // 1. Validasi stok sebelum membuat transaksi di cabang aktif
             foreach ($data['items'] as $item) {
                 $inventory = Inventory::where('product_id', $item['product_id'])
@@ -303,22 +308,23 @@ class PosService
 
             // 2. Buat transaksi utama
             $transaction = Transaction::create([
-                'business_id'          => $businessId,
-                'branch_id'            => $branchId,
-                'type'                 => 'sale',
-                'customer_id'          => $data['customer_id'] ?? null,
-                'driver_id'            => $driverId,
-                'claimed_by_driver_id' => $driverId,
-                'delivery_trip_code'   => $tripCode,
-                'total_amount'         => $data['total_amount'],
-                'payment_method'       => $isKasbon ? 'kasbon' : $data['payment_method'],
-                'payment_status'       => $isKasbon ? 'pending' : 'paid',
-                'order_status'         => $driverId ? 'delivering' : null,
-                'delivery_status'      => $driverId ? 'delivering' : 'pending',
-                'status'               => 'completed',
-                'transaction_date'     => now(),
-                'notes'                => $data['notes'] ?? null,
-                'created_by'           => Auth::id(),
+                'business_id'            => $businessId,
+                'branch_id'              => $branchId,
+                'type'                   => 'sale',
+                'customer_id'            => $data['customer_id'] ?? null,
+                'driver_id'              => $driverId,
+                'claimed_by_driver_id'   => $driverId,
+                'delivery_trip_code'     => $tripCode,
+                'total_amount'           => $data['total_amount'],
+                'payment_method'         => $isKasbon ? 'kasbon' : $data['payment_method'],
+                'initial_payment_method' => $isKasbon ? 'kasbon' : $data['payment_method'],
+                'payment_status'         => $isKasbon ? 'pending' : 'paid',
+                'order_status'           => $driverId ? 'delivering' : null,
+                'delivery_status'        => $driverId ? 'delivering' : 'pending',
+                'status'                 => 'completed',
+                'transaction_date'       => now(),
+                'notes'                  => $data['notes'] ?? null,
+                'created_by'             => Auth::id(),
             ]);
 
             // 3. Simpan detail transaksi dan kurangi stok
@@ -397,6 +403,8 @@ class PosService
                     'business_id'    => $transaction->business_id,
                     'branch_id'      => $branchId,
                     'type'           => 'income',
+                    'flow_type'      => 'sale_direct',
+                    'reference_type' => 'transaction',
                     'category_id'    => 1,
                     'amount'         => $transaction->total_amount,
                     'payment_method' => $transaction->payment_method,
