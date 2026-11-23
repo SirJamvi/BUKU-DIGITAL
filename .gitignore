@@ -26,6 +26,8 @@ yarn-error.log
 # Logs
 error_log
 *.log
+/public/error_log
+/public/*.log
 
 # Backup
 *.zip
