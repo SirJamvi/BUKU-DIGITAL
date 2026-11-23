@@ -117,7 +117,7 @@
                                             </div>
                                             <div class="flex-grow-1">
                                                 <div class="fw-medium text-gold">{{ $notification->data['title'] ?? 'Notifikasi' }}</div>
-                                                <div class="small">{{ $notification->data['message'] }}</div>
+                                                <div class="small">{{ $notification->data['message'] ?? '' }}</div>
                                                 <div class="text-muted small">{{ $notification->created_at->diffForHumans() }}</div>
                                             </div>
                                         </div>
@@ -149,25 +149,25 @@
                     <a class="btn btn-link text-decoration-none d-flex align-items-center" href="#" role="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                         <div class="d-flex align-items-center">
                             <div class="user-avatar me-2">
-                                @if(Auth::user()->avatar)
-                                    <img src="{{ asset('storage/' . Auth::user()->avatar) }}" alt="{{ Auth::user()->name }}" class="rounded-circle" width="32" height="32" style="border: 1px solid var(--luxury-gold);">
+                                @if(Auth::user()?->avatar)
+                                    <img src="{{ asset('storage/' . Auth::user()->avatar) }}" alt="{{ Auth::user()?->name ?? 'Admin' }}" class="rounded-circle" width="32" height="32" style="border: 1px solid var(--luxury-gold);">
                                 @else
                                     <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; background: var(--gold-gradient); color: var(--deep-navy); font-weight: 600;">
-                                        {{ strtoupper(substr(Auth::user()->name, 0, 1)) }}
+                                        {{ strtoupper(substr(Auth::user()?->name ?? 'A', 0, 1)) }}
                                     </div>
                                 @endif
                             </div>
                             <div class="d-none d-md-block">
-                                <div class="fw-medium" style="color: var(--luxury-gold);">{{ Auth::user()->name }}</div>
-                                <div class="text-muted small" style="color: rgba(255,255,255,0.7);">{{ Auth::user()->email }}</div>
+                                <div class="fw-medium" style="color: var(--luxury-gold);">{{ Auth::user()?->name ?? 'Admin' }}</div>
+                                <div class="text-muted small" style="color: rgba(255,255,255,0.7);">{{ Auth::user()?->email ?? '' }}</div>
                             </div>
                             <i class="fas fa-chevron-down ms-2" style="color: var(--luxury-gold); font-size: 0.8rem;"></i>
                         </div>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
                         <li class="dropdown-header d-md-none">
-                            <div class="fw-bold text-gold">{{ Auth::user()->name }}</div>
-                            <div class="text-muted small" style="color: rgba(255,255,255,0.7);">{{ Auth::user()->email }}</div>
+                            <div class="fw-bold text-gold">{{ Auth::user()?->name ?? 'Admin' }}</div>
+                            <div class="text-muted small" style="color: rgba(255,255,255,0.7);">{{ Auth::user()?->email ?? '' }}</div>
                         </li>
                         <li class="d-md-none"><hr class="dropdown-divider"></li>
                         

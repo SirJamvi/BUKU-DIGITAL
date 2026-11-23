@@ -14,7 +14,7 @@
 <div class="dashboard-header mb-4">
     <div class="row align-items-center">
         <div class="col-md-8">
-            <h1 class="dashboard-title">Selamat Datang, {{ Auth::user()->name ?? 'Admin' }}</h1>
+            <h1 class="dashboard-title">Selamat Datang, {{ Auth::user()?->name ?? 'Admin' }}</h1>
             <p class="dashboard-subtitle">Berikut adalah ringkasan performa bisnis Anda hari ini</p>
         </div>
         <div class="col-md-4 text-end d-flex flex-column align-items-md-end gap-2">

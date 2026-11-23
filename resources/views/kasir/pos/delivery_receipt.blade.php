@@ -82,7 +82,7 @@
         $firstTx = $transactions->first();
         $driverName = $firstTx->driver->name ?? 'Driver';
         $driverPhone = $firstTx->driver->phone ?? '-';
-        $kasirName = $firstTx->createdBy->name ?? Auth::user()->name;
+        $kasirName = $firstTx->createdBy->name ?? (Auth::user()?->name ?? 'Kasir');
         $totalTripAmount = $transactions->sum('total_amount');
         $totalItemsCount = 0;
         foreach($transactions as $t) {

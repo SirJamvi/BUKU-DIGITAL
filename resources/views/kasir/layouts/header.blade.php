@@ -34,7 +34,7 @@
                             <i class="fas fa-user-circle fa-2x"></i>
                         </div>
                         <div class="user-info d-none d-md-block">
-                            <div class="user-name fw-bold">{{ Auth::user()->name }}</div>
+                            <div class="user-name fw-bold">{{ Auth::user()?->name ?? 'Kasir' }}</div>
                             <div class="user-role text-muted small">Kasir</div>
                         </div>
                         <i class="fas fa-chevron-down ms-2 d-none d-md-inline"></i>
@@ -45,8 +45,8 @@
                             <div class="d-flex align-items-center">
                                 <i class="fas fa-user-circle fa-2x me-3 text-primary"></i>
                                 <div>
-                                    <div class="fw-bold">{{ Auth::user()->name }}</div>
-                                    <div class="text-muted small">{{ Auth::user()->email }}</div>
+                                    <div class="fw-bold">{{ Auth::user()?->name ?? 'Kasir' }}</div>
+                                    <div class="text-muted small">{{ Auth::user()?->email ?? '' }}</div>
                                 </div>
                             </div>
                         </li>
@@ -151,8 +151,8 @@
             <div class="modal-body p-4">
                 <div class="text-center mb-4">
                     <i class="fas fa-user-circle fa-4x text-primary mb-3"></i>
-                    <h6 class="fw-bold">{{ Auth::user()->name }}</h6>
-                    <p class="text-muted">{{ Auth::user()->email }}</p>
+                    <h6 class="fw-bold">{{ Auth::user()?->name ?? 'Kasir' }}</h6>
+                    <p class="text-muted">{{ Auth::user()?->email ?? '' }}</p>
                 </div>
                 <div class="row">
                     <div class="col-12">
