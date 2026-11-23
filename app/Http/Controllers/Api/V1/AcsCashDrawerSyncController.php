@@ -3,19 +3,27 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\CashierShiftClosing;
+use App\Services\Accounting\AccountingPeriodGuard;
 use App\Services\Acs\AcsCashDrawerSyncService;
+use App\Services\Kasir\CashierClosingService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class AcsCashDrawerSyncController extends Controller
 {
     protected AcsCashDrawerSyncService $syncService;
+    protected CashierClosingService $closingService;
 
-    public function __construct(AcsCashDrawerSyncService $syncService)
-    {
+    public function __construct(
+        AcsCashDrawerSyncService $syncService,
+        CashierClosingService $closingService
+    ) {
         $this->syncService = $syncService;
+        $this->closingService = $closingService;
     }
 
     /**
@@ -80,6 +88,152 @@ class AcsCashDrawerSyncController extends Controller
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Internal server error saat mengolah data laci kasir: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Endpoint Sinkronisasi Laporan Tutup Shift & Handover dari ACS (resdigaz_attendance).
+     * Menerapkan idempotency berbasis `external_reference` (misal 'ACS-SUB-123').
+     *
+     * Route: POST /api/v1/sync/acs/shift-closing
+     * Header: X-Sync-Secret / X-ACS-Key / Authorization: Bearer
+     */
+    public function storeShiftClosing(Request $request): JsonResponse
+    {
+        // 1. Verifikasi Keamanan API Key / Shared Secret
+        $authorized = $this->verifyAuthorization($request);
+        if (!$authorized) {
+            Log::warning('ACS Sync Shift Closing: Akses ditolak dari IP: ' . $request->ip());
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized: Invalid or missing X-Sync-Secret / X-ACS-Key header.',
+            ], 401);
+        }
+
+        // 2. Validasi Payload
+        $request->validate([
+            'external_reference'   => 'required|string|max:100',
+            'business_id'          => 'required|integer',
+            'branch_id'            => 'required|integer',
+            'user_id'              => 'required|integer',
+            'date'                 => 'required|date_format:Y-m-d',
+            'shift_code'           => 'nullable|string|max:30',
+            'actual_cash_counted'  => 'required|numeric|min:0',
+            'cash_handover_amount' => 'nullable|numeric|min:0',
+            'handover_receiver'    => 'nullable|string|max:150',
+            'notes'                => 'nullable|string',
+            'submitted_at'         => 'nullable|string',
+        ]);
+
+        $externalReference = trim($request->input('external_reference'));
+
+        // 3. Cek Idempotency: Jika sudah pernah diproses, kembalikan 200 tanpa insert ulang
+        $existing = CashierShiftClosing::where('external_reference', $externalReference)->first();
+        if ($existing) {
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Laporan tutup shift sudah pernah diproses (idempotent).',
+                'data'    => [
+                    'closing_id'                 => $existing->id,
+                    'external_reference'         => $existing->external_reference,
+                    'expected_drawer_cash'       => (float) $existing->expected_drawer_cash,
+                    'actual_cash_counted'        => (float) $existing->actual_cash_counted,
+                    'variance'                   => (float) $existing->variance,
+                    'cash_handover_amount'       => (float) $existing->cash_handover_amount,
+                    'ending_cash_for_next_shift' => (float) $existing->ending_cash_for_next_shift,
+                    'handover_receiver'          => $existing->handover_receiver,
+                    'date'                       => $existing->date ? Carbon::parse($existing->date)->toDateString() : null,
+                    'is_idempotent'              => true,
+                ],
+            ], 200);
+        }
+
+        try {
+            $closingData = DB::transaction(function () use ($request, $externalReference) {
+                $businessId         = (int) $request->input('business_id');
+                $branchId           = (int) $request->input('branch_id');
+                $userId             = (int) $request->input('user_id');
+                $date               = $request->input('date');
+                $shiftCode          = $request->input('shift_code', 'default');
+                $actualCashCounted  = round((float) $request->input('actual_cash_counted'), 2);
+                $cashHandoverAmount = round((float) $request->input('cash_handover_amount', 0), 2);
+                $handoverReceiver   = $request->input('handover_receiver');
+                $notes              = $request->input('notes');
+
+                // a) Validasi periode akuntansi masih terbuka
+                AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, $date);
+
+                // b) Hitung & simpan closing melalui CashierClosingService
+                // Dilakukan sebelum handover dicatat agar expected_drawer_cash & variance identik dengan Blind Count di ACS
+                $closing = $this->closingService->closeDailyShift([
+                    'business_id'                => $businessId,
+                    'branch_id'                  => $branchId,
+                    'user_id'                    => $userId,
+                    'date'                       => $date,
+                    'shift_code'                 => $shiftCode,
+                    'actual_cash_counted'        => $actualCashCounted,
+                    'ending_cash_for_next_shift' => $actualCashCounted,
+                    'notes'                      => $notes,
+                    'closed_by'                  => $userId,
+                ]);
+
+                // c) Jika cash_handover_amount > 0, catat mutasi kas penyerahan ke Owner/Bank
+                $totalHandover = (float) $closing->cash_handover_amount;
+                if ($cashHandoverAmount > 0) {
+                    $this->closingService->recordCashHandover(
+                        $businessId,
+                        $branchId,
+                        $userId,
+                        $cashHandoverAmount,
+                        $notes ? "Tutup Shift: {$notes}" : 'Tutup Shift ACS',
+                        'shift_closing',
+                        $externalReference,
+                        $date
+                    );
+
+                    $totalHandover += $cashHandoverAmount;
+                }
+
+                $endingCash = max(0.0, round($actualCashCounted - $cashHandoverAmount, 2));
+
+                // d) Update record cashier_shift_closings
+                $closing->update([
+                    'external_reference'         => $externalReference,
+                    'handover_receiver'          => $handoverReceiver,
+                    'cash_handover_amount'       => $totalHandover,
+                    'ending_cash_for_next_shift' => $endingCash,
+                ]);
+
+                return $closing->fresh();
+            });
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Laporan tutup shift dan serah terima kas berhasil disinkronkan ke Buku Digital.',
+                'data'    => [
+                    'closing_id'                 => $closingData->id,
+                    'external_reference'         => $closingData->external_reference,
+                    'expected_drawer_cash'       => (float) $closingData->expected_drawer_cash,
+                    'actual_cash_counted'        => (float) $closingData->actual_cash_counted,
+                    'variance'                   => (float) $closingData->variance,
+                    'cash_handover_amount'       => (float) $closingData->cash_handover_amount,
+                    'ending_cash_for_next_shift' => (float) $closingData->ending_cash_for_next_shift,
+                    'handover_receiver'          => $closingData->handover_receiver,
+                    'date'                       => $closingData->date ? Carbon::parse($closingData->date)->toDateString() : null,
+                    'is_idempotent'              => false,
+                ],
+            ], 200);
+
+        } catch (\Throwable $e) {
+            Log::error('ACS Sync Error saat simpan shift closing: ' . $e->getMessage(), [
+                'external_reference' => $externalReference,
+                'trace'              => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal memproses sinkronisasi tutup shift: ' . $e->getMessage(),
             ], 500);
         }
     }

@@ -18,6 +18,7 @@ Route::prefix('v1')->group(function () {
     // Rute Publik / Shared Secret Sync (Tidak butuh Sanctum session, diamankan token)
     Route::post('/sync/salary', [ExpenseSyncController::class, 'storeFromAttendance']);
     Route::get('/sync/acs/drawer-summary', [AcsCashDrawerSyncController::class, 'getDrawerSummary'])->name('sync.acs.drawer_summary');
+    Route::post('/sync/acs/shift-closing', [AcsCashDrawerSyncController::class, 'storeShiftClosing'])->name('sync.acs.shift_closing');
     Route::get('/whatsapp-report', [WhatsappReportController::class, 'generateDailyReport']);
 
     // [RUTE BARU UNTUK SHORTCUT PENGINGAT KASBON]

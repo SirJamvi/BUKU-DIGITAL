@@ -23,9 +23,13 @@ class CashierClosingService
         int $branchId,
         int $cashierId,
         float $amount,
-        ?string $notes = null
+        ?string $notes = null,
+        string $referenceType = 'handover',
+        ?string $referenceId = null,
+        ?string $date = null
     ): CashFlow {
-        AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, now());
+        $targetDate = $date ? Carbon::parse($date)->toDateString() : now()->toDateString();
+        AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, $targetDate);
 
         $category = ExpenseCategory::firstOrCreate(
             [
@@ -45,14 +49,15 @@ class CashierClosingService
             'branch_id'      => $branchId,
             'type'           => 'expense',
             'flow_type'      => 'cash_handover',
-            'reference_type' => 'handover',
+            'reference_type' => $referenceType,
+            'reference_id'   => $referenceId,
             'category_id'    => $category->id,
             'amount'         => $amount,
             'payment_method' => 'cash',
             'funding_source' => 'drawer',
             'affects_drawer' => 1,
             'description'    => 'Setoran Kas Fisik Laci ke Owner/Bank' . ($notes ? ": {$notes}" : ''),
-            'date'           => now()->toDateString(),
+            'date'           => $targetDate,
             'created_by'     => $cashierId,
         ]);
     }
