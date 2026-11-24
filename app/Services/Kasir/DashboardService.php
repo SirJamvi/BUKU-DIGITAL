@@ -144,11 +144,13 @@ class DashboardService
             }
             $lowStockItems = $lowStockQuery->count();
 
-            // 2. Hitung jumlah fisik produk es kristal yang keluar hari ini
+            // 2. Hitung jumlah fisik produk es kristal yang keluar hari ini (Kecualikan transaksi void/batal)
             $soldQuery = DB::table('transactions')
                 ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
                 ->join('products', 'transaction_details.product_id', '=', 'products.id')
                 ->where('transactions.created_by', $kasirId)
+                ->where('transactions.status', '!=', 'cancelled')
+                ->whereNull('transactions.voided_at')
                 ->whereBetween('transactions.transaction_date', [$todayStart, $todayEnd]);
 
             app(\App\Support\BranchContext::class)->applyTo($soldQuery, 'transactions', 'branch_id');
@@ -160,10 +162,14 @@ class DashboardService
                 ->limit(5)
                 ->get();
 
-            // 3. [BARU] Ambil Pengiriman Berjalan (Driver Delivery Trips yang sedang aktif)
+            // 3. [BARU] Ambil Pengiriman Berjalan (Driver Delivery Trips yang sedang aktif - Kecualikan transaksi void/batal)
             $activeDeliveriesQuery = Transaction::with(['customer', 'driver', 'details.product'])
                 ->where('business_id', $businessId)
                 ->where('type', 'sale')
+                ->where('status', '!=', 'cancelled')
+                ->whereNull('voided_at')
+                ->whereNotIn('order_status', ['cancelled', 'delivered'])
+                ->whereNotIn('delivery_status', ['cancelled', 'delivered'])
                 ->where(function ($q) {
                     $q->where('order_status', 'delivering')
                       ->orWhere('delivery_status', 'delivering');
@@ -185,12 +191,14 @@ class DashboardService
                 ->orderBy('name', 'asc')
                 ->get();
 
-            // 5. Ambil Kasbon yang Belum Lunas & Grouping Berdasarkan Pelanggan (Kecualikan yang sedang dibawa driver)
+            // 5. Ambil Kasbon yang Belum Lunas & Grouping Berdasarkan Pelanggan (Kecualikan yang sedang dibawa driver & transaksi void/batal)
             // Kasbon disatukan untuk semua cabang dalam 1 bisnis (lintas cabang) dengan eager load 'branch'
             $pendingKasbonQuery = Transaction::withoutGlobalScope('branch')
                 ->with(['customer', 'createdBy', 'driver', 'details.product', 'branch'])
                 ->where('business_id', $businessId)
                 ->where('type', 'sale')
+                ->where('status', '!=', 'cancelled')
+                ->whereNull('voided_at')
                 ->where('payment_status', 'pending')
                 ->where(function ($q) {
                     $q->whereNull('order_status')

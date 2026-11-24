@@ -248,6 +248,8 @@ class PosApiController extends Controller
 
         $ordersQuery = Transaction::with(['customer', 'driver'])
             ->where('business_id', $businessId)
+            ->where('status', '!=', 'cancelled')
+            ->whereNull('voided_at')
             ->whereIn('order_status', ['pending', 'delivering'])
             ->orderBy('created_at', 'desc');
 

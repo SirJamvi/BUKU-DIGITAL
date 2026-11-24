@@ -189,10 +189,12 @@ class TransactionService
 
             // 4. Soft Void: Set status cancelled dan isi audit trail
             $transaction->update([
-                'status'      => 'cancelled',
-                'void_reason' => $reason ?: 'Dibatalkan oleh Admin',
-                'voided_by'   => Auth::id(),
-                'voided_at'   => now(),
+                'status'          => 'cancelled',
+                'order_status'    => 'cancelled',
+                'delivery_status' => 'cancelled',
+                'void_reason'     => $reason ?: 'Dibatalkan oleh Admin',
+                'voided_by'       => Auth::id(),
+                'voided_at'       => now(),
             ]);
 
             return true;

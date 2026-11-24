@@ -242,11 +242,13 @@ class TransactionController extends Controller
         $businessId = Auth::user()->business_id;
         $transactionIds = $request->transaction_ids;
 
-        // Pastikan transaksi yang diubah benar-benar milik bisnis ini dan statusnya masih pending (lintas cabang diizinkan)
+        // Pastikan transaksi yang diubah benar-benar milik bisnis ini dan statusnya masih pending (lintas cabang diizinkan, kecualikan void)
         $transactions = Transaction::withoutGlobalScope('branch')
             ->with(['branch', 'customer'])
             ->whereIn('id', $transactionIds)
             ->where('business_id', $businessId)
+            ->where('status', '!=', 'cancelled')
+            ->whereNull('voided_at')
             ->where('payment_status', 'pending')
             ->get();
 
@@ -380,6 +382,8 @@ class TransactionController extends Controller
         $transactions = Transaction::with('customer')
             ->where('business_id', $businessId)
             ->where('delivery_trip_code', $tripCode)
+            ->where('status', '!=', 'cancelled')
+            ->whereNull('voided_at')
             ->get();
 
         if ($transactions->isEmpty()) {
