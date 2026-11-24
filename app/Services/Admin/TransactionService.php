@@ -99,7 +99,8 @@ class TransactionService
         return DB::transaction(function () use ($transaction, $reason) {
             // 1. Rollback Stok (Kembalikan stok ke inventori dengan tipe void_return)
             foreach ($transaction->details as $detail) {
-                $inventoryQuery = Inventory::where('product_id', $detail->product_id)
+                $inventoryQuery = Inventory::withoutGlobalScope('branch')
+                    ->where('product_id', $detail->product_id)
                     ->where('business_id', $transaction->business_id);
                 if ($transaction->branch_id) {
                     $inventoryQuery->where('branch_id', $transaction->branch_id);
@@ -112,16 +113,30 @@ class TransactionService
                     $inventory->current_stock += $qtyModifier;
                     $inventory->save();
 
-                    StockMovement::create([
-                        'business_id'  => $transaction->business_id,
-                        'branch_id'    => $transaction->branch_id,
-                        'product_id'   => $detail->product_id,
-                        'type'         => 'void_return',
-                        'quantity'     => $qtyModifier,
-                        'reference_id' => 'VOID-TX-' . $transaction->id,
-                        'notes'        => 'Pembatalan & Void transaksi #' . $transaction->id . ($reason ? ": {$reason}" : ''),
-                        'created_by'   => Auth::id(), 
-                    ]);
+                    $movementData = [
+                        'business_id'    => $transaction->business_id,
+                        'branch_id'      => $transaction->branch_id,
+                        'product_id'     => $detail->product_id,
+                        'type'           => 'void_return',
+                        'quantity'       => $qtyModifier,
+                        'unit_cost'      => (float) ($detail->cost_price ?? 0),
+                        'reference_type' => Transaction::class,
+                        'reference_id'   => 'VOID-TX-' . $transaction->id,
+                        'notes'          => 'Pembatalan & Void transaksi #' . $transaction->id . ($reason ? ": {$reason}" : ''),
+                        'created_by'     => Auth::id(), 
+                    ];
+
+                    try {
+                        StockMovement::create($movementData);
+                    } catch (\Illuminate\Database\QueryException $e) {
+                        // Fallback ke 'adjustment' jika ENUM kolom 'type' di database belum diupdate ke 'void_return' (MySQL error 1265)
+                        if (str_contains($e->getMessage(), '1265') || str_contains($e->getMessage(), 'truncated')) {
+                            $movementData['type'] = 'adjustment';
+                            StockMovement::create($movementData);
+                        } else {
+                            throw $e;
+                        }
+                    }
                 }
             }
 

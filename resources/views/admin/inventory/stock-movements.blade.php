@@ -43,10 +43,15 @@
                                 'out', 'sale' => 'bg-danger',
                                 'adjustment' => 'bg-info',
                                 'waste' => 'bg-warning text-dark',
+                                'void_return' => 'bg-dark',
                                 default => 'bg-secondary'
                             };
+                            $typeLabel = match($movement->type) {
+                                'void_return' => 'Void Return',
+                                default => ucfirst($movement->type)
+                            };
                         @endphp
-                        <span class="badge {{ $badgeClass }}">{{ ucfirst($movement->type) }}</span>
+                        <span class="badge {{ $badgeClass }}">{{ $typeLabel }}</span>
                     </td>
                     <td class="fw-bold text-center">
                         {{ ($movement->quantity > 0 && $movement->type != 'out') ? '+' : '' }}{{ $movement->quantity }}
