@@ -188,14 +188,24 @@ class TransactionService
             }
 
             // 4. Soft Void: Set status cancelled dan isi audit trail
-            $transaction->update([
+            $updateData = [
                 'status'          => 'cancelled',
                 'order_status'    => 'cancelled',
-                'delivery_status' => 'cancelled',
                 'void_reason'     => $reason ?: 'Dibatalkan oleh Admin',
                 'voided_by'       => Auth::id(),
                 'voided_at'       => now(),
-            ]);
+            ];
+
+            try {
+                $transaction->update(array_merge($updateData, ['delivery_status' => 'cancelled']));
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Fallback jika ENUM delivery_status di database belum diupdate ke 'cancelled'
+                if (str_contains($e->getMessage(), '1265') || str_contains($e->getMessage(), 'truncated')) {
+                    $transaction->update($updateData);
+                } else {
+                    throw $e;
+                }
+            }
 
             return true;
         });

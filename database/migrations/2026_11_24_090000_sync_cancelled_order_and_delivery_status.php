@@ -14,6 +14,11 @@ return new class extends Migration
     public function up(): void
     {
         if (Schema::hasTable('transactions')) {
+            // Perluas ENUM delivery_status di MySQL agar mencakup 'cancelled'
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement("ALTER TABLE transactions MODIFY COLUMN delivery_status ENUM('pending','delivering','delivered','cancelled') NOT NULL DEFAULT 'pending'");
+            }
+
             DB::table('transactions')
                 ->where(function ($q) {
                     $q->where('status', 'cancelled')
@@ -35,6 +40,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Operasi satu arah untuk sanitasi data void
+        if (Schema::hasTable('transactions') && DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE transactions MODIFY COLUMN delivery_status ENUM('pending','delivering','delivered') NOT NULL DEFAULT 'pending'");
+        }
     }
 };
