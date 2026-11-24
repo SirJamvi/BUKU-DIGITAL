@@ -65,9 +65,22 @@ class TransactionService
             });
         }
 
-        // Filter status pembayaran (paid / pending)
-        if (!empty($filters['payment_status']) && in_array($filters['payment_status'], ['paid', 'pending'])) {
-            $query->where('payment_status', $filters['payment_status']);
+        // Filter status pembayaran (paid / pending / void)
+        if (!empty($filters['payment_status'])) {
+            if ($filters['payment_status'] === 'void') {
+                $query->where(function ($q) {
+                    $q->where('status', 'cancelled')
+                      ->orWhereNotNull('voided_at');
+                });
+            } elseif ($filters['payment_status'] === 'paid') {
+                $query->where('payment_status', 'paid')
+                      ->where('status', '!=', 'cancelled')
+                      ->whereNull('voided_at');
+            } elseif ($filters['payment_status'] === 'pending') {
+                $query->where('payment_status', 'pending')
+                      ->where('status', '!=', 'cancelled')
+                      ->whereNull('voided_at');
+            }
         }
 
         // Filter tanggal mulai
@@ -89,6 +102,10 @@ class TransactionService
      */
     public function deleteTransaction(Transaction $transaction, ?string $reason = null): bool
     {
+        if ($transaction->status === 'cancelled' || !empty($transaction->voided_at)) {
+            throw new \Exception("Transaksi #{$transaction->id} sudah dibatalkan (Void) sebelumnya.");
+        }
+
         // Kunci periode pembukuan bulanan
         \App\Services\Accounting\AccountingPeriodGuard::ensurePeriodOpen(
             (int) $transaction->business_id,

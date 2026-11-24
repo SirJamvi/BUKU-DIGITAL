@@ -14,7 +14,10 @@
             Detail Transaksi #{{ $transaction->id }}
         @endslot
         @slot('headerActions')
-            @if($transaction->payment_status === 'pending')
+            @php
+                $isVoid = $transaction->status === 'cancelled' || !empty($transaction->voided_at);
+            @endphp
+            @if(!$isVoid && $transaction->payment_status === 'pending')
                 <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#payModalShow{{ $transaction->id }}">
                     <i class="fas fa-check-circle me-1"></i> Tandai Lunas
                 </button>
@@ -23,6 +26,22 @@
                 <i class="fas fa-print me-2"></i>Cetak Struk
             </a>
         @endslot
+
+        @if($isVoid)
+        <div class="alert alert-danger d-flex align-items-center mb-3 p-3 border-danger shadow-sm" style="border-radius: 10px;">
+            <i class="fas fa-ban fa-2x me-3 text-danger"></i>
+            <div>
+                <h5 class="alert-heading fw-bold mb-1">TRANSAKSI TELAH DIBATALKAN (VOID)</h5>
+                <p class="mb-0 small text-dark">
+                    Transaksi ini dibatalkan pada <strong>{{ $transaction->voided_at ? $transaction->voided_at->format('d/m/Y H:i') : '-' }} WIB</strong>.
+                    @if($transaction->void_reason)
+                        <br>Alasan: <em class="fw-semibold text-danger">{{ $transaction->void_reason }}</em>
+                    @endif
+                    <br><span class="text-muted">Seluruh stok barang dan alokasi kas terkait transaksi ini telah dikembalikan (Rollback) secara otomatis ke sistem.</span>
+                </p>
+            </div>
+        </div>
+        @endif
 
         <div class="receipt-preview p-3">
             <div class="header text-center mb-4">

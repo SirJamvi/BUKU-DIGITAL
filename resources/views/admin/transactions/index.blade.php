@@ -40,6 +40,7 @@
                             <option value="">Semua Status</option>
                             <option value="paid" {{ request('payment_status') === 'paid' ? 'selected' : '' }}>Lunas</option>
                             <option value="pending" {{ request('payment_status') === 'pending' ? 'selected' : '' }}>Kasbon / Tempo</option>
+                            <option value="void" {{ request('payment_status') === 'void' ? 'selected' : '' }}>Dibatalkan (Void)</option>
                         </select>
                     </div>
 
@@ -78,7 +79,7 @@
             <i class="fas fa-filter text-primary me-2"></i>
             Menampilkan hasil pencarian
             @if(request('search')) untuk ID / kata kunci: <strong>"{{ request('search') }}"</strong> @endif
-            @if(request('payment_status')) | Status: <strong>{{ request('payment_status') === 'paid' ? 'Lunas' : 'Kasbon' }}</strong> @endif
+            @if(request('payment_status')) | Status: <strong>{{ request('payment_status') === 'paid' ? 'Lunas' : (request('payment_status') === 'void' ? 'Dibatalkan (Void)' : 'Kasbon') }}</strong> @endif
             @if(request('start_date')) | Sejak: <strong>{{ request('start_date') }}</strong> @endif
             @if(request('end_date')) | Sampai: <strong>{{ request('end_date') }}</strong> @endif
             (Ditemukan <strong>{{ $transactions->total() }}</strong> transaksi)
@@ -103,10 +104,16 @@
         @endslot
 
         @forelse ($transactions as $transaction)
-        <tr>
+        @php
+            $isVoid = $transaction->status === 'cancelled' || !empty($transaction->voided_at);
+        @endphp
+        <tr class="{{ $isVoid ? 'table-secondary opacity-75' : '' }}">
             {{-- Kolom ID --}}
             <td>
                 <span class="badge bg-dark fs-6 px-2 py-1">#{{ $transaction->id }}</span>
+                @if($isVoid)
+                    <span class="badge bg-danger ms-1 small">VOID</span>
+                @endif
                 @if($transaction->delivery_trip_code)
                     <br>
                     <span class="badge bg-warning bg-opacity-25 text-dark border border-warning small mt-1" title="Surat Jalan Pengiriman">
@@ -140,12 +147,19 @@
 
             {{-- Kolom Total & Status Bayar --}}
             <td class="text-end">
-                <div class="fw-bold fs-6 text-dark">Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</div>
+                <div class="fw-bold fs-6 {{ $isVoid ? 'text-decoration-line-through text-muted' : 'text-dark' }}">Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</div>
                 @php
                     $pm = strtolower($transaction->payment_method ?? 'cash');
                     $isPaid = $transaction->payment_status === 'paid';
                 @endphp
-                @if($isPaid)
+                @if($isVoid)
+                    <span class="badge bg-secondary py-1 px-2" style="font-size: 0.75rem;">
+                        <i class="fas fa-ban me-1"></i>Dibatalkan (Void)
+                    </span>
+                    @if($transaction->void_reason)
+                        <br><small class="text-danger small" title="{{ $transaction->void_reason }}"><i class="fas fa-info-circle me-1"></i>{{ \Illuminate\Support\Str::limit($transaction->void_reason, 28) }}</small>
+                    @endif
+                @elseif($isPaid)
                     <span class="badge badge-soft-success py-1 px-2" style="font-size: 0.75rem; background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
                         <i class="fas fa-check-circle me-1"></i>Lunas ({{ strtoupper($pm) }})
                     </span>
@@ -158,32 +172,34 @@
 
             {{-- Kolom Aksi --}}
             <td class="text-center">
-                <div class="d-flex justify-content-center gap-1">
-                    {{-- Tombol Pelunasan jika Status Pending / Kasbon --}}
-                    @if($transaction->payment_status === 'pending')
-                    <button type="button" class="btn btn-sm btn-success fw-bold text-white shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAdminPay_{{ $transaction->id }}" title="Validasi Pelunasan Kasbon #{{ $transaction->id }}">
-                        <i class="fas fa-check"></i> Lunasi
-                    </button>
+                <div class="d-flex justify-content-center align-items-center gap-1">
+                    @if(!$isVoid)
+                        {{-- Tombol Pelunasan jika Status Pending / Kasbon --}}
+                        @if($transaction->payment_status === 'pending')
+                        <button type="button" class="btn btn-sm btn-success fw-bold text-white shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAdminPay_{{ $transaction->id }}" title="Validasi Pelunasan Kasbon #{{ $transaction->id }}">
+                            <i class="fas fa-check"></i> Lunasi
+                        </button>
+                        @endif
+
+                        {{-- Edit --}}
+                        <a href="{{ route('admin.transactions.edit', $transaction->id) }}" class="btn btn-sm btn-warning text-dark fw-bold" title="Edit Transaksi #{{ $transaction->id }}">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+
+                        {{-- Hapus dengan Rollback --}}
+                        <form action="{{ route('admin.transactions.destroy', $transaction->id) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus transaksi #{{ $transaction->id }} ini? Semua stok barang, arus kas, dan poin pelanggan terkait akan dikembalikan (Rollback) secara otomatis.');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-danger btn-sm" title="Hapus Transaksi #{{ $transaction->id }}">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </form>
                     @endif
 
                     {{-- Detail --}}
                     <a href="{{ route('admin.transactions.show', $transaction->id) }}" class="btn btn-sm btn-info text-white" title="Lihat Rincian Transaksi #{{ $transaction->id }}">
                         <i class="fas fa-eye"></i> Detail
                     </a>
-
-                    {{-- Edit --}}
-                    <a href="{{ route('admin.transactions.edit', $transaction->id) }}" class="btn btn-sm btn-warning text-dark fw-bold" title="Edit Transaksi #{{ $transaction->id }}">
-                        <i class="fas fa-edit"></i> Edit
-                    </a>
-
-                    {{-- Hapus dengan Rollback --}}
-                    <form action="{{ route('admin.transactions.destroy', $transaction->id) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus transaksi #{{ $transaction->id }} ini? Semua stok barang, arus kas, dan poin pelanggan terkait akan dikembalikan (Rollback) secara otomatis.');">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="btn btn-danger btn-sm" title="Hapus Transaksi #{{ $transaction->id }}">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </form>
                 </div>
             </td>
         </tr>

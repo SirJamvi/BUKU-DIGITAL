@@ -38,14 +38,22 @@ class TransactionController extends Controller
         return view('admin.transactions.show', compact('transaction'));
     }
 
-    public function edit(Transaction $transaction): View
+    public function edit(Transaction $transaction): View|RedirectResponse
     {
+        if ($transaction->status === 'cancelled' || !empty($transaction->voided_at)) {
+            return redirect()->route('admin.transactions.show', $transaction->id)
+                ->with('error', "Transaksi #{$transaction->id} sudah dibatalkan (Void) dan tidak dapat diedit.");
+        }
         $data = app(KasirTransactionService::class)->getEditTransactionData($transaction);
         return view('admin.transactions.edit', $data);
     }
 
     public function update(StoreTransactionRequest $request, Transaction $transaction): RedirectResponse
     {
+        if ($transaction->status === 'cancelled' || !empty($transaction->voided_at)) {
+            return redirect()->route('admin.transactions.show', $transaction->id)
+                ->with('error', "Transaksi #{$transaction->id} sudah dibatalkan (Void) dan tidak dapat diperbarui.");
+        }
         try {
             app(KasirTransactionService::class)->updateTransaction($transaction, $request->validated());
             \App\Support\BranchCache::flush($transaction->business_id);
@@ -62,6 +70,9 @@ class TransactionController extends Controller
      */
     public function markAsPaid(Request $request, Transaction $transaction): RedirectResponse
     {
+        if ($transaction->status === 'cancelled' || !empty($transaction->voided_at)) {
+            return back()->with('error', "Transaksi #{$transaction->id} sudah dibatalkan (Void) dan tidak dapat dilunasi.");
+        }
         $isCash = strtolower($request->payment_method ?? '') === 'cash';
 
         $request->validate([
@@ -147,6 +158,10 @@ class TransactionController extends Controller
      */
     public function destroy(Transaction $transaction): RedirectResponse
     {
+        if ($transaction->status === 'cancelled' || !empty($transaction->voided_at)) {
+            return back()->with('error', "Transaksi #{$transaction->id} sudah dibatalkan (Void) sebelumnya.");
+        }
+
         try {
             // Ambil ID dan tanggal untuk pesan sukses sebelum data hilang
             $txId = $transaction->id;
@@ -156,9 +171,7 @@ class TransactionController extends Controller
             $this->transactionService->deleteTransaction($transaction, $reason);
             \App\Support\BranchCache::flush($bizId);
 
-            return redirect()
-                ->route('admin.transactions.index')
-                ->with('success', "Transaksi #{$txId} berhasil dibatalkan (Void). Stok dikembalikan dan jurnal contra-entry telah dicatat.");
+            return back()->with('success', "Transaksi #{$txId} berhasil dibatalkan (Void). Stok dikembalikan dan jurnal contra-entry telah dicatat.");
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal menghapus transaksi: ' . $e->getMessage());
         }
