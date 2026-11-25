@@ -70,7 +70,7 @@
                 </div>
                 <div class="pos-product-grid">
                     @forelse ($products as $product)
-                    <div class="card product-card" data-id="{{ $product->id }}" data-name="{{ $product->name }}" data-price="{{ $product->base_price }}">
+                    <div class="card product-card kasir-card-interactive" data-id="{{ $product->id }}" data-name="{{ $product->name }}" data-price="{{ $product->base_price }}">
                         <div class="card-body text-center p-2">
                             <h6 class="card-title small fw-bold mb-1">{{ $product->name }}</h6>
                             <p class="card-text small fw-bold" style="color: var(--kasir-accent);">Rp {{ number_format($product->base_price, 0, ',', '.') }}</p>

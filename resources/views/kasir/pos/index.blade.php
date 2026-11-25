@@ -138,7 +138,7 @@
                 <div class="pos-product-grid">
                     @forelse ($products as $product)
                     {{-- KARTU PRODUK UTAMA --}}
-                    <div class="card product-card mb-3 cursor-pointer shadow-sm"
+                    <div class="card product-card kasir-card-interactive mb-3 cursor-pointer shadow-sm"
                         data-id="{{ $product->id }}"
                         data-variant-id=""
                         data-name="{{ $product->name }}"
@@ -156,7 +156,7 @@
                     @php
                     $customPrice = $product->base_price + $variant->price_adjustment;
                     @endphp
-                    <div class="card product-card mb-3 cursor-pointer shadow-sm bg-light"
+                    <div class="card product-card kasir-card-interactive mb-3 cursor-pointer shadow-sm bg-light"
                         data-id="{{ $product->id }}"
                         data-variant-id="{{ $variant->id }}"
                         data-name="{{ $product->name }} ({{ $variant->variant_name }})"
@@ -199,7 +199,7 @@
                 </div>
 
                 {{-- Alert Petunjuk Drag & Drop Pesanan AI --}}
-                <div id="ai-drop-hint" class="d-none alert alert-success py-2 px-3 small mb-2 border border-success">
+                <div id="ai-drop-hint" class="d-none alert alert-success alert-permanent py-2 px-3 small mb-2 border border-success">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-hand-holding-box fs-5 me-2 text-success"></i>
                         <div>
@@ -210,7 +210,7 @@
                 </div>
 
                 {{-- Alert Mode Pengiriman Rombongan --}}
-                <div id="multi-order-banner" class="alert alert-info py-2 px-3 small d-none mb-2">
+                <div id="multi-order-banner" class="alert alert-info alert-permanent py-2 px-3 small d-none mb-2">
                     <div class="d-flex align-items-center">
                         <i class="fas fa-truck-moving fs-5 me-2 text-primary"></i>
                         <div>
@@ -276,7 +276,7 @@
 
                 <div class="mt-auto">
                     {{-- Info & Toggle Deposit Pelanggan --}}
-                    <div id="customer-deposit-box" class="d-none alert alert-info py-2 px-3 mb-2 rounded border-info">
+                    <div id="customer-deposit-box" class="d-none alert alert-info alert-permanent py-2 px-3 mb-2 rounded border-info">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <i class="fas fa-wallet text-info me-1"></i>

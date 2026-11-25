@@ -13,8 +13,6 @@
             Daftar Transaksi Saya
         @endslot
 
-        @include('components.alert')
-
         <div class="table-responsive">
             <x-table>
                 @slot('thead')

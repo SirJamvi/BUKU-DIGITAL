@@ -797,27 +797,11 @@
         // Update stats every 5 minutes
         setInterval(updateStats, 300000);
 
-        // Handle window resize for responsive behavior
-        function handleResize() {
-            if (window.innerWidth > 992) {
-                sidebar.classList.remove('show');
-                if (sidebarOverlay) {
-                    sidebarOverlay.classList.remove('show');
-                }
-                if (mobileMenuBtn) {
-                    const icon = mobileMenuBtn.querySelector('i');
-                    if (icon) {
-                        icon.className = 'fas fa-bars';
-                    }
-                }
-            }
-        }
-
-        window.addEventListener('resize', handleResize);
-
         // Prevent sidebar from closing when clicking inside it
-        sidebar.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
+        if (sidebar) {
+            sidebar.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+        }
     });
 </script>

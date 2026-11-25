@@ -1,24 +1,25 @@
 {{-- resources/views/kasir/layouts/header.blade.php --}}
 <header class="main-header">
     <nav class="navbar navbar-expand-lg navbar-light bg-white">
-        <div class="container-fluid">
-            <!-- Breadcrumb Section -->
-            <div class="breadcrumb-section flex-grow-1">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb mb-0">
-                        <li class="breadcrumb-item">
-                            <a href="{{ route('kasir.dashboard') }}" class="text-decoration-none">
-                                <i class="fas fa-home me-1"></i>
-                                <span class="d-none d-sm-inline">Dashboard</span>
-                            </a>
-                        </li>
-                        @yield('breadcrumb')
-                    </ol>
-                </nav>
-                
-                <!-- Page Title (Mobile) -->
-                <div class="page-title d-lg-none mt-2">
-                    <h5 class="mb-0 fw-bold text-dark">@yield('page-title', 'Dashboard')</h5>
+        <div class="container-fluid d-flex align-items-center justify-content-between gap-2">
+            <!-- Left: Hamburger Toggle + Breadcrumb Section -->
+            <div class="d-flex align-items-center gap-3 flex-grow-1 min-w-0">
+                <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" title="Toggle Menu" aria-label="Toggle Menu" aria-expanded="false">
+                    <i class="fas fa-bars"></i>
+                </button>
+
+                <div class="breadcrumb-section flex-grow-1 min-w-0">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb mb-0">
+                            <li class="breadcrumb-item">
+                                <a href="{{ route('kasir.dashboard') }}" class="text-decoration-none">
+                                    <i class="fas fa-home me-1"></i>
+                                    <span class="d-none d-sm-inline">Dashboard</span>
+                                </a>
+                            </li>
+                            @yield('breadcrumb')
+                        </ol>
+                    </nav>
                 </div>
             </div>
 
@@ -236,19 +237,18 @@
     }
 
     .user-dropdown:hover {
-        background-color: var(--kasir-secondary);
-        border-color: var(--kasir-border);
-        transform: translateY(-1px);
+        background-color: var(--kasir-brand-soft);
+        border-color: var(--kasir-brand-border);
+        color: var(--kasir-text);
     }
 
     .user-avatar i {
         color: var(--kasir-primary);
-        transition: all 0.3s ease;
+        transition: color 0.18s ease;
     }
 
     .user-dropdown:hover .user-avatar i {
-        color: #1d4ed8;
-        transform: scale(1.1);
+        color: var(--kasir-secondary);
     }
 
     .dropdown-menu {
@@ -261,14 +261,16 @@
     }
 
     .dropdown-item {
-        padding: 0.75rem 1.25rem;
-        transition: all 0.3s ease;
+        padding: 0.65rem 1.25rem;
+        color: var(--kasir-text);
+        transition: background-color 0.15s ease, color 0.15s ease;
         border-radius: 0;
     }
 
-    .dropdown-item:hover {
-        background-color: var(--kasir-secondary);
-        transform: translateX(5px);
+    .dropdown-item:hover,
+    .dropdown-item:focus {
+        background-color: var(--kasir-brand-soft);
+        color: var(--kasir-text);
     }
 
     .dropdown-item i {

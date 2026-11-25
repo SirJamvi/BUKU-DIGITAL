@@ -7,8 +7,6 @@
 @endsection
 
 @section('content')
-    @include('components.alert') {{-- Memanggil komponen alert default sistem --}}
-
     {{-- Filter Data Menggunakan Komponen Anda --}}
     <x-card title="Filter Laporan">
         <form method="GET" action="{{ route('kasir.expenses.index') }}">

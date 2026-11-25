@@ -10,8 +10,6 @@
 @section('content')
     <x-card title="Pilih Laporan Anda">
         <p>Lihat riwayat dan rekapitulasi dari aktivitas penjualan yang telah Anda lakukan.</p>
-        
-        @include('components.alert')
 
         <div class="list-group">
             <a href="{{ route('kasir.reports.sales') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">

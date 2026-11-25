@@ -15,8 +15,6 @@
 
         <p class="text-muted">Halaman ini menampilkan semua produk yang aktif dan tersedia untuk dijual. Gunakan sebagai referensi atau untuk melihat detail stok.</p>
 
-        @include('components.alert')
-
         <div class="table-responsive">
             <x-table>
                 @slot('thead')
