@@ -253,8 +253,13 @@
                                 <strong>Pelanggan Umum</strong>
                             </div>
                             @foreach ($customers as $customer)
-                            <div class="customer-item" data-id="{{ $customer->id }}" data-name="{{ $customer->name }}">
-                                {{ $customer->name }}
+                            <div class="customer-item" data-id="{{ $customer->id }}" data-name="{{ $customer->name }}" data-deposit="{{ (float) ($customer->deposit_balance ?? 0) }}">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>{{ $customer->name }}</span>
+                                    @if(($customer->deposit_balance ?? 0) > 0)
+                                    <span class="badge bg-info text-dark" style="font-size: 0.72rem;">Deposit: Rp {{ number_format($customer->deposit_balance, 0, ',', '.') }}</span>
+                                    @endif
+                                </div>
                             </div>
                             @endforeach
                         </div>
@@ -270,15 +275,45 @@
                 </div>
 
                 <div class="mt-auto">
+                    {{-- Info & Toggle Deposit Pelanggan --}}
+                    <div id="customer-deposit-box" class="d-none alert alert-info py-2 px-3 mb-2 rounded border-info">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-wallet text-info me-1"></i>
+                                <small class="fw-bold">Saldo Deposit:</small>
+                                <span class="badge bg-primary ms-1" id="customer-deposit-amount">Rp 0</span>
+                            </div>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="toggle-use-deposit" checked>
+                                <label class="form-check-label small fw-semibold" for="toggle-use-deposit">Gunakan</label>
+                            </div>
+                        </div>
+                        <div id="deposit-deduction-info" class="small text-muted mt-1 d-none">
+                            Potong: <strong class="text-success" id="deposit-used-label">-Rp 0</strong> | Sisa Deposit: <span id="deposit-remaining-label">Rp 0</span>
+                        </div>
+                    </div>
+
                     <hr>
                     <div>
                         <div class="d-flex justify-content-between">
                             <h6 class="text-muted" id="subtotal-label">Subtotal Pesanan Ini</h6>
                             <h6 id="cart-subtotal">Rp 0</h6>
                         </div>
+                        <div class="d-flex justify-content-between text-success d-none" id="cart-deposit-row">
+                            <small class="fw-semibold"><i class="fas fa-check-circle me-1"></i>Potong Deposit Pelanggan</small>
+                            <small class="fw-bold" id="cart-deposit-used">-Rp 0</small>
+                        </div>
                         <div class="d-flex justify-content-between">
                             <h5 class="fw-bold" id="total-label">Total Pesanan Ini</h5>
                             <h5 class="fw-bold" id="cart-total" style="color: var(--kasir-accent);">Rp 0</h5>
+                        </div>
+                        <div class="d-flex justify-content-between text-primary d-none pt-1 border-top" id="cart-net-payable-row">
+                            <span class="fw-bold small">Sisa Tagihan / Bayar</span>
+                            <span class="fw-bold small fs-6" id="cart-net-payable">Rp 0</span>
+                        </div>
+                        <div class="d-flex justify-content-between text-info d-none mt-1" id="cart-deposit-remaining-row">
+                            <small class="fw-semibold"><i class="fas fa-wallet me-1"></i>Deposit Akhir Pelanggan</small>
+                            <small class="fw-bold" id="cart-deposit-remaining">Rp 0</small>
                         </div>
                     </div>
 
@@ -321,6 +356,7 @@
                         <label for="payment_method" class="form-label fw-bold">Metode Pembayaran</label>
                         <select name="payment_method" id="payment_method" class="form-select" required>
                             <option value="" disabled selected>-- Pilih Metode --</option>
+                            <option value="deposit" id="opt-payment-deposit" class="d-none text-success fw-bold">Saldo Deposit Pelanggan (Rp 0 / Lunas)</option>
                             <option value="kasbon" class="text-danger fw-bold">⚠️ BELUM LUNAS (KASBON)</option>
                             @foreach($paymentMethods as $method)
                             <option value="{{ $method->slug }}">
@@ -367,6 +403,8 @@
                 id: 1,
                 customerId: '',
                 customerName: '',
+                depositBalance: 0,
+                useDeposit: true,
                 items: {}
             }
         ];
@@ -545,6 +583,8 @@
                 id: Date.now(),
                 customerId: '',
                 customerName: '',
+                depositBalance: 0,
+                useDeposit: true,
                 items: {}
             });
             activeOrderIndex = orders.length - 1;
@@ -787,8 +827,104 @@
                     }
                 }
 
+                // 3b. Hitung Saldo & Potongan Deposit
+                const depositBox = safeEl('customer-deposit-box');
+                const depositAmountEl = safeEl('customer-deposit-amount');
+                const depositToggle = safeEl('toggle-use-deposit');
+                const depositDeductionInfo = safeEl('deposit-deduction-info');
+                const depositUsedLabel = safeEl('deposit-used-label');
+                const depositRemainingLabel = safeEl('deposit-remaining-label');
+                const depositRow = safeEl('cart-deposit-row');
+                const depositUsedEl = safeEl('cart-deposit-used');
+                const netPayableRow = safeEl('cart-net-payable-row');
+                const netPayableEl = safeEl('cart-net-payable');
+                const depositRemainingRow = safeEl('cart-deposit-remaining-row');
+                const depositRemainingEl = safeEl('cart-deposit-remaining');
+
+                const depositBalance = parseFloat(currentOrder.depositBalance || 0);
+                const useDeposit = currentOrder.useDeposit !== false && depositBalance > 0;
+
+                if (depositToggle) {
+                    depositToggle.checked = currentOrder.useDeposit !== false;
+                }
+
+                if (depositBalance > 0 && currentOrder.customerId) {
+                    safeSetVisible(depositBox, true);
+                    if (depositAmountEl) depositAmountEl.innerText = `Rp ${formatRupiah(depositBalance)}`;
+                } else {
+                    safeSetVisible(depositBox, false);
+                }
+
+                let depositUsed = 0;
+                let netPayable = activeOrderSubtotal;
+                let remainingDeposit = depositBalance;
+
+                if (useDeposit && activeOrderSubtotal > 0) {
+                    depositUsed = Math.min(depositBalance, activeOrderSubtotal);
+                    netPayable = Math.max(0, activeOrderSubtotal - depositUsed);
+                    remainingDeposit = Math.max(0, depositBalance - depositUsed);
+
+                    safeSetVisible(depositDeductionInfo, true);
+                    if (depositUsedLabel) depositUsedLabel.innerText = `-Rp ${formatRupiah(depositUsed)}`;
+                    if (depositRemainingLabel) depositRemainingLabel.innerText = `Rp ${formatRupiah(remainingDeposit)}`;
+
+                    safeSetVisible(depositRow, true);
+                    if (depositUsedEl) depositUsedEl.innerText = `-Rp ${formatRupiah(depositUsed)}`;
+
+                    if (depositUsed > 0) {
+                        safeSetVisible(netPayableRow, true);
+                        if (netPayableEl) netPayableEl.innerText = `Rp ${formatRupiah(netPayable)}`;
+                        safeSetVisible(depositRemainingRow, true);
+                        if (depositRemainingEl) depositRemainingEl.innerText = `Rp ${formatRupiah(remainingDeposit)}`;
+                    } else {
+                        safeSetVisible(netPayableRow, false);
+                        safeSetVisible(depositRemainingRow, false);
+                    }
+                } else {
+                    safeSetVisible(depositDeductionInfo, false);
+                    safeSetVisible(depositRow, false);
+                    safeSetVisible(netPayableRow, false);
+                    safeSetVisible(depositRemainingRow, false);
+                }
+
                 safeSetText('cart-subtotal', `Rp ${formatRupiah(activeOrderSubtotal)}`);
                 safeSetText('cart-total', `Rp ${formatRupiah(activeOrderSubtotal)}`);
+
+                // Update tombol / badge jika single order lunas 100% dari deposit
+                if (!isMultiOrder) {
+                    const hasDriver = driverSelect && driverSelect.value !== '';
+                    const optDeposit = safeEl('opt-payment-deposit');
+
+                    if (!hasDriver) {
+                        if (depositUsed > 0 && netPayable === 0) {
+                            safeSetVisible(optDeposit, true);
+                            if (paymentSelect) {
+                                paymentSelect.value = 'deposit';
+                                safeSetRequired(paymentSelect, false);
+                            }
+                            if (btnSubmit) {
+                                btnSubmit.innerHTML = `<i class="fas fa-check-circle me-2"></i> PROSES (LUNAS DEPOSIT)`;
+                            }
+                        } else {
+                            safeSetVisible(optDeposit, false);
+                            if (paymentSelect && paymentSelect.value === 'deposit') {
+                                paymentSelect.value = '';
+                                safeSetRequired(paymentSelect, true);
+                            }
+                        }
+                    } else {
+                        // Has driver
+                        if (depositUsed > 0 && netPayable === 0) {
+                            const badgeTitle = safeEl('delivery-badge-title');
+                            if (badgeTitle) badgeTitle.innerHTML = '<i class="fas fa-wallet text-success me-1"></i> STATUS: LUNAS 100% VIA DEPOSIT';
+                            const badgeSubtitle = safeEl('delivery-badge-subtitle');
+                            if (badgeSubtitle) badgeSubtitle.innerHTML = 'Pesanan sudah terbayar penuh dari Saldo Deposit Pelanggan. Driver mengantar pesanan tanpa perlu menagih pembayaran.';
+                            if (btnSubmit) {
+                                btnSubmit.innerHTML = `<i class="fas fa-truck-moving me-2"></i> PROSES PENGIRIMAN (LUNAS DEPOSIT)`;
+                            }
+                        }
+                    }
+                }
 
                 // 4. Hitung Multi-Order Grand Total & Render Summary Box
                 let grandTotal = 0;
@@ -830,6 +966,7 @@
                         orders.forEach((ord, ordIdx) => {
                             hiddenItemsDiv.innerHTML += `
                                 <input type="hidden" name="orders[${ordIdx}][customer_id]" value="${ord.customerId || ''}">
+                                <input type="hidden" name="orders[${ordIdx}][use_deposit]" value="${ord.useDeposit ? 1 : 0}">
                                 <input type="hidden" name="orders[${ordIdx}][ai_order_id]" value="${ord.aiOrderId || ''}">
                             `;
                             let itemIdx = 0;
@@ -854,6 +991,7 @@
                     } else {
                         hiddenItemsDiv.innerHTML += `
                             <input type="hidden" name="customer_id" value="${orders[0].customerId || ''}">
+                            <input type="hidden" name="use_deposit" value="${orders[0].useDeposit ? 1 : 0}">
                             <input type="hidden" name="ai_order_id" value="${orders[0].aiOrderId || ''}">
                         `;
                         let itemIdx = 0;
@@ -944,9 +1082,12 @@
                 if (item) {
                     const customerId = item.dataset.id;
                     const customerName = item.dataset.name;
+                    const depositBalance = parseFloat(item.dataset.deposit || '0');
 
                     orders[activeOrderIndex].customerId = customerId;
                     orders[activeOrderIndex].customerName = customerName;
+                    orders[activeOrderIndex].depositBalance = depositBalance;
+                    orders[activeOrderIndex].useDeposit = depositBalance > 0;
 
                     if (customerSearch) customerSearch.value = customerName;
                     if (customerIdInput) customerIdInput.value = customerId;
@@ -958,7 +1099,9 @@
                     posLog("👤 PELANGGAN DIPILIH", {
                         order: `Pesanan ${activeOrderIndex + 1}`,
                         customerId: customerId || 'Umum',
-                        customerName: customerName
+                        customerName: customerName,
+                        depositBalance: depositBalance,
+                        useDeposit: orders[activeOrderIndex].useDeposit
                     });
 
                     renderCart();
@@ -983,6 +1126,8 @@
 
                 orders[activeOrderIndex].customerId = '';
                 orders[activeOrderIndex].customerName = '';
+                orders[activeOrderIndex].depositBalance = 0;
+                orders[activeOrderIndex].useDeposit = false;
                 if (customerSearch) customerSearch.value = '';
                 if (customerIdInput) customerIdInput.value = '';
                 if (customerResults) {
@@ -999,6 +1144,20 @@
                 });
 
                 renderCart();
+            });
+        }
+
+        const toggleUseDeposit = safeEl('toggle-use-deposit');
+        if (toggleUseDeposit) {
+            toggleUseDeposit.addEventListener('change', function() {
+                if (orders[activeOrderIndex]) {
+                    orders[activeOrderIndex].useDeposit = this.checked;
+                    posLog("💳 TOGGLE PENGGUNAAN DEPOSIT", {
+                        order: `Pesanan ${activeOrderIndex + 1}`,
+                        useDeposit: this.checked
+                    });
+                    renderCart();
+                }
             });
         }
 

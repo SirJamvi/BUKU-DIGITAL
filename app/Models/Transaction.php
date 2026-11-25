@@ -22,6 +22,8 @@ class Transaction extends Model
         'claimed_by_driver_id',
         'delivery_trip_code',
         'total_amount',
+        'deposit_used',
+        'net_payable_amount',
         'payment_method',
         'initial_payment_method',
         'settlement_payment_method',
@@ -43,12 +45,31 @@ class Transaction extends Model
     ];
 
     protected $casts = [
-        'transaction_date' => 'datetime',
-        'delivered_at' => 'datetime',
-        'settled_at' => 'datetime',
-        'voided_at' => 'datetime',
-        'proof_verified_at' => 'datetime',
+        'total_amount'       => 'decimal:2',
+        'deposit_used'       => 'decimal:2',
+        'net_payable_amount' => 'decimal:2',
+        'transaction_date'   => 'datetime',
+        'delivered_at'       => 'datetime',
+        'settled_at'         => 'datetime',
+        'voided_at'          => 'datetime',
+        'proof_verified_at'  => 'datetime',
     ];
+
+    /**
+     * Sisa tagihan efektif setelah dipotong deposit.
+     */
+    public function getEffectivePayableAmountAttribute(): float
+    {
+        if ($this->net_payable_amount !== null) {
+            return (float) $this->net_payable_amount;
+        }
+        return (float) max(0, (float) $this->total_amount - (float) ($this->deposit_used ?? 0));
+    }
+
+    public function depositLogs()
+    {
+        return $this->hasMany(CustomerDepositLog::class);
+    }
 
     /**
      * [BARU] Mutator Otomatis untuk payment_method
@@ -120,6 +141,11 @@ class Transaction extends Model
     public function proofVerifiedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'proof_verified_by');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 
     /**

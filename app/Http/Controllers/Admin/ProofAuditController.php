@@ -74,6 +74,7 @@ class ProofAuditController extends Controller
             // =========================================================================
             $innerQuery = Transaction::where('business_id', $businessId)
                 ->where('payment_status', 'paid')
+                ->where('status', '!=', 'cancelled')
                 ->where('payment_method', '!=', 'cash')
                 ->where(function ($q) use ($startDate, $endDate) {
                     $q->whereBetween('transaction_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
@@ -118,6 +119,7 @@ class ProofAuditController extends Controller
             $loadedTransactions = collect();
             if ($proofPaths->isNotEmpty() || $singleIds->isNotEmpty()) {
                 $loadedTransactions = Transaction::where('business_id', $businessId)
+                    ->where('status', '!=', 'cancelled')
                     ->where(function($q) use ($proofPaths, $singleIds) {
                         if ($proofPaths->isNotEmpty()) {
                             $q->whereIn('payment_proof', $proofPaths);
@@ -139,6 +141,7 @@ class ProofAuditController extends Controller
             // Mode Rinci per Nota Satuan
             $txQuery = Transaction::where('business_id', $businessId)
                 ->where('payment_status', 'paid')
+                ->where('status', '!=', 'cancelled')
                 ->where('payment_method', '!=', 'cash')
                 ->where(function ($q) use ($startDate, $endDate) {
                     $q->whereBetween('transaction_date', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])

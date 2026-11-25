@@ -20,6 +20,7 @@ class ExpenseCategory extends Model
         'is_active',
         'created_by',
         'is_cogs', // <-- DITAMBAHKAN
+        'category_type',
     ];
 
     protected $casts = [

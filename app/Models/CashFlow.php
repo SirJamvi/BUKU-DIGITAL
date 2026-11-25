@@ -83,4 +83,37 @@ class CashFlow extends Model
     {
         return $this->belongsTo(User::class, 'proof_verified_by');
     }
+
+    /**
+     * Accessor & Helper Presenter SSOT Arus Kas
+     */
+    public function getFlowTypeLabelAttribute(): string
+    {
+        return \App\Support\CashFlowPresentation::flowTypeLabel($this);
+    }
+
+    public function getFlowTypeBadgeClassAttribute(): string
+    {
+        return \App\Support\CashFlowPresentation::flowTypeBadgeClass($this);
+    }
+
+    public function getFundingSourceLabelAttribute(): string
+    {
+        return \App\Support\CashFlowPresentation::fundingSourceLabel($this);
+    }
+
+    public function getFundingSourceBadgeClassAttribute(): string
+    {
+        return \App\Support\CashFlowPresentation::fundingSourceBadgeClass($this);
+    }
+
+    public function affectsProfitLoss(): bool
+    {
+        return \App\Support\CashFlowPresentation::affectsProfitLoss($this);
+    }
+
+    public function getProfitLossIndicatorBadgeAttribute(): string
+    {
+        return \App\Support\CashFlowPresentation::renderProfitLossBadge($this);
+    }
 }

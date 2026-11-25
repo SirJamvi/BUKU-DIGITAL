@@ -31,6 +31,7 @@ Route::prefix('transactions')->name('transactions.')->group(function () {
 
     Route::post('/bulk-mark-as-paid', [TransactionController::class, 'bulkMarkAsPaid'])->name('bulkMarkAsPaid');
     Route::post('/delivery-trip/complete', [TransactionController::class, 'completeDeliveryTrip'])->name('completeDeliveryTrip');
+    Route::post('/customer-deposit', [TransactionController::class, 'storeCustomerDeposit'])->name('customerDeposit');
 
     // RUTE EDIT
     Route::get('/{transaction}/edit', [TransactionController::class, 'edit'])->name('edit');

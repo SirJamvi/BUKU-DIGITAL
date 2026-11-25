@@ -35,20 +35,20 @@ class DashboardService
     /**
      * Mengambil semua data yang diperlukan untuk dashboard admin.
      */
-    public function getDashboardData(): array
+    public function getDashboardData(?Carbon $filterDate = null): array
     {
         $businessId = Auth::user()->business_id;
         
-        // Setup Tanggal
-        $today = Carbon::today();
-        $yesterday = Carbon::yesterday();
-        $startOfMonth = Carbon::now()->startOfMonth();
-        $endOfMonth = Carbon::now()->endOfMonth();
-        $startOfLastMonth = Carbon::now()->subMonth()->startOfMonth();
-        $endOfLastMonth = Carbon::now()->subMonth()->endOfMonth();
+        // Setup Tanggal Sinkron dengan Filter Date
+        $targetDate = $filterDate ? $filterDate->copy()->startOfDay() : Carbon::today();
+        $previousDate = $targetDate->copy()->subDay();
+        $startOfMonth = $targetDate->copy()->startOfMonth();
+        $endOfMonth = $targetDate->copy()->endOfMonth();
+        $startOfLastMonth = $targetDate->copy()->subMonth()->startOfMonth();
+        $endOfLastMonth = $targetDate->copy()->subMonth()->endOfMonth();
 
-        // 1. Metrik Utama (Penjualan Hari Ini)
-        $salesToday = $this->getSalesForDate($businessId, $today);
+        // 1. Metrik Utama (Penjualan Sesuai Tanggal Filter)
+        $salesToday = $this->getSalesForDate($businessId, $targetDate);
 
         // 2. Perhitungan Laba Bersih (Dengan BranchCache terisolasi cabang & tenant)
         // Bulan Ini (Cache 60 detik)
@@ -56,7 +56,7 @@ class DashboardService
             'start_date' => $startOfMonth->toDateString(), 
             'end_date' => $endOfMonth->toDateString()
         ];
-        $netProfitThisMonth = BranchCache::remember('dashboard_profit_this_month', 60, function () use ($thisMonthFilters) {
+        $netProfitThisMonth = BranchCache::remember('dashboard_profit_' . $startOfMonth->format('Y_m'), 60, function () use ($thisMonthFilters) {
             return $this->financialService->getNetProfitOnly($thisMonthFilters);
         });
 
@@ -65,22 +65,23 @@ class DashboardService
             'start_date' => $startOfLastMonth->toDateString(), 
             'end_date' => $endOfLastMonth->toDateString()
         ];
-        $netProfitLastMonth = BranchCache::remember('dashboard_profit_last_month', 3600, function () use ($lastMonthFilters) {
+        $netProfitLastMonth = BranchCache::remember('dashboard_profit_' . $startOfLastMonth->format('Y_m'), 3600, function () use ($lastMonthFilters) {
             return $this->financialService->getNetProfitOnly($lastMonthFilters);
         });
 
-        // 3. Perbandingan & Persentase (Penjualan kemarin di-cache 1 jam)
-        $salesYesterday = BranchCache::remember('sales_yesterday', 3600, function () use ($businessId, $yesterday) {
-            return $this->getSalesForDate($businessId, $yesterday);
-        }, $yesterday->toDateString());
+        // 3. Perbandingan & Persentase (Penjualan hari sebelumnya di-cache 1 jam)
+        $salesYesterday = BranchCache::remember('sales_prev_' . $previousDate->toDateString(), 3600, function () use ($businessId, $previousDate) {
+            return $this->getSalesForDate($businessId, $previousDate);
+        }, $previousDate->toDateString());
         $salesChangePercentage = $this->calculatePercentageChange($salesToday, $salesYesterday);
         $profitChangePercentage = $this->calculatePercentageChange($netProfitThisMonth, $netProfitLastMonth);
 
         // 4. Metrik Operasional Harian Pabrik Es (Abaikan Ongkos Kirim / Ongkir)
-        $totalBallSoldToday = (int) TransactionDetail::whereHas('transaction', function ($q) use ($businessId, $today) {
+        $totalBallSoldToday = (int) TransactionDetail::whereHas('transaction', function ($q) use ($businessId, $targetDate) {
             $q->where('business_id', $businessId)
               ->where('type', 'sale')
-              ->whereDate('transaction_date', $today);
+              ->where('status', '!=', 'cancelled')
+              ->whereDate('transaction_date', $targetDate);
         })
         ->whereHas('product', function ($q) {
             $q->where('name', 'NOT LIKE', '%ongkos kirim%')
@@ -92,23 +93,23 @@ class DashboardService
             ->where('type', 'sale')
             ->where('payment_status', 'paid')
             ->where('status', 'completed')
-            ->whereDate('transaction_date', $today)
+            ->whereDate('transaction_date', $targetDate)
             ->sum('total_amount');
 
         $pendingToday = (float) Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
             ->where('payment_status', 'pending')
-            ->where('status', 'completed')
-            ->whereDate('transaction_date', $today)
+            ->where('status', '!=', 'cancelled')
+            ->whereDate('transaction_date', $targetDate)
             ->sum('total_amount');
 
-        // Rincian Saluran Pembayaran Hari Ini:
+        // Rincian Saluran Pembayaran Tanggal Filter:
         // A. Penjualan Langsung Lunas di Kasir (Cash SSOT dari cash_flow, DANA, Transfer)
         $todaySalesCash = (float) CashFlow::where('business_id', $businessId)
             ->where('type', 'income')
             ->where('flow_type', 'sale_direct')
             ->where('affects_drawer', 1)
-            ->whereDate('date', $today)
+            ->whereDate('date', $targetDate)
             ->whereRaw('LOWER(payment_method) = ?', ['cash'])
             ->sum('amount');
 
@@ -117,7 +118,7 @@ class DashboardService
             ->where('payment_status', 'paid')
             ->where('payment_method', 'dana')
             ->where('status', 'completed')
-            ->whereDate('transaction_date', $today)
+            ->whereDate('transaction_date', $targetDate)
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('cash_flow')
@@ -134,7 +135,7 @@ class DashboardService
             ->where('payment_status', 'paid')
             ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
             ->where('status', 'completed')
-            ->whereDate('transaction_date', $today)
+            ->whereDate('transaction_date', $targetDate)
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('cash_flow')
@@ -146,11 +147,11 @@ class DashboardService
             })
             ->sum('total_amount');
 
-        // B. Pelunasan Kasbon & Pengiriman yang Cair Hari Ini
+        // B. Pelunasan Kasbon & Pengiriman yang Cair pada Tanggal Filter
         $pelunasanCashToday = (float) CashFlow::where('business_id', $businessId)
             ->where('type', 'income')
             ->where('payment_method', 'cash')
-            ->whereDate('date', $today)
+            ->whereDate('date', $targetDate)
             ->where(function ($q) {
                 $q->where('flow_type', 'debt_settlement')
                   ->orWhere('description', 'LIKE', '%Pelunasan%');
@@ -160,7 +161,7 @@ class DashboardService
         $pelunasanDanaToday = (float) CashFlow::where('business_id', $businessId)
             ->where('type', 'income')
             ->where('payment_method', 'dana')
-            ->whereDate('date', $today)
+            ->whereDate('date', $targetDate)
             ->where(function ($q) {
                 $q->where('flow_type', 'debt_settlement')
                   ->orWhere('description', 'LIKE', '%Pelunasan%');
@@ -170,17 +171,82 @@ class DashboardService
         $pelunasanTransferToday = (float) CashFlow::where('business_id', $businessId)
             ->where('type', 'income')
             ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
-            ->whereDate('date', $today)
+            ->whereDate('date', $targetDate)
             ->where(function ($q) {
                 $q->where('flow_type', 'debt_settlement')
                   ->orWhere('description', 'LIKE', '%Pelunasan%');
             })
             ->sum('amount');
 
-        // Total per saluran masuk uang hari ini
-        $totalInflowCash = $todaySalesCash + $pelunasanCashToday;
-        $totalInflowDana = $todaySalesDana + $pelunasanDanaToday;
-        $totalInflowTransfer = $todaySalesTransfer + $pelunasanTransferToday;
+        // C. Pengembalian Dana / Void Hari Ini (cash_refund) untuk Menyesuaikan Arus Kas Riil Netto
+        $refundCashToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->where('flow_type', 'cash_refund')
+            ->where('payment_method', 'cash')
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        $refundDanaToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->where('flow_type', 'cash_refund')
+            ->where('payment_method', 'dana')
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        $refundTransferToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->where('flow_type', 'cash_refund')
+            ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        // C2. Penerimaan & Pengembalian Deposit Pelanggan (Titipan Non-P&L Masuk Kas Riil)
+        $depositCashToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'income')
+            ->where('flow_type', 'customer_deposit')
+            ->where('payment_method', 'cash')
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        $depositDanaToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'income')
+            ->where('flow_type', 'customer_deposit')
+            ->where('payment_method', 'dana')
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        $depositTransferToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'income')
+            ->where('flow_type', 'customer_deposit')
+            ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        $depositRefundCashToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->where('flow_type', 'deposit_refund')
+            ->where('payment_method', 'cash')
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        $depositRefundDanaToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->where('flow_type', 'deposit_refund')
+            ->where('payment_method', 'dana')
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        $depositRefundTransferToday = (float) CashFlow::where('business_id', $businessId)
+            ->where('type', 'expense')
+            ->where('flow_type', 'deposit_refund')
+            ->whereIn('payment_method', ['transfer', 'transfer-bank', 'transfer_bank', 'bank_transfer'])
+            ->whereDate('date', $targetDate)
+            ->sum('amount');
+
+        // Total per saluran masuk uang hari ini (termasuk deposit, dikurangkan refund void & deposit refund)
+        $totalInflowCash = max(0.0, ($todaySalesCash + $pelunasanCashToday + $depositCashToday) - ($refundCashToday + $depositRefundCashToday));
+        $totalInflowDana = max(0.0, ($todaySalesDana + $pelunasanDanaToday + $depositDanaToday) - ($refundDanaToday + $depositRefundDanaToday));
+        $totalInflowTransfer = max(0.0, ($todaySalesTransfer + $pelunasanTransferToday + $depositTransferToday) - ($refundTransferToday + $depositRefundTransferToday));
         $totalAllInflowToday = $totalInflowCash + $totalInflowDana + $totalInflowTransfer;
 
         // Info Pelunasan Kasbon Lalu Cair Hari Ini
@@ -284,6 +350,7 @@ class DashboardService
     {
         return Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
+            ->where('status', '!=', 'cancelled')
             ->whereDate('transaction_date', $date)
             ->sum('total_amount');
     }
@@ -295,6 +362,7 @@ class DashboardService
     {
         return Transaction::where('business_id', $businessId)
             ->where('type', 'sale')
+            ->where('status', '!=', 'cancelled')
             ->whereBetween('transaction_date', [$startDate, $endDate])
             ->sum('total_amount');
     }
@@ -397,7 +465,8 @@ class DashboardService
     public function getCashierCashOnHandData(int $businessId, Carbon $filterDate): array
     {
         // Ambil user yang memiliki role 'kasir' (role utama maupun rangkap) yang aktif atau memiliki aktivitas transaksi / kas masuk-keluar di tanggal ini
-        $users = User::where('business_id', $businessId)
+        $users = User::with('branch')
+            ->where('business_id', $businessId)
             ->where(function ($q) {
                 $q->where('role', 'kasir')
                   ->orWhereJsonContains('secondary_roles', 'kasir');
@@ -454,7 +523,17 @@ class DashboardService
                 })
                 ->sum('amount');
 
-            $totalCashIn = $cashSalesAmount + $pelunasanCashAmount;
+            // 2b. Penerimaan Deposit Pelanggan Tunai di Laci Kasir (Non-P&L)
+            $depositCashAmount = (float) CashFlow::where('cash_flow.business_id', $businessId)
+                ->where('cash_flow.created_by', $user->id)
+                ->where('cash_flow.type', 'income')
+                ->where('cash_flow.payment_method', 'cash')
+                ->where('cash_flow.flow_type', 'customer_deposit')
+                ->where('cash_flow.affects_drawer', 1)
+                ->whereDate('cash_flow.date', $filterDate)
+                ->sum('amount');
+
+            $totalCashIn = $cashSalesAmount + $pelunasanCashAmount + $depositCashAmount;
 
             // 3. Seluruh Penjualan Hari Ini (Tunai, Non-Tunai & Kasbon) untuk Perhitungan Omset & COGS
             $allSalesToday = Transaction::with(['details.product'])
@@ -534,7 +613,7 @@ class DashboardService
                 ->where('type', 'expense')
                 ->where('affects_drawer', 1)
                 ->where('payment_method', 'cash')
-                ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund'])
+                ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund', 'deposit_refund'])
                 ->whereDate('date', $filterDate);
 
             $allCashExpensesAmount = (float) $drawerCashExpensesQuery->sum('amount');
@@ -547,7 +626,7 @@ class DashboardService
                 ->whereDate('date', $filterDate)
                 ->get();
 
-            $physicalCashDrawer = $openingCash + $cashSalesAmount + $pelunasanCashAmount - $allCashExpensesAmount;
+            $physicalCashDrawer = $openingCash + $cashSalesAmount + $pelunasanCashAmount + $depositCashAmount - $allCashExpensesAmount;
 
             // 6. METRIK 2: Estimasi Laba Bersih Shift ($shiftNetProfit)
             // Hanya memperhitungkan beban operasional murni (is_cogs = 0 & category_type = Operasional) agar tidak double-counting dengan COGS
@@ -650,11 +729,14 @@ class DashboardService
             $cashierData[] = [
                 'user_id'                  => $user->id,
                 'name'                     => $user->name,
+                'branch_name'              => $user->branch->name ?? '-',
+                'branch_code'              => $user->branch->code ?? '-',
                 'role'                     => $user->role,
                 'phone'                    => $user->phone ?? '-',
                 'total_cash_in'            => $totalCashIn,
                 'cash_sales'               => $cashSalesAmount,
                 'pelunasan_cash'           => $pelunasanCashAmount,
+                'deposit_cash'             => $depositCashAmount,
                 'cash_orders_count'        => $cashOrdersCount,
                 'sales_revenue'            => $totalSalesRevenue,
                 'cogs'                     => $cogsAmount,
@@ -692,6 +774,26 @@ class DashboardService
         });
 
         return $cashierData;
+    }
+
+    /**
+     * Menghitung total agregasi ringkasan kasir di Service SSOT (Bebas kalkulasi di Blade).
+     */
+    public function computeCashierSummaryTotals(array $cashierMonitoring): array
+    {
+        $coll = collect($cashierMonitoring);
+        return [
+            'total_cashiers_count'   => $coll->count(),
+            'active_cashiers_count'  => $coll->where('has_activity', true)->count(),
+            'standby_cashiers_count' => $coll->where('has_activity', false)->count(),
+            'total_cash_in'          => (float) $coll->sum('total_cash_in'),
+            'total_cogs'             => (float) $coll->sum('cogs'),
+            'total_expenses'         => (float) $coll->sum('expenses'),
+            'total_drawer'           => (float) $coll->sum('physical_drawer'),
+            'total_shift_profit'     => (float) $coll->sum('shift_net_profit'),
+            'missing_cogs_count'     => (int) $coll->sum('missing_cogs_count'),
+            'missing_cogs_revenue'   => (float) $coll->sum('missing_cogs_revenue'),
+        ];
     }
 
     /**

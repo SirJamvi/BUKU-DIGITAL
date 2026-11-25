@@ -88,13 +88,28 @@ class AcsCashDrawerSyncService
                 $debtCollectionAmount = (float) $debtCollectionQuery->sum('amount');
                 $debtCollectionCount = $debtCollectionQuery->count();
 
+                // 3b. PENERIMAAN DEPOSIT PELANGGAN TUNAI (Customer Deposit)
+                $depositQuery = CashFlow::where('branch_id', $branch->id)
+                    ->where('type', 'income')
+                    ->where('flow_type', 'customer_deposit')
+                    ->whereRaw('LOWER(payment_method) = ?', ['cash'])
+                    ->where('affects_drawer', 1)
+                    ->whereDate('date', $targetDate);
+
+                if ($shiftTimeFilter) {
+                    $depositQuery->whereBetween('created_at', [$shiftStart, $shiftEnd]);
+                }
+
+                $depositAmount = (float) $depositQuery->sum('amount');
+                $depositCount = $depositQuery->count();
+
                 // 4. PENGELUARAN KAS DARI LACI KASIR (Cash Expenses from Drawer)
                 // Filter: Pengeluaran cash_flow bertipe 'expense' yang memotong laci kasir (bensin, makan, galon, dll)
                 $expensesQuery = CashFlow::where('branch_id', $branch->id)
                     ->where('type', 'expense')
                     ->whereRaw('LOWER(payment_method) = ?', ['cash'])
                     ->where('affects_drawer', 1)
-                    ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund'])
+                    ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund', 'deposit_refund'])
                     ->whereDate('date', $targetDate);
 
                 if ($shiftTimeFilter) {
@@ -105,7 +120,7 @@ class AcsCashDrawerSyncService
                 $expensesCount = $expensesQuery->count();
 
                 // 5. SALDO FISIK LACI KASIR YANG DIHARAPKAN (Expected Drawer Cash)
-                $expectedDrawerCash = $openingCash + $cashSalesAmount + $debtCollectionAmount - $expensesAmount;
+                $expectedDrawerCash = $openingCash + $cashSalesAmount + $debtCollectionAmount + $depositAmount - $expensesAmount;
 
                 $results[] = [
                     'date'                       => $targetDate,
@@ -116,12 +131,14 @@ class AcsCashDrawerSyncService
                     'opening_cash'               => round($openingCash, 2),
                     'total_cash_sales'           => round($cashSalesAmount, 2),
                     'total_cash_debt_collection' => round($debtCollectionAmount, 2),
+                    'total_cash_deposits'        => round($depositAmount, 2),
                     'total_cash_expenses'        => round($expensesAmount, 2),
                     'expected_drawer_cash'       => round($expectedDrawerCash, 2),
                     'details'                    => [
                         'opening_records_count' => $openingRecordsCount,
                         'cash_sales_count'      => $cashSalesCount,
                         'debt_collection_count' => $debtCollectionCount,
+                        'cash_deposits_count'   => $depositCount,
                         'expenses_count'        => $expensesCount,
                         'shift_applied'         => $shiftTimeFilter ? '07:00:00 - 17:15:00 WIB' : 'Full Day',
                     ],

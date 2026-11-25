@@ -147,22 +147,29 @@
 
             {{-- Kolom Total & Status Bayar --}}
             <td class="text-end">
-                <div class="fw-bold fs-6 {{ $isVoid ? 'text-decoration-line-through text-muted' : 'text-dark' }}">Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</div>
+                <div class="fw-bold fs-6 {{ $isVoid ? 'text-decoration-line-through text-muted opacity-75' : 'text-dark' }}">Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</div>
                 @php
                     $pm = strtolower($transaction->payment_method ?? 'cash');
                     $isPaid = $transaction->payment_status === 'paid';
+                    $isFromCredit = ($transaction->initial_payment_method === 'kasbon' || strtolower($transaction->initial_payment_method ?? '') === 'kasbon');
                 @endphp
                 @if($isVoid)
-                    <span class="badge bg-secondary py-1 px-2" style="font-size: 0.75rem;">
-                        <i class="fas fa-ban me-1"></i>Dibatalkan (Void)
+                    <span class="badge bg-danger py-1 px-2" style="font-size: 0.78rem;">
+                        <i class="fas fa-ban me-1"></i>BATAL (VOID)
                     </span>
                     @if($transaction->void_reason)
                         <br><small class="text-danger small" title="{{ $transaction->void_reason }}"><i class="fas fa-info-circle me-1"></i>{{ \Illuminate\Support\Str::limit($transaction->void_reason, 28) }}</small>
                     @endif
+                    @if($transaction->voided_at)
+                        <br><small class="text-muted" style="font-size: 0.68rem;"><i class="fas fa-clock me-1"></i>{{ $transaction->voided_at->format('d M H:i') }}</small>
+                    @endif
                 @elseif($isPaid)
                     <span class="badge badge-soft-success py-1 px-2" style="font-size: 0.75rem; background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
-                        <i class="fas fa-check-circle me-1"></i>Lunas ({{ strtoupper($pm) }})
+                        <i class="fas fa-check-circle me-1"></i>Lunas ({{ strtoupper(str_replace('-', ' ', $transaction->payment_method ?: 'Cash')) }})
                     </span>
+                    @if($isFromCredit)
+                        <br><small class="text-primary" style="font-size: 0.7rem;"><i class="fas fa-history me-1"></i>Asal: Kasbon • Lunas {{ $transaction->settled_at ? $transaction->settled_at->format('d M H:i') : ($transaction->updated_at ? $transaction->updated_at->format('d M H:i') : '-') }}</small>
+                    @endif
                 @else
                     <span class="badge badge-soft-danger py-1 px-2" style="font-size: 0.75rem; background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fca5a5 !important;">
                         <i class="fas fa-clock me-1"></i>Kasbon
@@ -186,14 +193,10 @@
                             <i class="fas fa-edit"></i> Edit
                         </a>
 
-                        {{-- Hapus dengan Rollback --}}
-                        <form action="{{ route('admin.transactions.destroy', $transaction->id) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus transaksi #{{ $transaction->id }} ini? Semua stok barang, arus kas, dan poin pelanggan terkait akan dikembalikan (Rollback) secara otomatis.');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-danger btn-sm" title="Hapus Transaksi #{{ $transaction->id }}">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
-                        </form>
+                        {{-- Tombol Void / Batalkan via Modal --}}
+                        <button type="button" class="btn btn-sm btn-outline-danger fw-semibold" data-bs-toggle="modal" data-bs-target="#modalAdminVoid_{{ $transaction->id }}" title="Void / Batalkan Transaksi #{{ $transaction->id }}">
+                            <i class="fas fa-ban me-1"></i>Void
+                        </button>
                     @endif
 
                     {{-- Detail --}}
@@ -444,6 +447,71 @@ document.addEventListener('DOMContentLoaded', function() {
     checkAdminSettlementMode_{{ $transaction->id }}();
 });
 </script>
+@endif
+@endforeach
+
+{{-- MODAL VOID / PEMBATALAN TRANSAKSI KHUSUS ADMIN --}}
+@foreach ($transactions as $transaction)
+@php
+    $isVoidModal = $transaction->status === 'cancelled' || !empty($transaction->voided_at);
+@endphp
+@if(!$isVoidModal)
+<div class="modal fade" id="modalAdminVoid_{{ $transaction->id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white py-3">
+                <h5 class="modal-title fw-bold mb-0">
+                    <i class="fas fa-ban me-2"></i> Konfirmasi Void Transaksi #{{ $transaction->id }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ route('admin.transactions.destroy', $transaction->id) }}" method="POST">
+                @csrf
+                @method('DELETE')
+                <div class="modal-body p-4 text-start">
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Pelanggan:</span>
+                            <strong class="text-dark">{{ optional($transaction->customer)->name ?? 'Pelanggan Umum' }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Waktu Transaksi:</span>
+                            <span>{{ $transaction->transaction_date ? $transaction->transaction_date->format('d/m/Y H:i') : '-' }} WIB</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Metode Pembayaran:</span>
+                            <span class="badge bg-secondary">{{ strtoupper(str_replace('-', ' ', $transaction->payment_method ?: 'Cash')) }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between fs-5 fw-bold text-danger border-top pt-2 mt-2">
+                            <span>Nominal Nota:</span>
+                            <span>Rp {{ number_format($transaction->total_amount, 0, ',', '.') }}</span>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info py-2 px-3 mb-3 small" style="font-size: 0.8rem; border-left: 4px solid #0284c7;">
+                        <i class="fas fa-info-circle me-1"></i> <strong>Dampak Pembatalan (Void):</strong>
+                        <ul class="mb-0 ps-3 mt-1">
+                            <li>Stok produk dikembalikan otomatis ke inventaris (<code>void_return</code>).</li>
+                            <li>Jurnal contra-entry kas dicatat di arus kas (<code>cash_refund</code>).</li>
+                            <li>Nota tidak dihapus fisik melainkan bertanda <strong>BATAL (VOID)</strong> untuk audit.</li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold text-dark small">Alasan Pembatalan / Void <span class="text-danger">*</span></label>
+                        <textarea name="void_reason" class="form-control" rows="3" placeholder="Contoh: Pelanggan salah pesan es / nota keliru diinput kasir / transaksi dibatalkan" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold">
+                        <i class="fas fa-ban me-1"></i> Ya, Batalkan (Void) Nota Ini
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endif
 @endforeach
 @endsection

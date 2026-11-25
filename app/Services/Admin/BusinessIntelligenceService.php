@@ -28,6 +28,7 @@ class BusinessIntelligenceService
             ->join('products', 'transaction_details.product_id', '=', 'products.id')
             ->select('products.name', DB::raw('SUM(transaction_details.quantity) as total_sold'))
             ->where('transactions.type', 'sale')
+            ->where('transactions.status', '!=', 'cancelled')
             ->where('transactions.business_id', $businessId)
             ->where('products.name', 'NOT LIKE', '%ongkos kirim%')
             ->where('products.name', 'NOT LIKE', '%ongkir%');

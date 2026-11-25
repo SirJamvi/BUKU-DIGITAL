@@ -28,17 +28,29 @@
         @endslot
 
         @if($isVoid)
-        <div class="alert alert-danger d-flex align-items-center mb-3 p-3 border-danger shadow-sm" style="border-radius: 10px;">
-            <i class="fas fa-ban fa-2x me-3 text-danger"></i>
-            <div>
-                <h5 class="alert-heading fw-bold mb-1">TRANSAKSI TELAH DIBATALKAN (VOID)</h5>
-                <p class="mb-0 small text-dark">
-                    Transaksi ini dibatalkan pada <strong>{{ $transaction->voided_at ? $transaction->voided_at->format('d/m/Y H:i') : '-' }} WIB</strong>.
-                    @if($transaction->void_reason)
-                        <br>Alasan: <em class="fw-semibold text-danger">{{ $transaction->void_reason }}</em>
-                    @endif
-                    <br><span class="text-muted">Seluruh stok barang dan alokasi kas terkait transaksi ini telah dikembalikan (Rollback) secara otomatis ke sistem.</span>
-                </p>
+        <div class="alert alert-danger mb-4 p-4 border-danger shadow-sm" style="border-radius: 12px; border-left: 6px solid #dc2626 !important; background-color: #fef2f2;">
+            <div class="d-flex align-items-start">
+                <i class="fas fa-ban fa-3x me-3 text-danger mt-1"></i>
+                <div class="flex-grow-1">
+                    <h4 class="alert-heading fw-bold text-danger mb-2">TRANSAKSI DIBATALKAN (VOID)</h4>
+                    <div class="row g-2 small text-dark">
+                        <div class="col-md-6">
+                            <strong>Dibatalkan Oleh:</strong> {{ optional($transaction->voidedBy)->name ?? 'Admin / Sistem' }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Waktu Pembatalan:</strong> {{ $transaction->voided_at ? $transaction->voided_at->format('d/m/Y H:i') : '-' }} WIB
+                        </div>
+                        <div class="col-12 mt-2">
+                            <strong>Alasan Pembatalan:</strong>
+                            <div class="p-2 bg-white rounded border border-danger-subtle text-danger fw-semibold mt-1">
+                                {{ $transaction->void_reason ?: 'Tidak ada alasan pembatalan tertulis.' }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-2">
+                        <i class="fas fa-info-circle me-1"></i> Seluruh stok barang telah dikembalikan (Rollback) dan jurnal contra-entry telah dicatat di sistem. Nota ini tidak masuk ke dalam omset penjualan.
+                    </div>
+                </div>
             </div>
         </div>
         @endif
@@ -87,8 +99,27 @@
                 </div>
                  <div class="d-flex justify-content-between mt-1">
                     <span class="text-muted">Metode Pembayaran</span>
-                    <span>{{ $transaction->payment_method }}</span>
+                    <span>{{ strtoupper(str_replace('-', ' ', $transaction->payment_method ?: 'Cash')) }}</span>
                 </div>
+                @if($transaction->initial_payment_method === 'kasbon' || strtolower($transaction->initial_payment_method ?? '') === 'kasbon')
+                <div class="mt-3 p-3 bg-light rounded border text-start">
+                    <h6 class="fw-bold text-dark mb-2 small"><i class="fas fa-history text-primary me-1"></i> Histori Pelunasan Piutang / Kasbon:</h6>
+                    <div class="row g-2 small">
+                        <div class="col-sm-4">
+                            <span class="text-muted d-block">Metode Awal:</span>
+                            <span class="badge bg-danger">Kasbon</span>
+                        </div>
+                        <div class="col-sm-4">
+                            <span class="text-muted d-block">Metode Pelunasan:</span>
+                            <span class="badge bg-success">{{ strtoupper(str_replace('-', ' ', $transaction->settlement_payment_method ?: $transaction->payment_method)) }}</span>
+                        </div>
+                        <div class="col-sm-4">
+                            <span class="text-muted d-block">Waktu Pelunasan:</span>
+                            <strong>{{ $transaction->settled_at ? $transaction->settled_at->format('d/m/Y H:i') : ($transaction->updated_at ? $transaction->updated_at->format('d/m/Y H:i') : '-') }} WIB</strong>
+                        </div>
+                    </div>
+                </div>
+                @endif
                 @if(!empty($transaction->payment_proof))
                 <div class="mt-3 p-2 bg-light rounded border text-center">
                     <span class="small fw-bold text-success d-block mb-1"><i class="fas fa-receipt me-1"></i> Bukti Pembayaran / Transfer WA:</span>

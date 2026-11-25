@@ -62,6 +62,8 @@ Route::prefix('financial')->name('financial.')->group(function () {
 
     Route::get('/', [FinancialController::class, 'index'])->name('index');
     Route::get('/branch-closings', [FinancialController::class, 'branchClosings'])->name('branch-closings');
+    Route::post('/branch-closings/{closing}/reopen', [FinancialController::class, 'reopenBranchClosing'])->name('branch-closings.reopen');
+    Route::get('/shift-closings', [FinancialController::class, 'shiftClosings'])->name('shift-closings.index');
     Route::get('/cash-flow', [FinancialController::class, 'cashFlow'])->name('cash-flow');
     Route::get('/expenses', [FinancialController::class, 'expenses'])->name('expenses');
     Route::get('/roi-analysis', [FinancialController::class, 'roiAnalysis'])->name('roi-analysis');

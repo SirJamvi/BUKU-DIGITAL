@@ -43,7 +43,7 @@
                 <i class="fas fa-chart-line"></i>
             </div>
             <div class="metric-content">
-                <h3 class="metric-title">Penjualan Hari Ini</h3>
+                <h3 class="metric-title">Penjualan {{ $isToday ? 'Hari Ini' : $formattedDate }}</h3>
                 <div class="metric-value">Rp {{ number_format($salesToday ?? 0, 0, ',', '.') }}</div>
                 <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
                     <span class="badge bg-primary text-white py-1 px-2 fw-bold">
@@ -77,8 +77,9 @@
                 <i class="fas fa-wallet"></i>
             </div>
             <div class="metric-content">
-                <h3 class="metric-title">Arus Kas Riil Hari Ini</h3>
+                <h3 class="metric-title">Arus Kas Riil {{ $isToday ? 'Hari Ini' : $formattedDate }}</h3>
                 <div class="metric-value text-success">Rp {{ number_format($totalAllInflowToday ?? ($cashInToday ?? 0), 0, ',', '.') }}</div>
+                <div class="text-muted small mb-1" style="font-size: 0.72rem;"><em>Kas masuk fisik & bank (termasuk pelunasan kasbon lama; pelunasan tidak menambah omset)</em></div>
                 <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
                     <span class="badge py-1 px-2" style="background-color: #d1e7dd !important; color: #0f5132 !important; border: 1px solid #badbcc !important; font-size: 0.78rem; font-weight: 600;">
                         <i class="fas fa-check-circle me-1 text-success"></i>Lunas (Hari Ini): Rp {{ number_format($cashInToday ?? 0, 0, ',', '.') }}
@@ -153,7 +154,7 @@
                 <i class="fas fa-coins"></i>
             </div>
             <div class="metric-content">
-                <h3 class="metric-title">Laba Bersih Bulan Ini</h3>
+                <h3 class="metric-title">Laba Bersih Bulan {{ \Carbon\Carbon::parse($filterDate)->isoFormat('MMMM Y') }}</h3>
                 <div class="metric-value">Rp {{ number_format($netProfitThisMonth ?? 0, 0, ',', '.') }}</div>
                 <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
                     @if(isset($profitChangePercentage))
@@ -210,7 +211,7 @@
                                 <th class="ps-3">Nama Cabang</th>
                                 <th>Kode</th>
                                 <th class="text-end">Omzet Hari Ini</th>
-                                <th class="text-end">Kas Bersih Hari Ini</th>
+                                <th class="text-end" title="Total Kas Masuk Tunai dikurangi Kas Keluar Tunai hari ini">Net Mutasi Kas Hari Ini (Tanpa Modal Awal)</th>
                                 <th class="text-center">Stok Kritis</th>
                                 <th class="text-center pe-3">Aksi</th>
                             </tr>
@@ -298,31 +299,21 @@
                     </h5>
                     <small class="text-white-50">Monitoring uang kas fisik di laci kasir (Cash on Hand) dan estimasi laba bersih operasional shift.</small>
                 </div>
-                @php
-                    $allCashiers = collect($cashierMonitoring ?? []);
-                    $activeCashiersCount = $allCashiers->where('has_activity', true)->count();
-                    $standbyCashiersCount = $allCashiers->where('has_activity', false)->count();
-                    $totalAllCashIn = $allCashiers->sum('total_cash_in');
-                    $totalAllCogs = $allCashiers->sum('cogs');
-                    $totalAllExpenses = $allCashiers->sum('expenses');
-                    $totalAllDrawer = $allCashiers->sum('physical_drawer');
-                    $totalAllShiftProfit = $allCashiers->sum('shift_net_profit');
-                @endphp
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <span class="badge bg-secondary px-3 py-2 fs-6">
-                        <i class="fas fa-users me-1"></i> {{ $allCashiers->count() }} Akun Kasir
+                        <i class="fas fa-users me-1"></i> {{ $cashierSummaryTotals['total_cashiers_count'] ?? count($cashierMonitoring ?? []) }} Akun Kasir
                     </span>
                     <span class="badge bg-light text-dark px-3 py-2 fs-6" title="Total Uang Tunai Masuk">
-                        <i class="fas fa-arrow-down text-success me-1"></i> Masuk: <strong>Rp {{ number_format($totalAllCashIn, 0, ',', '.') }}</strong>
+                        <i class="fas fa-arrow-down text-success me-1"></i> Masuk: <strong>Rp {{ number_format($cashierSummaryTotals['total_cash_in'] ?? 0, 0, ',', '.') }}</strong>
                     </span>
                     <span class="badge bg-warning text-dark px-3 py-2 fs-6" title="Total Semua Kas Keluar Laci">
-                        <i class="fas fa-receipt me-1"></i> Keluar Laci: <strong>- Rp {{ number_format($totalAllExpenses, 0, ',', '.') }}</strong>
+                        <i class="fas fa-receipt me-1"></i> Keluar Laci: <strong>- Rp {{ number_format($cashierSummaryTotals['total_expenses'] ?? 0, 0, ',', '.') }}</strong>
                     </span>
                     <span class="badge bg-success px-3 py-2 fs-6 fw-bold shadow-sm" title="Grand Total Saldo Kas Laci Semua Kasir">
-                        <i class="fas fa-cash-register me-1"></i> Saldo Laci: <strong>Rp {{ number_format($totalAllDrawer, 0, ',', '.') }}</strong>
+                        <i class="fas fa-cash-register me-1"></i> Saldo Laci: <strong>Rp {{ number_format($cashierSummaryTotals['total_drawer'] ?? 0, 0, ',', '.') }}</strong>
                     </span>
-                    <span class="badge {{ $totalAllShiftProfit >= 0 ? 'bg-info bg-opacity-75 text-white' : 'bg-danger text-white' }} px-3 py-2 fs-6 fw-bold shadow-sm" title="Grand Total Estimasi Laba Bersih Shift">
-                        <i class="fas fa-chart-line me-1"></i> Laba Shift: <strong>{{ $totalAllShiftProfit >= 0 ? '+' : '' }}Rp {{ number_format($totalAllShiftProfit, 0, ',', '.') }}</strong>
+                    <span class="badge {{ ($cashierSummaryTotals['total_shift_profit'] ?? 0) >= 0 ? 'bg-info bg-opacity-75 text-white' : 'bg-danger text-white' }} px-3 py-2 fs-6 fw-bold shadow-sm" title="Grand Total Estimasi Laba Bersih Shift">
+                        <i class="fas fa-chart-line me-1"></i> Laba Shift: <strong>{{ ($cashierSummaryTotals['total_shift_profit'] ?? 0) >= 0 ? '+' : '' }}Rp {{ number_format($cashierSummaryTotals['total_shift_profit'] ?? 0, 0, ',', '.') }}</strong>
                     </span>
                 </div>
             </div>
@@ -333,28 +324,40 @@
                     <span class="text-muted small fw-bold"><i class="fas fa-filter text-primary me-1"></i>Filter Kasir:</span>
                     <div class="btn-group btn-group-sm" role="group" id="cashierFilterBtnGroup" aria-label="Filter Kasir">
                         <button type="button" class="btn btn-primary active px-3 fw-semibold cashier-filter-btn" data-filter="active" onclick="switchCashierFilter('active')">
-                            <i class="fas fa-circle-dot text-success me-1"></i>Aktif Bertugas <span class="badge bg-white text-primary ms-1 rounded-pill">{{ $activeCashiersCount }}</span>
+                            <i class="fas fa-circle-dot text-success me-1"></i>Aktif Bertugas <span class="badge bg-white text-primary ms-1 rounded-pill">{{ $cashierSummaryTotals['active_cashiers_count'] ?? 0 }}</span>
                         </button>
                         <button type="button" class="btn btn-outline-secondary px-3 fw-semibold cashier-filter-btn" data-filter="standby" onclick="switchCashierFilter('standby')">
-                            <i class="fas fa-clock text-muted me-1"></i>Standby (Nol Trx) <span class="badge bg-secondary ms-1 rounded-pill">{{ $standbyCashiersCount }}</span>
+                            <i class="fas fa-clock text-muted me-1"></i>Standby (Nol Trx) <span class="badge bg-secondary ms-1 rounded-pill">{{ $cashierSummaryTotals['standby_cashiers_count'] ?? 0 }}</span>
                         </button>
                         <button type="button" class="btn btn-outline-secondary px-3 fw-semibold cashier-filter-btn" data-filter="all" onclick="switchCashierFilter('all')">
-                            <i class="fas fa-users me-1"></i>Semua Kasir <span class="badge bg-secondary ms-1 rounded-pill">{{ $allCashiers->count() }}</span>
+                            <i class="fas fa-users me-1"></i>Semua Kasir <span class="badge bg-secondary ms-1 rounded-pill">{{ $cashierSummaryTotals['total_cashiers_count'] ?? count($cashierMonitoring ?? []) }}</span>
                         </button>
                     </div>
                 </div>
                 <div class="small text-muted d-flex align-items-center gap-2">
                     <span id="cashierFilterInfo">
-                        Menampilkan <strong>{{ $activeCashiersCount }}</strong> kasir aktif bertugas
+                        Menampilkan <strong>{{ $cashierSummaryTotals['active_cashiers_count'] ?? 0 }}</strong> kasir aktif bertugas
                     </span>
                 </div>
             </div>
 
             <div class="card-body bg-light p-3">
+                @if(!empty($cashierSummaryTotals['missing_cogs_count']) && $cashierSummaryTotals['missing_cogs_count'] > 0)
+                <div class="alert alert-warning border-0 shadow-sm d-flex align-items-center mb-3 p-3" style="border-radius: 10px;">
+                    <i class="fas fa-exclamation-triangle fa-2x me-3 text-warning"></i>
+                    <div>
+                        <h6 class="alert-heading fw-bold mb-1">Perhatian: Ditemukan {{ number_format($cashierSummaryTotals['missing_cogs_count']) }} Transaksi Kasir Tanpa Snapshot HPP</h6>
+                        <p class="mb-0 small">
+                            Terdapat detail transaksi bernilai total omzet <strong>Rp {{ number_format($cashierSummaryTotals['missing_cogs_revenue'], 0, ',', '.') }}</strong> yang belum menyimpan snapshot HPP. Sistem menggunakan estimasi fallback HPP produk.
+                        </p>
+                    </div>
+                </div>
+                @endif
+
                 @if(count($cashierMonitoring ?? []) > 0)
                 <div class="row g-3" id="cashierCardsGrid">
                     {{-- Alert jika filter aktif dipilih tapi belum ada transaksi --}}
-                    <div id="cashier-no-active-alert" class="col-12 {{ $activeCashiersCount > 0 ? 'd-none' : '' }}">
+                    <div id="cashier-no-active-alert" class="col-12 {{ ($cashierSummaryTotals['active_cashiers_count'] ?? $activeCashiersCount ?? 0) > 0 ? 'd-none' : '' }}">
                         <div class="alert alert-info border-0 shadow-sm d-flex align-items-center justify-content-between p-3 mb-0" style="border-radius: 10px;">
                             <div class="d-flex align-items-center">
                                 <i class="fas fa-info-circle me-3 fs-4 text-info"></i>
@@ -364,7 +367,7 @@
                                 </div>
                             </div>
                             <button type="button" class="btn btn-sm btn-primary" onclick="switchCashierFilter('standby')">
-                                <i class="fas fa-eye me-1"></i>Lihat Kasir Standby ({{ $standbyCashiersCount }})
+                                <i class="fas fa-eye me-1"></i>Lihat Kasir Standby ({{ $cashierSummaryTotals['standby_cashiers_count'] ?? $standbyCashiersCount ?? 0 }})
                             </button>
                         </div>
                     </div>
@@ -391,6 +394,9 @@
                                     </div>
                                     <div>
                                         <strong class="text-dark fs-6">{{ $c['name'] }}</strong>
+                                        @if(app(\App\Support\BranchContext::class)->isConsolidated() || session('active_branch_id') === 'all')
+                                            <span class="badge bg-secondary text-white ms-1" style="font-size: 0.7rem;"><i class="fas fa-store me-1"></i>{{ $c['branch_name'] ?? '-' }}</span>
+                                        @endif
                                         @if($c['phone'] && $c['phone'] !== '-')
                                         <br><small class="text-muted"><i class="fas fa-phone small me-1"></i>{{ $c['phone'] }}</small>
                                         @endif
@@ -411,6 +417,12 @@
 
                             {{-- Body Card Kasir: Hero Dual-Metric (Saldo Laci & Laba Shift) --}}
                             <div class="card-body p-3">
+                                @if(($c['missing_cogs_count'] ?? 0) > 0)
+                                <div class="alert alert-warning py-1 px-2 mb-2 small text-dark d-flex align-items-center justify-content-between" style="font-size: 0.72rem; border-radius: 6px;">
+                                    <span><i class="fas fa-exclamation-triangle text-warning me-1"></i><strong>{{ $c['missing_cogs_count'] }} item tanpa snapshot HPP</strong></span>
+                                    <span class="badge bg-warning text-dark">Rp {{ number_format($c['missing_cogs_revenue'], 0, ',', '.') }}</span>
+                                </div>
+                                @endif
                                 <div class="text-center p-3 rounded mb-3" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(5, 150, 105, 0.12) 100%); border: 1px solid rgba(16, 185, 129, 0.25);">
                                     <span class="text-uppercase fw-bold text-muted small" style="letter-spacing: 0.5px;">SALDO KAS LACI (FISIK)</span>
                                     <h3 class="fw-bold mb-1 mt-1 {{ $c['physical_drawer'] >= 0 ? 'text-success' : 'text-danger' }}">
@@ -467,9 +479,14 @@
                                 </div>
 
                                 {{-- Info Tambahan: Non-Tunai & Kasbon --}}
-                                <div class="d-flex justify-content-between align-items-center small text-muted px-1">
-                                    <span><i class="fas fa-building-columns me-1"></i>Transfer: <strong>Rp {{ number_format($c['non_cash_sales'], 0, ',', '.') }}</strong></span>
+                                <div class="d-flex justify-content-between align-items-center small text-muted px-1 flex-wrap gap-1">
+                                    <span><i class="fas fa-building-columns me-1"></i>Non-Tunai (Transfer/DANA): <strong>Rp {{ number_format($c['non_cash_sales'], 0, ',', '.') }}</strong></span>
                                     <span><i class="fas fa-clock text-danger me-1"></i>Kasbon: <strong>Rp {{ number_format($c['kasbon'], 0, ',', '.') }}</strong></span>
+                                    @if(($c['pelunasan_non_cash_total'] ?? 0) > 0)
+                                    <div class="w-100 text-primary small pt-1 border-top" style="font-size: 0.72rem;">
+                                        <i class="fas fa-rotate me-1"></i>Pelunasan Non-Tunai: <strong>Rp {{ number_format($c['pelunasan_non_cash_total'], 0, ',', '.') }}</strong>
+                                    </div>
+                                    @endif
                                 </div>
                             </div>
 
@@ -1336,27 +1353,18 @@
                                 <tbody>
                                     @forelse($c['expenses_list'] as $exp)
                                     @php
-                                        $isCogs = (bool) (optional($exp->category)->is_cogs);
                                         $affectsDrawer = ($exp->affects_drawer ?? 1) == 1;
                                     @endphp
                                     <tr>
                                         <td class="ps-3">
                                             <div class="d-flex align-items-center gap-1 flex-wrap">
-                                                <span class="badge {{ $isCogs ? 'bg-primary' : 'bg-warning text-dark' }}">
-                                                    {{ $exp->category->name ?? ($isCogs ? 'Refill Es Batu' : 'Operasional') }}
+                                                <span class="badge {{ $exp->flow_type_badge_class }}" style="font-size: 0.72rem;">
+                                                    {{ $exp->flow_type_label }}
                                                 </span>
-                                                <span class="badge {{ $isCogs ? 'badge-soft-info' : 'badge-soft-secondary' }}" style="font-size: 0.72rem; {{ $isCogs ? 'background-color: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #7dd3fc !important;' : 'background-color: #f1f5f9 !important; color: #475569 !important; border: 1px solid #cbd5e1 !important;' }}">
-                                                    {{ $isCogs ? 'Pembelian Stok (HPP)' : 'Beban Operasional Murni' }}
+                                                {!! $exp->profit_loss_indicator_badge !!}
+                                                <span class="badge {{ $exp->funding_source_badge_class }}" style="font-size: 0.7rem;">
+                                                    {{ $exp->funding_source_label }}
                                                 </span>
-                                                @if(!$affectsDrawer)
-                                                <span class="badge bg-light text-muted border" style="font-size: 0.7rem;" title="Dibayar menggunakan kas kemarin atau titipan bos, tidak memotong laci kasir hari ini">
-                                                    <i class="fas fa-shield-alt me-1"></i>Uang Bos / Non-Laci
-                                                </span>
-                                                @else
-                                                <span class="badge badge-soft-success" style="font-size: 0.7rem; background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">
-                                                    <i class="fas fa-cash-register me-1"></i>Potong Laci
-                                                </span>
-                                                @endif
                                             </div>
                                         </td>
                                         <td class="text-dark small">{{ $exp->description ?? '-' }}</td>

@@ -171,10 +171,14 @@ class TransactionService
                 }
             }
 
+            // 2b. Kembalikan Saldo Deposit Pelanggan jika transaksi menggunakan deposit
+            \App\Services\Accounting\CustomerDepositService::restoreDepositFromVoid($transaction, Auth::id());
+
             // 3. JANGAN HAPUS record cash_flow lama!
             // Jika transaksi pernah menghasilkan penerimaan kas / non-tunai, buat jurnal pembalik (contra-entry)
             $isPaid = $transaction->payment_status === 'paid';
-            if ($isPaid && (float) $transaction->total_amount > 0) {
+            $refundAmount = (float) $transaction->effective_payable_amount;
+            if ($isPaid && $refundAmount > 0) {
                 $isCash = strtolower($transaction->payment_method ?? '') === 'cash';
                 $refundCategory = \App\Models\ExpenseCategory::where('business_id', $transaction->business_id)
                     ->where(function ($q) {
@@ -194,7 +198,7 @@ class TransactionService
                     'reference_type' => 'transaction',
                     'reference_id'   => (string) $transaction->id,
                     'category_id'    => $categoryId,
-                    'amount'         => $transaction->total_amount,
+                    'amount'         => $refundAmount,
                     'payment_method' => $transaction->payment_method ?: 'cash',
                     'funding_source' => $isCash ? 'drawer' : 'owner',
                     'affects_drawer' => $isCash ? 1 : 0,

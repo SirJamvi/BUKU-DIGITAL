@@ -219,8 +219,11 @@
                                 @if(isset($myOpeningCash) && $myOpeningCash > 0)
                                     <span class="text-dark fw-bold">Modal Awal: Rp {{ number_format($myOpeningCash, 0, ',', '.') }}</span> |
                                 @endif
-                                Masuk Tunai: <span class="text-success fw-bold">+Rp {{ number_format($totalCashInToday ?? $mySalesToday ?? 0, 0, ',', '.') }}</span> |
-                                Keluar: <span class="text-danger fw-bold">-Rp {{ number_format($myExpensesToday ?? 0, 0, ',', '.') }}</span>
+                                Masuk Tunai: <span class="text-success fw-bold">+Rp {{ number_format($totalCashInToday ?? $mySalesToday ?? 0, 0, ',', '.') }}</span>
+                                @if(isset($depositCashAmount) && $depositCashAmount > 0)
+                                    <span class="text-info fw-bold" title="Penerimaan titipan deposit pelanggan tunai">(Inc. Deposit: +Rp {{ number_format($depositCashAmount, 0, ',', '.') }})</span>
+                                @endif
+                                | Keluar: <span class="text-danger fw-bold">-Rp {{ number_format($myExpensesToday ?? 0, 0, ',', '.') }}</span>
                             </small>
                         </div>
                     </div>
@@ -363,6 +366,9 @@
                     <a href="{{ route('kasir.customers.create') }}" class="btn btn-lg btn-outline-secondary">
                         <i class="fas fa-user-plus me-2"></i>Tambah Pelanggan
                     </a>
+                    <button type="button" class="btn btn-lg btn-outline-info fw-bold" data-bs-toggle="modal" data-bs-target="#modalManualDeposit">
+                        <i class="fas fa-wallet me-2"></i>Terima Deposit Pelanggan
+                    </button>
                 </div>
             </x-card>
         </div>
@@ -417,6 +423,12 @@
                             </thead>
                             <tbody>
                                 @foreach($tripTrx as $trx)
+                                @php
+                                    $depositUsed = (float) ($trx->deposit_used ?? 0);
+                                    $effectivePayable = (float) $trx->effective_payable_amount;
+                                    $isFullDeposit = ($depositUsed > 0 && $effectivePayable <= 0);
+                                    $custDepositBal = (float) ($trx->customer->deposit_balance ?? 0);
+                                @endphp
                                 <tr>
                                     <td class="ps-3 fw-bold text-primary">
                                         #{{ str_pad($trx->id, 6, '0', STR_PAD_LEFT) }}
@@ -426,6 +438,13 @@
                                         @if($trx->customer && $trx->customer->phone)
                                         <br><small class="text-muted"><i class="fas fa-phone small me-1"></i>{{ $trx->customer->phone }}</small>
                                         @endif
+                                        @if($custDepositBal > 0)
+                                        <div class="mt-1">
+                                            <span class="badge bg-info-subtle text-info border border-info" style="font-size: 0.68rem;" title="Saldo deposit saat ini">
+                                                <i class="fas fa-wallet me-1"></i>Deposit: Rp {{ number_format($custDepositBal, 0, ',', '.') }}
+                                            </span>
+                                        </div>
+                                        @endif
                                     </td>
                                     <td>
                                         <ul class="list-unstyled mb-0 small text-muted">
@@ -434,36 +453,97 @@
                                             @endforeach
                                         </ul>
                                     </td>
-                                    <td class="text-end fw-bold text-danger fs-6">
-                                        Rp {{ number_format($trx->total_amount, 0, ',', '.') }}
+                                    <td class="text-end">
+                                        @if($depositUsed > 0)
+                                            <div class="small text-muted text-decoration-line-through">Rp {{ number_format($trx->total_amount, 0, ',', '.') }}</div>
+                                            <span class="badge bg-success-subtle text-success border border-success mb-1" style="font-size: 0.7rem;">
+                                                Deposit: -Rp {{ number_format($depositUsed, 0, ',', '.') }}
+                                            </span>
+                                            @if($isFullDeposit)
+                                                <div class="badge bg-primary text-white d-block py-1">LUNAS DEPOSIT (Rp 0)</div>
+                                            @else
+                                                <div class="fw-bold fs-6 text-danger">Sisa: Rp {{ number_format($effectivePayable, 0, ',', '.') }}</div>
+                                            @endif
+                                        @else
+                                            <div class="fw-bold text-danger fs-6">
+                                                Rp {{ number_format($trx->total_amount, 0, ',', '.') }}
+                                            </div>
+                                        @endif
                                     </td>
                                     <td>
-                                        <select name="payments[{{ $trx->id }}]" class="form-select form-select-sm fw-bold border-primary" required>
-                                            <option value="" disabled>-- Pilih Pembayaran Riil --</option>
-                                            @if(isset($paymentMethods) && $paymentMethods->isNotEmpty())
-                                                @foreach($paymentMethods as $pm)
-                                                <option value="{{ $pm->slug }}" {{ strtolower($pm->slug) === 'cash' ? 'selected' : '' }}>
-                                                    @if(str_contains(strtolower($pm->slug), 'cash')) 💵
-                                                    @elseif(str_contains(strtolower($pm->slug), 'dana')) 📱
-                                                    @elseif(str_contains(strtolower($pm->slug), 'transfer')) 🏦
-                                                    @elseif(str_contains(strtolower($pm->slug), 'qris')) 📲
-                                                    @else 💳 @endif
-                                                    {{ $pm->name }} (Lunas)
+                                        @if($isFullDeposit)
+                                            <div class="p-2 rounded bg-light border border-primary text-center">
+                                                <span class="badge bg-primary text-white mb-1"><i class="fas fa-check-circle me-1"></i> Lunas via Deposit</span>
+                                                <input type="hidden" name="payments[{{ $trx->id }}]" value="deposit">
+                                                <div class="small text-muted" style="font-size: 0.72rem;">Barang tinggal diantar tanpa penagihan uang.</div>
+                                            </div>
+                                        @else
+                                            <select name="payments[{{ $trx->id }}]" id="pay_sel_{{ $trx->id }}" class="form-select form-select-sm fw-bold border-primary" onchange="toggleTripDepositBtn('{{ $trx->id }}')" required>
+                                                <option value="" disabled>-- Pilih Pembayaran Riil --</option>
+                                                @if(isset($paymentMethods) && $paymentMethods->isNotEmpty())
+                                                    @foreach($paymentMethods as $pm)
+                                                    <option value="{{ $pm->slug }}" {{ strtolower($pm->slug) === 'cash' ? 'selected' : '' }}>
+                                                        @if(str_contains(strtolower($pm->slug), 'cash')) 💵
+                                                        @elseif(str_contains(strtolower($pm->slug), 'dana')) 📱
+                                                        @elseif(str_contains(strtolower($pm->slug), 'transfer')) 🏦
+                                                        @elseif(str_contains(strtolower($pm->slug), 'qris')) 📲
+                                                        @else 💳 @endif
+                                                        {{ $pm->name }} (Lunas)
+                                                    </option>
+                                                    @endforeach
+                                                @else
+                                                    <option value="cash" selected>💵 Cash / Tunai (Lunas)</option>
+                                                    <option value="transfer-bank">🏦 Transfer Bank (Lunas)</option>
+                                                    <option value="dana">📱 DANA (Lunas)</option>
+                                                @endif
+                                                <option value="kasbon" class="text-danger fw-bold">
+                                                    ⚠️ TETAP KASBON (Belum Lunas)
                                                 </option>
-                                                @endforeach
-                                            @else
-                                                <option value="cash" selected>💵 Cash / Tunai (Lunas)</option>
-                                                <option value="transfer-bank">🏦 Transfer Bank (Lunas)</option>
-                                                <option value="dana">📱 DANA (Lunas)</option>
-                                            @endif
-                                            <option value="kasbon" class="text-danger fw-bold">
-                                                ⚠️ TETAP KASBON (Belum Lunas)
-                                            </option>
-                                        </select>
-                                        <select name="settlement_date_modes[{{ $trx->id }}]" class="form-select form-select-sm mt-1 text-muted" style="font-size: 0.72rem;">
-                                            <option value="today" selected>💵 Uang Diterima Hari Ini (Masuk Laci Kasir)</option>
-                                            <option value="nota_date">⚠️ Koreksi Lupa Update (Tgl Nota: {{ $trx->transaction_date->format('d/m') }})</option>
-                                        </select>
+                                            </select>
+                                            <select name="settlement_date_modes[{{ $trx->id }}]" class="form-select form-select-sm mt-1 text-muted" style="font-size: 0.72rem;">
+                                                <option value="today" selected>💵 Uang Diterima Hari Ini (Masuk Laci Kasir)</option>
+                                                <option value="nota_date">⚠️ Koreksi Lupa Update (Tgl Nota: {{ $trx->transaction_date->format('d/m') }})</option>
+                                            </select>
+                                        @endif
+
+                                        @if($trx->customer_id)
+                                            <button type="button" class="btn btn-xs btn-outline-info mt-1 w-100 fw-bold py-1 btn-toggle-deposit" id="btn_dep_{{ $trx->id }}" data-trx-id="{{ $trx->id }}" onclick="toggleTripDepositPanel('{{ $trx->id }}')">
+                                                <i class="fas fa-piggy-bank me-1"></i> + Deposit Pelanggan
+                                            </button>
+                                            <div class="deposit-panel mt-2 p-2 rounded bg-light border border-info d-none" id="deposit_panel_{{ $trx->id }}">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <small class="fw-bold text-info"><i class="fas fa-wallet me-1"></i> Titip Deposit Pelanggan</small>
+                                                    <small class="text-muted" style="font-size: 0.7rem;">Saldo: <strong>Rp {{ number_format($custDepositBal, 0, ',', '.') }}</strong></small>
+                                                </div>
+
+                                                {{-- Hidden input nilai deposit yang dikirim ke backend --}}
+                                                <input type="hidden" name="deposits[{{ $trx->id }}]" id="deposit_val_{{ $trx->id }}" value="0">
+
+                                                {{-- 1 Kotak Input Tunggal Lebar Penuh --}}
+                                                <div class="mb-1">
+                                                    <div class="d-flex justify-content-between text-muted mb-1" style="font-size: 0.68rem;">
+                                                        <span>Tagihan: <strong class="text-danger">Rp {{ number_format($effectivePayable, 0, ',', '.') }}</strong></span>
+                                                        <span>Saldo Awal: <strong class="text-info">Rp {{ number_format($custDepositBal, 0, ',', '.') }}</strong></span>
+                                                    </div>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-white text-muted" style="font-size: 0.72rem;">Rp</span>
+                                                        <input type="number" 
+                                                               class="form-control form-control-sm fw-bold input-driver-money" 
+                                                               id="driver_money_{{ $trx->id }}" 
+                                                               data-trx-id="{{ $trx->id }}" 
+                                                               data-payable="{{ $effectivePayable }}" 
+                                                               data-deposit-bal="{{ $custDepositBal }}" 
+                                                               oninput="calcTripDeposit('{{ $trx->id }}')" 
+                                                               placeholder="Uang Diterima dari Driver (Contoh: {{ (int) $effectivePayable + 20000 }})" 
+                                                               min="0">
+                                                    </div>
+                                                    <small class="text-muted d-block mt-1" style="font-size: 0.67rem;">Ketik total uang tunai yang diserahkan driver</small>
+                                                </div>
+
+                                                {{-- Panel Ringkasan Live (Read-only) --}}
+                                                <div class="summary-deposit-live" id="deposit_summary_{{ $trx->id }}"></div>
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="pe-3">
                                         <input type="text" name="notes[{{ $trx->id }}]" class="form-control form-control-sm" placeholder="Ket...">
@@ -1259,6 +1339,123 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+
+    // =============================================================
+    // FITUR DEPOSIT PELANGGAN LINTAS CABANG (PENGIRIMAN DRIVER)
+    // =============================================================
+    function formatRupiahVal(angka) {
+        return new Intl.NumberFormat('id-ID').format(angka || 0);
+    }
+
+    window.toggleTripDepositPanel = function(trxId) {
+        const panel = document.getElementById('deposit_panel_' + trxId);
+        const btn = document.getElementById('btn_dep_' + trxId);
+        if (!panel) return;
+
+        panel.classList.toggle('d-none');
+        const isVisible = !panel.classList.contains('d-none');
+
+        if (btn) {
+            if (isVisible) {
+                btn.classList.remove('btn-outline-info');
+                btn.classList.add('btn-info', 'text-white');
+                btn.innerHTML = '<i class="fas fa-times me-1"></i> Tutup Form Deposit';
+                const driverInput = document.getElementById('driver_money_' + trxId);
+                if (driverInput) driverInput.focus();
+            } else {
+                btn.classList.add('btn-outline-info');
+                btn.classList.remove('btn-info', 'text-white');
+                btn.innerHTML = '<i class="fas fa-piggy-bank me-1"></i> + Deposit Pelanggan';
+
+                // PROTEKSI RESET: Jika ditutup, bersihkan input dan kembalikan deposit ke 0
+                const driverInput = document.getElementById('driver_money_' + trxId);
+                const depositInput = document.getElementById('deposit_val_' + trxId);
+                const summaryEl = document.getElementById('deposit_summary_' + trxId);
+                if (driverInput) driverInput.value = '';
+                if (depositInput) depositInput.value = 0;
+                if (summaryEl) summaryEl.innerHTML = '';
+            }
+        }
+    };
+
+    window.calcTripDeposit = function(trxId) {
+        const driverInput = document.getElementById('driver_money_' + trxId);
+        const depositInput = document.getElementById('deposit_val_' + trxId);
+        const summaryEl = document.getElementById('deposit_summary_' + trxId);
+        if (!driverInput || !depositInput) return;
+
+        const payable = parseFloat(driverInput.getAttribute('data-payable') || '0');
+        const saldoAwal = parseFloat(driverInput.getAttribute('data-deposit-bal') || '0');
+        const valStr = driverInput.value.trim();
+        const driverMoney = parseFloat(valStr || '0');
+
+        if (valStr === '' || isNaN(driverMoney)) {
+            depositInput.value = 0;
+            if (summaryEl) summaryEl.innerHTML = '';
+            return;
+        }
+
+        if (driverMoney > payable) {
+            const depositBaru = driverMoney - payable;
+            const saldoAkhir = saldoAwal + depositBaru;
+            depositInput.value = depositBaru;
+
+            if (summaryEl) {
+                summaryEl.innerHTML = `
+                    <div class="p-2 rounded bg-white border border-success mt-1 shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center text-success fw-bold">
+                            <span><i class="fas fa-arrow-circle-right me-1"></i>Deposit Baru:</span>
+                            <span>+Rp ${formatRupiahVal(depositBaru)}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center text-muted mt-1 border-top pt-1" style="font-size: 0.68rem;">
+                            <span>Total Saldo Pelanggan:</span>
+                            <strong class="text-info">Rp ${formatRupiahVal(saldoAkhir)}</strong>
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            depositInput.value = 0;
+            if (driverMoney > 0) {
+                if (summaryEl) {
+                    summaryEl.innerHTML = `
+                        <div class="text-warning p-1 mt-1 small" style="font-size: 0.68rem;">
+                            <i class="fas fa-info-circle me-1"></i>Nominal harus lebih besar dari tagihan (Rp ${formatRupiahVal(payable)}) untuk menyimpan deposit.
+                        </div>
+                    `;
+                }
+            } else {
+                if (summaryEl) summaryEl.innerHTML = '';
+            }
+        }
+    };
+
+    window.toggleTripDepositBtn = function(trxId) {
+        const paySel = document.getElementById('pay_sel_' + trxId);
+        const btnDep = document.getElementById('btn_dep_' + trxId);
+        const panel = document.getElementById('deposit_panel_' + trxId);
+        if (!paySel) return;
+
+        if (paySel.value === 'kasbon') {
+            if (btnDep) btnDep.classList.add('d-none');
+            if (panel) panel.classList.add('d-none');
+
+            // PROTEKSI RESET: Jika kasir ganti metode ke kasbon, reset input dan deposit
+            const driverInput = document.getElementById('driver_money_' + trxId);
+            const depositInput = document.getElementById('deposit_val_' + trxId);
+            const summaryEl = document.getElementById('deposit_summary_' + trxId);
+            if (driverInput) driverInput.value = '';
+            if (depositInput) depositInput.value = 0;
+            if (summaryEl) summaryEl.innerHTML = '';
+            if (btnDep) {
+                btnDep.classList.add('btn-outline-info');
+                btnDep.classList.remove('btn-info', 'text-white');
+                btnDep.innerHTML = '<i class="fas fa-piggy-bank me-1"></i> + Deposit Pelanggan';
+            }
+        } else {
+            if (btnDep) btnDep.classList.remove('d-none');
+        }
+    };
 </script>
 
     {{-- Modal Input Modal Awal Laci (Kas Kemarin) --}}
@@ -1296,6 +1493,71 @@ document.addEventListener('DOMContentLoaded', function() {
                         <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Batal</button>
                         <button type="submit" class="btn btn-success px-4 fw-bold">
                             <i class="fas fa-save me-1"></i> Simpan Modal Awal
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {{-- Modal Penerimaan Deposit Pelanggan Mandiri --}}
+    <div class="modal fade" id="modalManualDeposit" tabindex="-1" aria-labelledby="modalManualDepositLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <form action="{{ route('kasir.transactions.customerDeposit') }}" method="POST">
+                    @csrf
+                    <div class="modal-header bg-info text-white">
+                        <h5 class="modal-title fw-bold" id="modalManualDepositLabel">
+                            <i class="fas fa-wallet me-2"></i> Penerimaan Deposit Pelanggan
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="alert alert-info py-2 px-3 small mb-3">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Penyetoran deposit tunai otomatis menambah <strong>Kas Fisik Laci</strong> kasir hari ini, berlaku lintas cabang, dan tersimpan sebagai saldo belanja pelanggan tanpa mencemari omset penjualan ataupun laba rugi.
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Pilih Pelanggan <span class="text-danger">*</span></label>
+                            <select name="customer_id" class="form-select border-info fw-bold" required>
+                                <option value="" disabled selected>-- Pilih Pelanggan --</option>
+                                @if(isset($customers) && $customers->isNotEmpty())
+                                    @foreach($customers as $c)
+                                    <option value="{{ $c->id }}">
+                                        {{ $c->name }} (Saldo: Rp {{ number_format($c->deposit_balance ?? 0, 0, ',', '.') }})
+                                    </option>
+                                    @endforeach
+                                @endif
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nominal Setoran (Rp) <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text fw-bold">Rp</span>
+                                <input type="number" step="any" min="1000" name="amount" class="form-control fw-bold fs-5 text-info" required placeholder="0">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Metode Pembayaran <span class="text-danger">*</span></label>
+                            <select name="payment_method" class="form-select" required>
+                                <option value="cash" selected>💵 Cash / Tunai (Masuk Laci Kasir)</option>
+                                <option value="transfer-bank">🏦 Transfer Bank (Rekening Owner)</option>
+                                <option value="dana">📱 DANA (E-Wallet Owner)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label fw-bold">Catatan (Opsional)</label>
+                            <textarea name="notes" rows="2" class="form-control" placeholder="Contoh: Titipan saldo belanja mingguan..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-info px-4 fw-bold text-white">
+                            <i class="fas fa-save me-1"></i> Simpan Setoran Deposit
                         </button>
                     </div>
                 </form>

@@ -113,6 +113,17 @@ class CashierClosingService
             ->whereDate('date', $date)
             ->sum('amount');
 
+        // 3b. Deposit Pelanggan Tunai di Laci Kasir (Non-P&L)
+        $cashDeposits = (float) CashFlow::where('business_id', $businessId)
+            ->where('branch_id', $branchId)
+            ->where('created_by', $userId)
+            ->where('type', 'income')
+            ->where('payment_method', 'cash')
+            ->where('affects_drawer', 1)
+            ->where('flow_type', 'customer_deposit')
+            ->whereDate('date', $date)
+            ->sum('amount');
+
         // 4. Pengeluaran Laci Kasir (Beban Operasional & Pembelian Stok Luar)
         $cashExpenses = (float) CashFlow::where('business_id', $businessId)
             ->where('branch_id', $branchId)
@@ -135,19 +146,19 @@ class CashierClosingService
             ->whereDate('date', $date)
             ->sum('amount');
 
-        // 6. Contra-Entry Refund / Void Tunai
+        // 6. Contra-Entry Refund / Void Tunai & Pengembalian Deposit
         $cashRefunds = (float) CashFlow::where('business_id', $businessId)
             ->where('branch_id', $branchId)
             ->where('created_by', $userId)
             ->where('type', 'expense')
             ->where('payment_method', 'cash')
             ->where('affects_drawer', 1)
-            ->where('flow_type', 'cash_refund')
+            ->whereIn('flow_type', ['cash_refund', 'deposit_refund'])
             ->whereDate('date', $date)
             ->sum('amount');
 
         // 7. Expected Drawer Cash & Variance
-        $expectedDrawerCash = $openingCash + $cashSales + $cashDebtCollection - ($cashExpenses + $cashHandoverAmount + $cashRefunds);
+        $expectedDrawerCash = $openingCash + $cashSales + $cashDebtCollection + $cashDeposits - ($cashExpenses + $cashHandoverAmount + $cashRefunds);
         $variance = $actualCashCounted - $expectedDrawerCash;
 
         return CashierShiftClosing::updateOrCreate(

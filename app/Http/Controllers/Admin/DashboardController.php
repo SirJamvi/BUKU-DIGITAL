@@ -26,13 +26,13 @@ class DashboardController extends Controller
     public function index(Request $request): View
     {
         try {
-            // Mengambil semua data dashboard dari service bawaan
-            $dashboardData = $this->dashboardService->getDashboardData();
-
             // --- SETUP FILTER TANGGAL ---
             // Mengambil input tanggal dari URL (jika ada), default-nya adalah hari ini
             $dateInput = $request->input('filter_date');
             $filterDate = $dateInput ? Carbon::parse($dateInput)->startOfDay() : Carbon::today();
+
+            // Mengambil semua data dashboard dari service bawaan mengikuti tanggal filter
+            $dashboardData = $this->dashboardService->getDashboardData($filterDate);
 
             // Simpan ke array untuk dikirim ke view
             $dashboardData['filterDate'] = $filterDate->format('Y-m-d');
@@ -107,6 +107,7 @@ class DashboardController extends Controller
                 ])
                 ->where('business_id', $businessId)
                 ->where('type', 'sale')
+                ->where('status', '!=', 'cancelled')
                 ->where(function ($q) {
                     $q->whereNotNull('driver_id')
                       ->orWhereNotNull('claimed_by_driver_id');
@@ -207,7 +208,12 @@ class DashboardController extends Controller
             $dashboardData['driverRecap'] = $driverRecap;
 
             // --- MONITORING CASH ON HAND REAL PER KASIR (PRIORITAS) ---
-            $dashboardData['cashierMonitoring'] = $this->dashboardService->getCashierCashOnHandData($businessId, $filterDate);
+            $cashierMonitoring = $this->dashboardService->getCashierCashOnHandData($businessId, $filterDate);
+            $cashierSummaryTotals = $this->dashboardService->computeCashierSummaryTotals($cashierMonitoring);
+            $dashboardData['cashierMonitoring'] = $cashierMonitoring;
+            $dashboardData['cashierSummaryTotals'] = $cashierSummaryTotals;
+            $dashboardData['activeCashiersCount'] = $cashierSummaryTotals['active_cashiers_count'] ?? 0;
+            $dashboardData['standbyCashiersCount'] = $cashierSummaryTotals['standby_cashiers_count'] ?? 0;
 
             // --- LOG AKTIVITAS PELUNASAN KASBON & PENGIRIMAN HARI INI ---
             $dashboardData['settlementLogs'] = $this->dashboardService->getSettlementAuditLogs($businessId, $filterDate);

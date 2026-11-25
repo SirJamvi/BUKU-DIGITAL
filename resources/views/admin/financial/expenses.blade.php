@@ -192,13 +192,33 @@
     <x-card title="Filter Laporan">
         <form method="GET" action="{{ route('admin.financial.expenses') }}" id="filterForm">
             <div class="row g-3">
-                <div class="col-md-4 col-sm-6">
+                <div class="col-md-3 col-sm-6">
                     <x-input type="date" name="start_date" label="Dari Tanggal" :value="request('start_date')" />
                 </div>
-                <div class="col-md-4 col-sm-6">
+                <div class="col-md-3 col-sm-6">
                     <x-input type="date" name="end_date" label="Sampai Tanggal" :value="request('end_date')" />
                 </div>
-                <div class="col-md-4 col-12">
+                <div class="col-md-2 col-sm-6">
+                    <label class="form-label small fw-bold">Jenis Aliran</label>
+                    <select name="flow_type" class="form-select form-select-sm">
+                        <option value="">-- Semua Aliran --</option>
+                        <option value="expense" {{ request('flow_type') === 'expense' ? 'selected' : '' }}>Beban Operasional</option>
+                        <option value="stock_purchase" {{ request('flow_type') === 'stock_purchase' ? 'selected' : '' }}>Pembelian Stok (HPP)</option>
+                        <option value="salary_external" {{ request('flow_type') === 'salary_external' ? 'selected' : '' }}>Gaji Karyawan</option>
+                        <option value="cash_handover" {{ request('flow_type') === 'cash_handover' ? 'selected' : '' }}>Setoran ke Owner/Bank</option>
+                        <option value="cash_refund" {{ request('flow_type') === 'cash_refund' ? 'selected' : '' }}>Refund / Void Nota</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <label class="form-label small fw-bold">Sumber Dana</label>
+                    <select name="funding_source" class="form-select form-select-sm">
+                        <option value="">-- Semua Sumber --</option>
+                        <option value="owner" {{ request('funding_source') === 'owner' ? 'selected' : '' }}>Kas Owner</option>
+                        <option value="external" {{ request('funding_source') === 'external' ? 'selected' : '' }}>Dana Eksternal</option>
+                        <option value="drawer" {{ request('funding_source') === 'drawer' ? 'selected' : '' }}>Laci Kasir</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-12">
                     <label class="form-label d-none d-md-block">&nbsp;</label>
                     <div class="d-flex filter-actions">
                         <x-button type="submit" variant="primary" class="me-2">
@@ -259,7 +279,9 @@
                 @slot('thead')
                     <tr>
                         <th>Tanggal</th>
-                        <th>Kategori</th>
+                        <th>Aliran & Kategori</th>
+                        <th class="text-center">Sumber Dana & Laci</th>
+                        <th class="text-center">Dampak P&L</th>
                         <th class="d-none d-md-table-cell">Deskripsi</th>
                         <th class="text-center">Bukti Nota</th>
                         <th class="text-end">Jumlah</th>
@@ -273,8 +295,24 @@
                             <span class="d-none d-md-inline">{{ \Carbon\Carbon::parse($expense->date)->isoFormat('D MMM YYYY') }}</span>
                             <span class="d-md-none">{{ \Carbon\Carbon::parse($expense->date)->isoFormat('D/M/YY') }}</span>
                         </td>
-                        <td data-label="Kategori">
-                            <span class="badge bg-secondary">{{ $expense->category->name ?? 'N/A' }}</span>
+                        <td data-label="Aliran & Kategori">
+                            <div class="d-flex flex-column gap-1">
+                                <span class="badge {{ $expense->flow_type_badge_class }}" style="font-size: 0.72rem;">
+                                    {{ $expense->flow_type_label }}
+                                </span>
+                                <small class="text-muted" style="font-size: 0.72rem;">
+                                    {{ $expense->category->name ?? 'Operasional' }} ({{ $expense->category->category_type ?? $expense->category->type ?? 'Operasional' }})
+                                </small>
+                            </div>
+                        </td>
+                        <td data-label="Sumber Dana" class="text-center">
+                            <span class="badge {{ $expense->funding_source_badge_class }}" style="font-size: 0.7rem;">
+                                {{ $expense->funding_source_label }}
+                            </span>
+                            <br><small class="text-muted font-monospace" style="font-size: 0.68rem;">{{ strtoupper(str_replace('-', ' ', $expense->payment_method ?? 'Cash')) }}</small>
+                        </td>
+                        <td data-label="Dampak P&L" class="text-center">
+                            {!! $expense->profit_loss_indicator_badge !!}
                         </td>
                         <td data-label="Deskripsi" class="d-none d-md-table-cell">
                             {{ Str::limit($expense->description, 50) }}

@@ -7,6 +7,7 @@ use App\Http\Requests\Kasir\StoreTransactionRequest;
 use App\Models\CashFlow;
 use App\Models\Transaction;
 use App\Services\Kasir\TransactionService;
+use App\Services\Accounting\CustomerDepositService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -155,24 +156,28 @@ class TransactionController extends Controller
                 ->first();
             $categoryId = $incomeCat ? $incomeCat->id : 1;
 
-            \App\Models\CashFlow::create([
-                'business_id'    => $transaction->business_id,
-                'branch_id'      => $activeBranchId, // Dicatat pada cabang kasir penerima dana
-                'type'           => 'income',
-                'flow_type'      => 'debt_settlement',
-                'reference_type' => 'transaction',
-                'category_id'    => $categoryId,
-                'payment_method' => $request->payment_method,
-                'funding_source' => $affectsDrawer ? 'drawer' : 'owner',
-                'affects_drawer' => $affectsDrawer,
-                'amount'         => $transaction->total_amount,
-                'description'    => $desc,
-                'date'           => $settlementDate,
-                'reference_id'   => $transaction->id,
-                'created_by'     => $creatorId,
-            ]);
+            $payable = (float) $transaction->effective_payable_amount;
 
-            // Tambahkan akumulasi belanja customer
+            if ($payable > 0) {
+                \App\Models\CashFlow::create([
+                    'business_id'    => $transaction->business_id,
+                    'branch_id'      => $activeBranchId, // Dicatat pada cabang kasir penerima dana
+                    'type'           => 'income',
+                    'flow_type'      => 'debt_settlement',
+                    'reference_type' => 'transaction',
+                    'category_id'    => $categoryId,
+                    'payment_method' => $request->payment_method,
+                    'funding_source' => $affectsDrawer ? 'drawer' : 'owner',
+                    'affects_drawer' => $affectsDrawer,
+                    'amount'         => $payable,
+                    'description'    => $desc,
+                    'date'           => $settlementDate,
+                    'reference_id'   => $transaction->id,
+                    'created_by'     => $creatorId,
+                ]);
+            }
+
+            // Tambahkan akumulasi belanja customer jika transaksi sebelumnya pending
             if ($transaction->customer_id) {
                 $customer = \App\Models\Customer::find($transaction->customer_id);
                 if ($customer) {
@@ -328,22 +333,26 @@ class TransactionController extends Controller
                     ->first();
                 $categoryId = $incomeCat ? $incomeCat->id : 1;
 
-                \App\Models\CashFlow::create([
-                    'business_id'    => $transaction->business_id,
-                    'branch_id'      => $activeBranchId, // Laci kasir penerima
-                    'type'           => 'income',
-                    'flow_type'      => 'debt_settlement',
-                    'reference_type' => 'transaction',
-                    'category_id'    => $categoryId,
-                    'payment_method' => $request->payment_method,
-                    'funding_source' => $isCash ? 'drawer' : 'owner',
-                    'affects_drawer' => $isCash ? 1 : 0,
-                    'amount'         => $transaction->total_amount,
-                    'description'    => $desc,
-                    'date'           => $settlementDate,
-                    'reference_id'   => $transaction->id,
-                    'created_by'     => Auth::id(),
-                ]);
+                $payable = (float) $transaction->effective_payable_amount;
+
+                if ($payable > 0) {
+                    \App\Models\CashFlow::create([
+                        'business_id'    => $transaction->business_id,
+                        'branch_id'      => $activeBranchId, // Laci kasir penerima
+                        'type'           => 'income',
+                        'flow_type'      => 'debt_settlement',
+                        'reference_type' => 'transaction',
+                        'category_id'    => $categoryId,
+                        'payment_method' => $request->payment_method,
+                        'funding_source' => $isCash ? 'drawer' : 'owner',
+                        'affects_drawer' => $isCash ? 1 : 0,
+                        'amount'         => $payable,
+                        'description'    => $desc,
+                        'date'           => $settlementDate,
+                        'reference_id'   => $transaction->id,
+                        'created_by'     => Auth::id(),
+                    ]);
+                }
 
                 // Tambahkan akumulasi belanja customer
                 if ($transaction->customer_id) {
@@ -372,8 +381,9 @@ class TransactionController extends Controller
     {
         $request->validate([
             'trip_code' => 'required|string',
-            'payments' => 'required|array',
-            'notes' => 'nullable|array',
+            'payments'  => 'required|array',
+            'deposits'  => 'nullable|array',
+            'notes'     => 'nullable|array',
         ]);
 
         $businessId = Auth::user()->business_id;
@@ -397,10 +407,40 @@ class TransactionController extends Controller
             $kasbonCount = 0;
 
             foreach ($transactions as $transaction) {
-                $chosenMethod = $request->payments[$transaction->id] ?? 'kasbon';
                 $orderNote = $request->notes[$transaction->id] ?? null;
-                $isKasbon = strtolower($chosenMethod) === 'kasbon';
 
+                // 1. Cek jika transaksi sudah lunas 100% dari deposit saat checkout POS
+                if ($transaction->payment_status === 'paid' && $transaction->effective_payable_amount <= 0) {
+                    $upd = [
+                        'order_status'    => 'delivered',
+                        'delivery_status' => 'delivered',
+                        'delivered_at'    => now(),
+                    ];
+                    if (!empty($orderNote)) {
+                        $upd['notes'] = ($transaction->notes ? $transaction->notes . ' | ' : '') . $orderNote;
+                    }
+                    $transaction->update($upd);
+                    $paidCount++;
+
+                    // Cek jika kasir menginput titipan deposit tambahan via driver
+                    $depositAmount = isset($request->deposits[$transaction->id]) ? (float) $request->deposits[$transaction->id] : 0.0;
+                    if ($depositAmount > 0 && $transaction->customer_id) {
+                        CustomerDepositService::addDeposit(
+                            $businessId,
+                            $transaction->branch_id,
+                            $transaction->customer_id,
+                            $depositAmount,
+                            'cash',
+                            $transaction->id,
+                            "Deposit kelebihan bayar pengiriman {$tripCode} #{$transaction->id}",
+                            Auth::id()
+                        );
+                    }
+                    continue;
+                }
+
+                $chosenMethod = $request->payments[$transaction->id] ?? 'kasbon';
+                $isKasbon = strtolower($chosenMethod) === 'kasbon';
                 $methodSlug = $isKasbon ? 'kasbon' : \Illuminate\Support\Str::slug($chosenMethod);
 
                 $updateData = [
@@ -449,23 +489,27 @@ class TransactionController extends Controller
                         ->first();
                     $categoryId = $incomeCat ? $incomeCat->id : 1;
 
-                    // Catat ke CashFlow secara dinamis dengan metode pembayaran riil & alokasi tanggal
-                    \App\Models\CashFlow::create([
-                        'business_id'    => $transaction->business_id,
-                        'branch_id'      => $transaction->branch_id,
-                        'type'           => 'income',
-                        'flow_type'      => 'debt_settlement',
-                        'reference_type' => 'transaction',
-                        'category_id'    => $categoryId,
-                        'payment_method' => $methodSlug,
-                        'funding_source' => $isCashChosen ? 'drawer' : 'owner',
-                        'affects_drawer' => $isCashChosen ? 1 : 0,
-                        'amount'         => $transaction->total_amount,
-                        'description'    => $desc,
-                        'date'           => $settlementDate,
-                        'reference_id'   => $transaction->id,
-                        'created_by'     => Auth::id(),
-                    ]);
+                    $payable = (float) $transaction->effective_payable_amount;
+
+                    if ($payable > 0) {
+                        // Catat ke CashFlow SEBESAR $payable (bukan total_amount)
+                        \App\Models\CashFlow::create([
+                            'business_id'    => $transaction->business_id,
+                            'branch_id'      => $transaction->branch_id,
+                            'type'           => 'income',
+                            'flow_type'      => 'debt_settlement',
+                            'reference_type' => 'transaction',
+                            'category_id'    => $categoryId,
+                            'payment_method' => $methodSlug,
+                            'funding_source' => $isCashChosen ? 'drawer' : 'owner',
+                            'affects_drawer' => $isCashChosen ? 1 : 0,
+                            'amount'         => $payable,
+                            'description'    => $desc,
+                            'date'           => $settlementDate,
+                            'reference_id'   => $transaction->id,
+                            'created_by'     => Auth::id(),
+                        ]);
+                    }
 
                     // Tambahkan akumulasi belanja customer
                     if ($transaction->customer_id) {
@@ -473,6 +517,22 @@ class TransactionController extends Controller
                         if ($customer) {
                             $customer->increment('total_purchases', $transaction->total_amount);
                         }
+                    }
+
+                    // Input Deposit kelebihan bayar pengiriman jika kasir mengisi input deposit
+                    $depositAmount = isset($request->deposits[$transaction->id]) ? (float) $request->deposits[$transaction->id] : 0.0;
+                    if ($depositAmount > 0 && $transaction->customer_id) {
+                        CustomerDepositService::addDeposit(
+                            $businessId,
+                            $transaction->branch_id,
+                            $transaction->customer_id,
+                            $depositAmount,
+                            $methodSlug,
+                            $transaction->id,
+                            "Deposit kelebihan bayar pengiriman {$tripCode} #{$transaction->id}",
+                            Auth::id(),
+                            $settlementDate
+                        );
                     }
                 } else {
                     $kasbonCount++;
@@ -496,6 +556,42 @@ class TransactionController extends Controller
             DB::rollBack();
             logger()->error('completeDeliveryTrip error: ' . $e->getMessage());
             return back()->with('error', 'Gagal menyelesaikan pengiriman driver: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Endpoint mandiri untuk kasir mencatat deposit pelanggan di luar pengiriman driver.
+     */
+    public function storeCustomerDeposit(\Illuminate\Http\Request $request): RedirectResponse
+    {
+        $request->validate([
+            'customer_id'    => 'required|integer|exists:customers,id',
+            'amount'         => 'required|numeric|min:1',
+            'payment_method' => 'required|string',
+            'notes'          => 'nullable|string|max:255',
+        ]);
+
+        try {
+            $businessId = Auth::user()->business_id;
+            $branchId = app(\App\Support\BranchContext::class)->requireBranchId();
+
+            CustomerDepositService::addDeposit(
+                $businessId,
+                $branchId,
+                (int) $request->customer_id,
+                (float) $request->amount,
+                $request->payment_method,
+                null,
+                $request->notes,
+                Auth::id()
+            );
+
+            \App\Support\BranchCache::flush($businessId);
+
+            return back()->with('success', 'Deposit pelanggan sebesar Rp ' . number_format($request->amount, 0, ',', '.') . ' berhasil disimpan.');
+        } catch (\Exception $e) {
+            logger()->error('storeCustomerDeposit error: ' . $e->getMessage());
+            return back()->with('error', 'Gagal mencatat deposit pelanggan: ' . $e->getMessage());
         }
     }
 }

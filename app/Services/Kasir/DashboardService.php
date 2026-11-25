@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use App\Models\Inventory;
 use App\Models\CashFlow;
 use App\Models\CashierOpeningBalance;
+use App\Models\Customer;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -70,7 +71,21 @@ class DashboardService
             }
             $pelunasanCashAmount = (float) $pelunasanCashQuery->sum('amount');
 
-            $totalCashInToday = $cashSalesAmount + $pelunasanCashAmount;
+            // B2. Penerimaan Titipan Deposit Pelanggan Tunai di Laci Kasir (Non-P&L)
+            $depositCashQuery = CashFlow::where('business_id', $businessId)
+                ->where('created_by', $kasirId)
+                ->where('type', 'income')
+                ->whereRaw('LOWER(payment_method) = ?', ['cash'])
+                ->where('affects_drawer', 1)
+                ->where('flow_type', 'customer_deposit')
+                ->where('date', $todayDate);
+
+            if ($branchId) {
+                $depositCashQuery->where('branch_id', $branchId);
+            }
+            $depositCashAmount = (float) $depositCashQuery->sum('amount');
+
+            $totalCashInToday = $cashSalesAmount + $pelunasanCashAmount + $depositCashAmount;
 
             // C. Kas Keluar Tunai Fisik dari Laci Kasir (affects_drawer = 1 & cash)
             $drawerCashExpensesQuery = CashFlow::where('business_id', $businessId)
@@ -78,7 +93,7 @@ class DashboardService
                 ->where('type', 'expense')
                 ->where('affects_drawer', 1)
                 ->where('payment_method', 'cash')
-                ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund'])
+                ->whereIn('flow_type', ['expense', 'stock_purchase', 'cash_handover', 'cash_refund', 'deposit_refund'])
                 ->where('date', $todayDate);
 
             if ($branchId) {
@@ -216,12 +231,19 @@ class DashboardService
                 return $item->customer_id ? 'cust_' . $item->customer_id : 'umum';
             });
 
+            // Daftar Pelanggan untuk Setor Deposit Mandiri
+            $customers = Customer::where('business_id', $businessId)
+                ->select('id', 'name', 'phone', 'deposit_balance')
+                ->orderBy('name')
+                ->get();
+
             return [
                 'myOpeningCash'            => $myOpeningCash,
                 'myOpeningNotes'           => $myOpeningNotes,
                 'totalCashInToday'         => $totalCashInToday,
                 'cashSalesAmount'          => $cashSalesAmount,
                 'pelunasanCashAmount'      => $pelunasanCashAmount,
+                'depositCashAmount'        => $depositCashAmount,
                 'mySalesToday'             => $totalCashInToday, // Alias kompatibilitas laci kasir
                 'myExpensesToday'          => $drawerCashExpensesAmount,
                 'myNetCashToday'           => $myNetCashToday,  // Murni Uang Fisik di Laci Real-Time
@@ -239,6 +261,7 @@ class DashboardService
                 'kasbonByCustomer'         => $kasbonByCustomer,
                 'totalKasbonCount'         => $pendingKasbonRaw->count(),
                 'totalKasbonAmount'        => $pendingKasbonRaw->sum('total_amount'),
+                'customers'                => $customers,
             ];
         } catch (\Exception $e) {
             logger()->error(__METHOD__ . ': ' . $e->getMessage());
@@ -249,6 +272,7 @@ class DashboardService
                 'totalCashInToday'         => 0,
                 'cashSalesAmount'          => 0,
                 'pelunasanCashAmount'      => 0,
+                'depositCashAmount'        => 0,
                 'mySalesToday'             => 0,
                 'myExpensesToday'          => 0,
                 'myNetCashToday'           => 0,
@@ -264,6 +288,7 @@ class DashboardService
                 'kasbonByCustomer'         => collect(),
                 'totalKasbonCount'         => 0,
                 'totalKasbonAmount'        => 0,
+                'customers'                => collect(),
             ];
         }
     }

@@ -29,6 +29,7 @@ class StoreTransactionRequest extends FormRequest
                 'driver_id' => ['required', 'integer', 'exists:users,id'],
                 'orders' => ['required', 'array', 'min:1'],
                 'orders.*.customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+                'orders.*.use_deposit' => ['nullable', 'boolean'],
                 'orders.*.ai_order_id' => ['nullable'],
                 'orders.*.total_amount' => ['required', 'numeric', 'min:0'],
                 'orders.*.notes' => ['nullable', 'string'],
@@ -38,6 +39,7 @@ class StoreTransactionRequest extends FormRequest
                 'orders.*.items.*.quantity' => ['required', 'integer', 'min:1'],
                 'orders.*.items.*.unit_price' => ['required', 'numeric', 'min:0'],
                 'orders.*.items.*.total_price' => ['required', 'numeric', 'min:0'],
+                'use_deposit' => ['nullable', 'boolean'],
                 'ai_order_id' => ['nullable'],
                 'ai_order_ids' => ['nullable', 'array'],
                 'ai_order_ids.*' => ['nullable'],
@@ -46,11 +48,12 @@ class StoreTransactionRequest extends FormRequest
 
         return [
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'use_deposit' => ['nullable', 'boolean'],
             'ai_order_id' => ['nullable'],
             'ai_order_ids' => ['nullable', 'array'],
             'ai_order_ids.*' => ['nullable'],
             'driver_id' => ['nullable', 'integer', 'exists:users,id'],
-            'payment_method' => ['required', 'string', 'max:50'],
+            'payment_method' => ['nullable', 'string', 'max:50'],
             'total_amount' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
@@ -82,7 +85,7 @@ class StoreTransactionRequest extends FormRequest
             }
             $this->merge([
                 'orders' => $orders,
-                'payment_method' => 'kasbon',
+                'payment_method' => $this->input('payment_method', 'kasbon'),
             ]);
             return;
         }
@@ -99,8 +102,8 @@ class StoreTransactionRequest extends FormRequest
             'total_amount' => $totalAmount,
         ];
 
-        // Jika single order ditugaskan ke driver, otomatis payment_method kasbon
-        if ($this->filled('driver_id')) {
+        // Jika single order ditugaskan ke driver dan payment_method kosong, fallback ke kasbon
+        if ($this->filled('driver_id') && !$this->filled('payment_method')) {
             $mergeData['payment_method'] = 'kasbon';
         }
 

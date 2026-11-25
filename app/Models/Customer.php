@@ -19,13 +19,20 @@ class Customer extends Model
         'join_date',
         'total_purchases',
         'loyalty_points',
+        'deposit_balance',
         'status',
         'created_by',
     ];
 
     protected $casts = [
-        'join_date' => 'date',
+        'join_date'       => 'date',
+        'deposit_balance' => 'decimal:2',
     ];
+
+    public function depositLogs()
+    {
+        return $this->hasMany(CustomerDepositLog::class);
+    }
 
     public function transactions()
     {

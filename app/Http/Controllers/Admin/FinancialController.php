@@ -69,9 +69,15 @@ class FinancialController extends Controller
         if ($request->filled('end_date')) {
             $query->whereDate('date', '<=', $request->end_date);
         }
+        if ($request->filled('flow_type')) {
+            $query->where('flow_type', $request->flow_type);
+        }
+        if ($request->filled('funding_source')) {
+            $query->where('funding_source', $request->funding_source);
+        }
         
         // Ambil data dengan paginasi
-        $expenses = $query->latest('date')->paginate(10);
+        $expenses = $query->latest('date')->latest('id')->paginate(10)->withQueryString();
         $categories = ExpenseCategory::all();
         
         return view('admin.financial.expenses', compact('expenses', 'categories'));
@@ -103,7 +109,7 @@ class FinancialController extends Controller
             
             // [BARU] Validasi Payment Method: Wajib diisi & harus ada di kolom 'slug' tabel payment_methods
             'payment_method' => 'required|exists:payment_methods,slug',
-            'funding_source' => 'nullable|string|in:drawer,external',
+            'funding_source' => 'nullable|string|in:drawer,owner,external',
             'receipt_image'  => 'nullable|file|mimes:jpeg,png,jpg,webp,pdf|max:10240',
         ]);
         
@@ -119,7 +125,12 @@ class FinancialController extends Controller
     // Menyimpan kategori pengeluaran baru dari modal
     public function storeExpenseCategory(Request $request): RedirectResponse
     {
-        $request->validate(['name' => 'required|string|max:191', 'type' => 'required|string']);
+        $request->validate([
+            'name'          => 'required|string|max:191',
+            'type'          => 'nullable|string',
+            'category_type' => 'nullable|string|in:HPP,Operasional,Piutang Karyawan,Non-usaha',
+        ]);
+        
         $this->financialService->createExpenseCategory($request->all());
         return back()->with('success', 'Kategori pengeluaran baru berhasil ditambahkan.');
     }
@@ -174,9 +185,25 @@ class FinancialController extends Controller
         return $pdf->download($fileName);
     }
     
-    public function cashFlow(): View
+    public function cashFlow(Request $request): View
     {
-        $cashFlows = $this->financialService->getCashFlowWithPagination();
+        $query = CashFlow::where('business_id', Auth::user()->business_id)
+            ->with(['category', 'createdBy']);
+
+        if ($request->filled('start_date')) {
+            $query->whereDate('date', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('date', '<=', $request->end_date);
+        }
+        if ($request->filled('flow_type')) {
+            $query->where('flow_type', $request->flow_type);
+        }
+        if ($request->filled('funding_source')) {
+            $query->where('funding_source', $request->funding_source);
+        }
+
+        $cashFlows = $query->latest('date')->latest('id')->paginate(20)->withQueryString();
         return view('admin.financial.cash-flow', compact('cashFlows'));
     }
 
@@ -352,6 +379,100 @@ class FinancialController extends Controller
     }
 
     /**
+     * Membuka kembali periode tutup buku bulanan cabang (Reopen -> Draft).
+     */
+    public function reopenBranchClosing(Request $request, int $closing): RedirectResponse
+    {
+        $request->validate([
+            'reason' => 'required|string|min:5|max:500',
+        ]);
+
+        try {
+            $this->financialService->reopenBranchClosing($closing, $request->reason, Auth::id());
+            \App\Support\BranchCache::flush(Auth::user()->business_id);
+
+            return redirect()->route('admin.financial.branch-closings')
+                ->with('success', 'Periode tutup buku cabang berhasil dibuka kembali (Draft).');
+        } catch (\Exception $e) {
+            return redirect()->route('admin.financial.branch-closings')
+                ->with('error', 'Gagal membuka kembali tutup buku: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Monitoring dan Rekap Riwayat Tutup Shift Kasir (Cashier Shift Closings).
+     */
+    public function shiftClosings(Request $request): View
+    {
+        $businessId = Auth::user()->business_id;
+        $context = app(\App\Support\BranchContext::class);
+
+        $query = \App\Models\CashierShiftClosing::where('business_id', $businessId)
+            ->with(['branch', 'user', 'closedBy']);
+
+        if ($context->isBranch() && $context->getBranchId() !== null) {
+            $query->where('branch_id', $context->getBranchId());
+        } elseif ($request->filled('branch_id')) {
+            $query->where('branch_id', $request->branch_id);
+        }
+
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        if ($request->filled('start_date')) {
+            $query->whereDate('date', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->whereDate('date', '<=', $request->end_date);
+        }
+
+        if ($request->filled('variance_status')) {
+            if ($request->variance_status === 'balanced') {
+                $query->where('variance', 0);
+            } elseif ($request->variance_status === 'over') {
+                $query->where('variance', '>', 0);
+            } elseif ($request->variance_status === 'short') {
+                $query->where('variance', '<', 0);
+            }
+        }
+
+        // Hitung 4 KPI Summary Cards terfilter secara matang di Controller SSOT
+        $cloneTotal = clone $query;
+        $totalClosings = $cloneTotal->count();
+        $totalHandover = (float) $cloneTotal->sum('cash_handover_amount');
+
+        $cloneShort = clone $query;
+        $totalShort = (float) $cloneShort->where('variance', '<', 0)->sum('variance');
+
+        $cloneOver = clone $query;
+        $totalOver = (float) $cloneOver->where('variance', '>', 0)->sum('variance');
+
+        $kpi = [
+            'total_closings' => $totalClosings,
+            'total_handover' => $totalHandover,
+            'total_short'    => abs($totalShort),
+            'total_over'     => $totalOver,
+        ];
+
+        $closings = $query->latest('date')->latest('closed_at')->paginate(15)->withQueryString();
+
+        $branches = \App\Models\Branch::where('business_id', $businessId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $cashiers = \App\Models\User::where('business_id', $businessId)
+            ->where(function ($q) {
+                $q->where('role', 'kasir')->orWhereJsonContains('secondary_roles', 'kasir');
+            })
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.financial.shift_closings', compact('closings', 'kpi', 'branches', 'cashiers'));
+    }
+
+    /**
      * Menampilkan form untuk mengedit data pengeluaran.
      */
     public function editExpense(CashFlow $expense): View
@@ -384,7 +505,7 @@ class FinancialController extends Controller
             
             // [BARU] Validasi Payment Method: Wajib diisi & harus ada di kolom 'slug' tabel payment_methods
             'payment_method' => 'required|exists:payment_methods,slug',
-            'funding_source' => 'nullable|string|in:drawer,external',
+            'funding_source' => 'nullable|string|in:drawer,owner,external',
         ]);
 
         $this->financialService->updateExpense($expense, $request->all());

@@ -34,7 +34,7 @@ class TransactionController extends Controller
 
     public function show(Transaction $transaction): View
     {
-        $transaction->load('customer', 'createdBy', 'details.product');
+        $transaction->load('customer', 'createdBy', 'voidedBy', 'details.product');
         return view('admin.transactions.show', compact('transaction'));
     }
 

@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\PaymentMethod;
 use App\Services\Accounting\CogsCalculator;
 use Carbon\Carbon;
+use App\Services\Accounting\AccountingPeriodGuard;
 
 class FinancialService
 {
@@ -100,6 +101,12 @@ class FinancialService
 
         $netProfit = $totalGrossProfit - $totalExpense;
 
+        // Beban Holding / Owner (OwnerExpense) pada periode yang sama
+        $ownerExpenseQuery = OwnerExpense::where('business_id', $businessId);
+        $this->applyDateFilters($ownerExpenseQuery, $filters, 'date');
+        $ownerExpensesTotal = (float) $ownerExpenseQuery->sum('amount');
+        $holdingNetProfit = $netProfit - $ownerExpensesTotal;
+
         $balances = $this->calculatePaymentBalances($filters);
 
         // Data untuk TABEL rincian arus kas — dipaginate
@@ -117,6 +124,8 @@ class FinancialService
             'total_expense'        => $totalExpense,
             'total_gross_profit'   => $totalGrossProfit,
             'net_profit'           => $netProfit,
+            'owner_expenses_total' => $ownerExpensesTotal,
+            'holding_net_profit'   => $holdingNetProfit,
             'balances'             => $balances,
             'filters'              => $filters,
             'missing_cogs_count'   => $cogsResult['missing_cogs_count'],
@@ -155,7 +164,7 @@ class FinancialService
             if ($flow->type !== 'expense') {
                 return false;
             }
-            if (in_array($flow->flow_type, ['cash_handover', 'cash_refund', 'stock_purchase'])) {
+            if (in_array($flow->flow_type, ['cash_handover', 'cash_refund', 'stock_purchase', 'deposit_refund'])) {
                 return false;
             }
             if ($useCashflowIsCogs && (int) ($flow->is_cogs ?? 0) !== 0) {
@@ -168,6 +177,12 @@ class FinancialService
 
         $netProfit = $totalGrossProfit - $totalExpense;
 
+        // Beban Holding / Owner (OwnerExpense) pada periode yang sama
+        $ownerExpenseQuery = OwnerExpense::where('business_id', $businessId);
+        $this->applyDateFilters($ownerExpenseQuery, $filters, 'date');
+        $ownerExpensesTotal = (float) $ownerExpenseQuery->sum('amount');
+        $holdingNetProfit = $netProfit - $ownerExpensesTotal;
+
         $balances = $this->calculatePaymentBalances($filters);
 
         return [
@@ -178,6 +193,8 @@ class FinancialService
             'total_expense'        => $totalExpense,
             'total_gross_profit'   => $totalGrossProfit,
             'net_profit'           => $netProfit,
+            'owner_expenses_total' => $ownerExpensesTotal,
+            'holding_net_profit'   => $holdingNetProfit,
             'balances'             => $balances,
             'filters'              => $filters,
             'missing_cogs_count'   => $cogsResult['missing_cogs_count'],
@@ -321,7 +338,7 @@ class FinancialService
                 ->where('business_id', $businessId)
                 ->where('branch_id', $branchId)
                 ->where('type', 'expense')
-                ->whereNotIn('flow_type', ['cash_handover', 'cash_refund', 'stock_purchase'])
+                ->whereNotIn('flow_type', ['cash_handover', 'cash_refund', 'stock_purchase', 'deposit_refund'])
                 ->whereBetween('date', [$startOfMonth, $endOfMonth]);
 
             if (config('accounting.use_cashflow_is_cogs', false)) {
@@ -749,6 +766,10 @@ class FinancialService
     {
         $rawCategoryName = trim($data['category_name']);
         $businessId = Auth::user()->business_id;
+        $branchId = app(\App\Support\BranchContext::class)->requireBranchId();
+
+        // Cek Period Lock: pastikan pembukuan bulan tersebut masih terbuka
+        AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, $data['date']);
 
         // Cek case-insensitive agar tidak terjadi duplikasi seperti 'Bensin' vs 'bensin'
         $category = ExpenseCategory::where('business_id', $businessId)
@@ -773,7 +794,7 @@ class FinancialService
         if ($isSalary && empty($data['funding_source'])) {
             $fundingSource = 'external';
         } else {
-            $fundingSource = $data['funding_source'] ?? 'drawer';
+            $fundingSource = $data['funding_source'] ?? 'owner';
         }
         $affectsDrawer = ($fundingSource === 'drawer');
 
@@ -796,7 +817,6 @@ class FinancialService
             }
         }
 
-        $branchId = app(\App\Support\BranchContext::class)->requireBranchId();
         $expensePayload['branch_id'] = $branchId;
 
         CashFlow::create($expensePayload);
@@ -807,6 +827,11 @@ class FinancialService
     {
         $rawCategoryName = trim($data['category_name']);
         $businessId = Auth::user()->business_id;
+        $branchId = $expense->branch_id ?? app(\App\Support\BranchContext::class)->requireBranchId();
+
+        // Cek Period Lock: pastikan pembukuan bulan tanggal LAMA dan tanggal BARU masih terbuka
+        AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, $expense->date);
+        AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, $data['date']);
 
         // Cek case-insensitive agar tidak terjadi duplikasi
         $category = ExpenseCategory::where('business_id', $businessId)
@@ -858,6 +883,11 @@ class FinancialService
     public function deleteExpense(CashFlow $expense): void
     {
         $bizId = $expense->business_id;
+        $branchId = $expense->branch_id;
+
+        // Cek Period Lock sebelum menghapus pengeluaran
+        AccountingPeriodGuard::ensurePeriodOpen($bizId, $branchId, $expense->date);
+
         if ($expense->receipt_image) {
             \App\Services\ProofUploadService::deleteProof($expense->receipt_image);
         }
@@ -869,6 +899,8 @@ class FinancialService
     {
         $rawName = trim($data['name']);
         $businessId = Auth::user()->business_id;
+        $categoryType = $data['category_type'] ?? 'Operasional';
+        $isCogs = $data['is_cogs'] ?? ($categoryType === 'HPP');
 
         $existing = ExpenseCategory::where('business_id', $businessId)
             ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($rawName)])
@@ -876,12 +908,18 @@ class FinancialService
 
         if (!$existing) {
             ExpenseCategory::create([
-                'business_id' => $businessId,
-                'name'        => $rawName,
-                'type'        => $data['type'] ?? 'Operasional',
-                'is_active'   => true,
-                'created_by'  => Auth::id(),
-                'is_cogs'     => $data['is_cogs'] ?? false,
+                'business_id'   => $businessId,
+                'name'          => $rawName,
+                'type'          => $data['type'] ?? $categoryType,
+                'category_type' => $categoryType,
+                'is_active'     => true,
+                'created_by'    => Auth::id(),
+                'is_cogs'       => $isCogs,
+            ]);
+        } else {
+            $existing->update([
+                'category_type' => $categoryType,
+                'is_cogs'       => $isCogs,
             ]);
         }
     }
@@ -969,7 +1007,7 @@ class FinancialService
     {
         $query = CashFlow::where('business_id', $businessId)
             ->where('type', 'expense')
-            ->whereNotIn('flow_type', ['cash_handover', 'cash_refund', 'stock_purchase']);
+            ->whereNotIn('flow_type', ['cash_handover', 'cash_refund', 'stock_purchase', 'deposit_refund']);
 
         if (config('accounting.use_cashflow_is_cogs', false)) {
             $query->where('is_cogs', 0);

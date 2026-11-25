@@ -34,20 +34,29 @@
 
         <div class="mb-3">
             <label class="form-label d-block fw-bold">Sumber Dana Pengeluaran <span class="text-danger">*</span></label>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_drawer" value="drawer" {{ old('funding_source', $expense->funding_source ?? 'drawer') === 'drawer' ? 'checked' : '' }}>
-                <label class="form-check-label text-danger fw-semibold" for="exp_funding_drawer">
-                    <i class="bi bi-wallet2 me-1"></i> Kas Laci Kasir (Potong Fisik Laci)
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_owner" value="owner" {{ old('funding_source', $expense->funding_source ?? 'owner') === 'owner' ? 'checked' : '' }} onchange="toggleDrawerWarning(this.value)">
+                <label class="form-check-label text-primary fw-semibold" for="exp_funding_owner">
+                    <i class="fas fa-user-shield me-1"></i> Rekening / Kas Owner (Tidak Potong Laci Kasir)
                 </label>
+                <div class="small text-muted ms-4">Biaya operasional yang dibayar melalui rekening owner/perusahaan.</div>
             </div>
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_external" value="external" {{ old('funding_source', $expense->funding_source ?? 'drawer') === 'external' ? 'checked' : '' }}>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_external" value="external" {{ old('funding_source', $expense->funding_source) === 'external' ? 'checked' : '' }} onchange="toggleDrawerWarning(this.value)">
                 <label class="form-check-label text-success fw-semibold" for="exp_funding_external">
-                    <i class="bi bi-bank me-1"></i> Uang Bos / Eksternal (Tidak Potong Laci)
+                    <i class="fas fa-money-bill-wave me-1"></i> Dana Eksternal / Gaji Bos (Tidak Potong Laci Kasir)
                 </label>
+                <div class="small text-muted ms-4">Biaya payroll/gaji karyawan atau dana talangan bos luar laci.</div>
             </div>
-            <div class="form-text text-muted">
-                Pilih <strong>Uang Bos / Eksternal</strong> agar pengeluaran tidak mengurangi uang fisik kas di laci kasir.
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="radio" name="funding_source" id="exp_funding_drawer" value="drawer" {{ old('funding_source', $expense->funding_source) === 'drawer' ? 'checked' : '' }} onchange="toggleDrawerWarning(this.value)">
+                <label class="form-check-label text-danger fw-semibold" for="exp_funding_drawer">
+                    <i class="fas fa-cash-register me-1"></i> Kas Laci Kasir Cabang (⚠️ Memotong Fisik Uang Laci Kasir)
+                </label>
+                <div class="small text-muted ms-4">Hanya gunakan jika uang pengeluaran diambil tunai dari laci meja kasir.</div>
+            </div>
+            <div id="drawer_warning_alert" class="alert alert-warning py-2 px-3 mt-2 d-none" style="font-size: 0.8rem; border-left: 4px solid #f59e0b;">
+                <i class="fas fa-exclamation-triangle me-1 text-warning"></i> <strong>Perhatian:</strong> Memilih <em>Kas Laci Kasir</em> akan memotong perhitungan fisik uang kasir saat tutup shift kasir di cabang bersangkutan.
             </div>
         </div>
 
@@ -73,4 +82,23 @@
         </div>
     </form>
 </x-card>
+
+<script>
+function toggleDrawerWarning(val) {
+    const alertEl = document.getElementById('drawer_warning_alert');
+    if (alertEl) {
+        if (val === 'drawer') {
+            alertEl.classList.remove('d-none');
+        } else {
+            alertEl.classList.add('d-none');
+        }
+    }
+}
+document.addEventListener('DOMContentLoaded', function() {
+    const checked = document.querySelector('input[name="funding_source"]:checked');
+    if (checked) {
+        toggleDrawerWarning(checked.value);
+    }
+});
+</script>
 @endsection

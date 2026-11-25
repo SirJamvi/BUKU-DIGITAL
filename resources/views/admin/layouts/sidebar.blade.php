@@ -77,7 +77,11 @@
             @endpermission
 
             @permission('financial.view_all')
-            <a href="{{ route('admin.financial.index') }}" class="sidebar-item {{ (request()->routeIs('admin.financial.*') && !request()->routeIs('admin.financial.expenses*') && !request()->routeIs('admin.financial.branch-closings')) ? 'active' : '' }}">
+            <a href="{{ route('admin.financial.shift-closings.index') }}" class="sidebar-item {{ request()->routeIs('admin.financial.shift-closings*') ? 'active' : '' }}">
+                <i class="fas fa-clock-rotate-left"></i>
+                <span>Rekap Tutup Shift Kasir</span>
+            </a>
+            <a href="{{ route('admin.financial.index') }}" class="sidebar-item {{ (request()->routeIs('admin.financial.*') && !request()->routeIs('admin.financial.expenses*') && !request()->routeIs('admin.financial.branch-closings') && !request()->routeIs('admin.financial.shift-closings*')) ? 'active' : '' }}">
                 <i class="fas fa-file-invoice-dollar"></i>
                 <span>Finansial</span>
             </a>

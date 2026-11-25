@@ -7,12 +7,14 @@ use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\CashFlow;
 use App\Models\PaymentMethod;
+use App\Models\ExpenseCategory;
 use App\Models\Inventory;
 use App\Models\StockMovement;
 use App\Models\Branch;
 use App\Models\User;
 use App\Support\BranchContext;
 use App\Exceptions\InsufficientStockException;
+use App\Services\Accounting\CustomerDepositService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -44,7 +46,7 @@ class PosService
         $products = $productQuery->get();
 
         $customers = Customer::where('status', 'active')
-            ->select('id', 'name')
+            ->select('id', 'name', 'deposit_balance')
             ->orderBy('name', 'asc')
             ->get();
 
@@ -160,20 +162,36 @@ class PosService
             $driverId = $data['driver_id'] ?? null;
 
             foreach ($data['orders'] as $orderIndex => $order) {
-                $orderTotal = $order['total_amount'] ?? 0;
+                $orderTotal = (float) ($order['total_amount'] ?? 0);
+                $customerId = $order['customer_id'] ?? null;
+                $useDeposit = !empty($order['use_deposit']) && $customerId;
+
+                $depositUsed = 0.0;
+                if ($useDeposit) {
+                    $custModel = Customer::find($customerId);
+                    $avail = $custModel ? (float) ($custModel->deposit_balance ?? 0) : 0.0;
+                    $depositUsed = min($avail, $orderTotal);
+                }
+
+                $netPayable = round($orderTotal - $depositUsed, 2);
+                $isFullDeposit = ($depositUsed > 0 && $netPayable <= 0);
 
                 $transaction = Transaction::create([
                     'business_id'            => $businessId,
                     'branch_id'              => $branchId,
                     'type'                   => 'sale',
-                    'customer_id'            => $order['customer_id'] ?? null,
+                    'customer_id'            => $customerId,
                     'driver_id'              => $driverId,
                     'claimed_by_driver_id'   => $driverId,
                     'delivery_trip_code'     => $tripCode,
                     'total_amount'           => $orderTotal,
-                    'payment_method'         => 'kasbon',
-                    'initial_payment_method' => 'kasbon',
-                    'payment_status'         => 'pending',
+                    'deposit_used'           => $depositUsed,
+                    'net_payable_amount'     => $netPayable,
+                    'payment_method'         => $isFullDeposit ? 'deposit' : 'kasbon',
+                    'initial_payment_method' => $isFullDeposit ? 'deposit' : 'kasbon',
+                    'settlement_payment_method' => $isFullDeposit ? 'deposit' : null,
+                    'settled_at'             => $isFullDeposit ? now() : null,
+                    'payment_status'         => $isFullDeposit ? 'paid' : 'pending',
                     'order_status'           => 'delivering',
                     'delivery_status'        => 'delivering',
                     'status'                 => 'completed',
@@ -181,6 +199,14 @@ class PosService
                     'notes'                  => $order['notes'] ?? ("Pengiriman {$tripCode}"),
                     'created_by'             => Auth::id(),
                 ]);
+
+                if ($depositUsed > 0 && $customerId) {
+                    CustomerDepositService::useDeposit($businessId, $branchId, $customerId, $depositUsed, $transaction->id, Auth::id());
+                }
+
+                if ($isFullDeposit && $customerId) {
+                    Customer::where('id', $customerId)->increment('total_purchases', $orderTotal);
+                }
 
                 foreach ($order['items'] as $item) {
                     $product = Product::find($item['product_id']);
@@ -298,34 +324,75 @@ class PosService
 
             // Cek apakah ada driver yang ditugaskan (Pengiriman)
             $driverId = !empty($data['driver_id']) ? (int) $data['driver_id'] : null;
+            $customerId = $data['customer_id'] ?? null;
+            $useDeposit = !empty($data['use_deposit']) && $customerId;
+            $totalAmount = (float) $data['total_amount'];
 
-            // Berdasarkan kesepakatan: Jika ada driver, otomatis Kasbon / Pending sampai driver kembali
+            $depositUsed = 0.0;
+            if ($useDeposit) {
+                $custModel = Customer::find($customerId);
+                $avail = $custModel ? (float) ($custModel->deposit_balance ?? 0) : 0.0;
+                $depositUsed = min($avail, $totalAmount);
+            }
+
+            $netPayable = round($totalAmount - $depositUsed, 2);
+            $isFullDeposit = ($depositUsed > 0 && $netPayable <= 0);
+
             $isDelivery = !empty($driverId);
-            $isKasbon = $isDelivery || (($data['payment_method'] ?? '') === 'kasbon');
-
-            // Generate trip_code jika pengiriman driver (baik 1 pesanan maupun rombongan)
             $tripCode = $isDelivery ? $this->generateTripCode($businessId, $branchId) : null;
+
+            // Tentukan status dan payment_method sesuai 3 kasus:
+            if ($isFullDeposit) {
+                // KASUS 1: Lunas 100% dari Deposit
+                $paymentMethod = 'deposit';
+                $paymentStatus = 'paid';
+                $settledAt = now();
+                $orderStatus = $driverId ? 'delivering' : null;
+                $deliveryStatus = $driverId ? 'delivering' : 'pending';
+            } elseif ($isDelivery || (($data['payment_method'] ?? '') === 'kasbon')) {
+                // KASUS 2: Masih ada sisa tagihan & pengiriman driver atau kasbon
+                $paymentMethod = 'kasbon';
+                $paymentStatus = 'pending';
+                $settledAt = null;
+                $orderStatus = $driverId ? 'delivering' : null;
+                $deliveryStatus = $driverId ? 'delivering' : 'pending';
+            } else {
+                // KASUS 3: Walk-in langsung lunas tunai/transfer/dana
+                $paymentMethod = $data['payment_method'] ?? 'cash';
+                $paymentStatus = 'paid';
+                $settledAt = now();
+                $orderStatus = null;
+                $deliveryStatus = 'pending';
+            }
 
             // 2. Buat transaksi utama
             $transaction = Transaction::create([
                 'business_id'            => $businessId,
                 'branch_id'              => $branchId,
                 'type'                   => 'sale',
-                'customer_id'            => $data['customer_id'] ?? null,
+                'customer_id'            => $customerId,
                 'driver_id'              => $driverId,
                 'claimed_by_driver_id'   => $driverId,
                 'delivery_trip_code'     => $tripCode,
-                'total_amount'           => $data['total_amount'],
-                'payment_method'         => $isKasbon ? 'kasbon' : $data['payment_method'],
-                'initial_payment_method' => $isKasbon ? 'kasbon' : $data['payment_method'],
-                'payment_status'         => $isKasbon ? 'pending' : 'paid',
-                'order_status'           => $driverId ? 'delivering' : null,
-                'delivery_status'        => $driverId ? 'delivering' : 'pending',
+                'total_amount'           => $totalAmount,
+                'deposit_used'           => $depositUsed,
+                'net_payable_amount'     => $netPayable,
+                'payment_method'         => $paymentMethod,
+                'initial_payment_method' => $paymentMethod,
+                'settlement_payment_method' => ($paymentStatus === 'paid') ? $paymentMethod : null,
+                'settled_at'             => $settledAt,
+                'payment_status'         => $paymentStatus,
+                'order_status'           => $orderStatus,
+                'delivery_status'        => $deliveryStatus,
                 'status'                 => 'completed',
                 'transaction_date'       => now(),
                 'notes'                  => $data['notes'] ?? null,
                 'created_by'             => Auth::id(),
             ]);
+
+            if ($depositUsed > 0 && $customerId) {
+                CustomerDepositService::useDeposit($businessId, $branchId, $customerId, $depositUsed, $transaction->id, Auth::id());
+            }
 
             // 3. Simpan detail transaksi dan kurangi stok
             foreach ($data['items'] as $item) {
@@ -396,17 +463,22 @@ class PosService
                 ]);
             }
 
-            // 4. Catat ke Cash Flow HANYA JIKA LUNAS
-            if (!$isKasbon) {
+            // 4. Catat ke Cash Flow HANYA JIKA LUNAS DAN BUKAN 100% DEPOSIT
+            if ($paymentStatus === 'paid' && $paymentMethod !== 'deposit' && $netPayable > 0) {
                 $isCash = strtolower($transaction->payment_method ?? '') === 'cash';
+                $incomeCat = ExpenseCategory::where('business_id', $businessId)
+                    ->where('type', 'income')
+                    ->first();
+                $catId = $incomeCat ? $incomeCat->id : 1;
+
                 CashFlow::create([
                     'business_id'    => $transaction->business_id,
                     'branch_id'      => $branchId,
                     'type'           => 'income',
                     'flow_type'      => 'sale_direct',
                     'reference_type' => 'transaction',
-                    'category_id'    => 1,
-                    'amount'         => $transaction->total_amount,
+                    'category_id'    => $catId,
+                    'amount'         => $netPayable, // SEBESAR $netPayable BUKAN total_amount!
                     'payment_method' => $transaction->payment_method,
                     'funding_source' => $isCash ? 'drawer' : 'owner',
                     'affects_drawer' => $isCash ? 1 : 0,
@@ -417,8 +489,8 @@ class PosService
                 ]);
             }
 
-            // Update total belanja pelanggan
-            if ($transaction->customer_id) {
+            // Update total belanja pelanggan jika lunas (termasuk yang lunas deposit)
+            if ($transaction->customer_id && $paymentStatus === 'paid') {
                 $customer = Customer::find($transaction->customer_id);
                 if ($customer) {
                     $customer->increment('total_purchases', $transaction->total_amount);

@@ -115,14 +115,43 @@
             </div>
         </div>
 
+        {{-- Laba Bersih Operasional vs Holding --}}
         <div class="col-12 mt-3">
-            <div class="card border-0 shadow-sm bg-primary text-white">
-                <div class="card-body text-center">
-                    <p class="mb-2 opacity-75">Keuntungan Bersih (Periode Ini)</p>
-                    <h2 class="mb-0 fw-bold">
-                        Rp {{ number_format($reportData['net_profit'] ?? 0, 0, ',', '.') }}
-                    </h2>
-                    <small class="opacity-75">Laba Kotor - Beban Operasional</small>
+            <div class="card border-0 shadow-sm bg-light border">
+                <div class="card-body p-3">
+                    <div class="row g-3 align-items-center text-center">
+                        <div class="col-md-{{ (!empty($reportData['owner_expenses_total']) && $reportData['owner_expenses_total'] > 0) ? '4' : '12' }}">
+                            <div class="p-3 bg-white rounded border">
+                                <span class="text-muted small fw-semibold d-block mb-1">Laba Bersih Operasional Cabang</span>
+                                <h3 class="mb-0 fw-bold {{ ($reportData['net_profit'] ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">
+                                    Rp {{ number_format($reportData['net_profit'] ?? 0, 0, ',', '.') }}
+                                </h3>
+                                <small class="text-muted">Laba Kotor - Beban Operasional Cabang</small>
+                            </div>
+                        </div>
+
+                        @if(!empty($reportData['owner_expenses_total']) && $reportData['owner_expenses_total'] > 0)
+                        <div class="col-md-4">
+                            <div class="p-3 bg-white rounded border">
+                                <span class="text-muted small fw-semibold d-block mb-1">Beban Holding / Owner (Non-Cabang)</span>
+                                <h3 class="mb-0 fw-bold text-danger">
+                                    - Rp {{ number_format($reportData['owner_expenses_total'] ?? 0, 0, ',', '.') }}
+                                </h3>
+                                <small class="text-muted">Pengeluaran langsung kas holding/owner</small>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="p-3 rounded border text-white" style="background: linear-gradient(135deg, #1e3a8a 0%, #1e293b 100%);">
+                                <span class="opacity-75 small fw-semibold d-block mb-1">Laba Bersih Konsolidasi Holding</span>
+                                <h3 class="mb-0 fw-bold text-white">
+                                    Rp {{ number_format($reportData['holding_net_profit'] ?? ($reportData['net_profit'] ?? 0), 0, ',', '.') }}
+                                </h3>
+                                <small class="opacity-75">Hasil Rekonsiliasi Tutup Buku</small>
+                            </div>
+                        </div>
+                        @endif
+                    </div>
                 </div>
             </div>
         </div>
@@ -193,11 +222,11 @@
         <x-table class="table-hover">
             @slot('thead')
             <tr>
-                <th style="width: 10%;">Tanggal</th>
-                <th style="width: 25%;">Deskripsi</th>
-                <th style="width: 15%;" class="text-center">Metode</th>
-                <th style="width: 15%;" class="text-center">Kategori</th>
-                <th style="width: 5%;" class="text-center">Tipe</th>
+                <th style="width: 12%;">Tanggal</th>
+                <th style="width: 23%;">Deskripsi</th>
+                <th style="width: 18%;" class="text-center">Metode & Sumber</th>
+                <th style="width: 18%;" class="text-center">Kategori & Aliran</th>
+                <th style="width: 14%;" class="text-center">Dampak P&L</th>
                 <th style="width: 15%;" class="text-end">Jumlah</th>
             </tr>
             @endslot
@@ -206,41 +235,31 @@
             <tr>
                 <td>{{ \Carbon\Carbon::parse($flow->date)->format('d/m/Y') }}</td>
                 <td>
-                    <small class="text-muted d-block">#{{ $flow->id }}</small>
+                    <small class="text-muted d-block font-monospace">#{{ $flow->id }}</small>
                     {{ Str::limit($flow->description, 50) }}
                 </td>
                 <td class="text-center">
-                    @php
-                    $badgeClass = match($flow->payment_method) {
-                    'cash' => 'bg-success',
-                    'dana' => 'bg-primary',
-                    'transfer-bank' => 'bg-info text-dark',
-                    default => 'bg-secondary'
-                    };
-                    @endphp
-                    <span class="badge {{ $badgeClass }}">
-                        {{ ucfirst(str_replace('-', ' ', $flow->payment_method ?? 'Cash')) }}
-                    </span>
+                    <div class="d-flex flex-column align-items-center gap-1">
+                        <span class="badge bg-secondary font-monospace" style="font-size: 0.72rem;">
+                            {{ ucfirst(str_replace('-', ' ', $flow->payment_method ?? 'Cash')) }}
+                        </span>
+                        <span class="badge {{ $flow->funding_source_badge_class }}" style="font-size: 0.7rem;">
+                            {{ $flow->funding_source_label }}
+                        </span>
+                    </div>
                 </td>
                 <td class="text-center">
-                    @if($flow->category)
-                    <span class="badge {{ $flow->category->is_cogs ? 'bg-warning text-dark' : 'bg-secondary' }}">
-                        {{ $flow->category->name }}
-                    </span>
-                    @else
-                    <span class="badge bg-light text-dark">N/A</span>
-                    @endif
+                    <div class="d-flex flex-column align-items-center gap-1">
+                        <span class="badge {{ $flow->flow_type_badge_class }}" style="font-size: 0.72rem;">
+                            {{ $flow->flow_type_label }}
+                        </span>
+                        @if($flow->category)
+                        <small class="text-muted" style="font-size: 0.72rem;">{{ $flow->category->name }} ({{ $flow->category->category_type ?? $flow->category->type ?? 'Operasional' }})</small>
+                        @endif
+                    </div>
                 </td>
                 <td class="text-center">
-                    @if($flow->type == 'income')
-                    <i class="fas fa-arrow-down text-success" title="Pemasukan"></i>
-                    @else
-                    @if($flow->category && $flow->category->is_cogs)
-                    <i class="fas fa-box text-warning" title="COGS"></i>
-                    @else
-                    <i class="fas fa-arrow-up text-danger" title="Pengeluaran"></i>
-                    @endif
-                    @endif
+                    {!! $flow->profit_loss_indicator_badge !!}
                 </td>
                 <td class="text-end">
                     <span class="{{ $flow->type == 'income' ? 'text-success' : 'text-danger' }} fw-bold">
