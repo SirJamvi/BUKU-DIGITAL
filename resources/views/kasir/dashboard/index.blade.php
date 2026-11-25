@@ -3470,9 +3470,15 @@ $modalId = 'modalGroup_' . $groupKey;
         }
     });
 
+    // Fase capture (true) agar validasi berjalan SEBELUM listener global di app.blade.php
     document.addEventListener('submit', function(e) {
         const settleForm = e.target.closest('.kd-settle-form');
         if (settleForm) {
+            if (settleForm.dataset.kdSubmitting === '1') {
+                e.preventDefault();
+                return false;
+            }
+
             let firstInvalidCard = null;
             settleForm.querySelectorAll('.kd-settle-pay-select').forEach(function(sel) {
                 const trxId = sel.getAttribute('data-trx-id');
@@ -3496,20 +3502,28 @@ $modalId = 'modalGroup_' . $groupKey;
                 return false;
             }
 
+            settleForm.dataset.kdSubmitting = '1';
             const submitBtn = settleForm.querySelector('.kd-settle-submit-btn');
             if (submitBtn) {
-                if (submitBtn.disabled) {
-                    e.preventDefault();
-                    return false;
-                }
+                const originalHtml = submitBtn.innerHTML;
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Menyimpan...';
+                setTimeout(function() {
+                    delete settleForm.dataset.kdSubmitting;
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalHtml;
+                }, 10000);
             }
             return;
         }
 
         const bulkForm = e.target.closest('.kasbon-bulk-form');
         if (bulkForm) {
+            if (bulkForm.dataset.kdSubmitting === '1') {
+                e.preventDefault();
+                return false;
+            }
+
             const modalEl = bulkForm.closest('.kasbon-bulk-modal');
             const methodSelect = modalEl ? modalEl.querySelector('.kd-kasbon-method-sel') : null;
             const method = methodSelect ? methodSelect.value : 'cash';
@@ -3541,17 +3555,20 @@ $modalId = 'modalGroup_' . $groupKey;
                 return false;
             }
 
+            bulkForm.dataset.kdSubmitting = '1';
             const btnSubmit = bulkForm.querySelector('.kd-kasbon-submit-btn');
             if (btnSubmit) {
-                if (btnSubmit.disabled) {
-                    e.preventDefault();
-                    return false;
-                }
+                const originalHtml = btnSubmit.innerHTML;
                 btnSubmit.disabled = true;
                 btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Memproses...';
+                setTimeout(function() {
+                    delete bulkForm.dataset.kdSubmitting;
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = originalHtml;
+                }, 10000);
             }
         }
-    });
+    }, true);
 
     document.addEventListener('DOMContentLoaded', function() {
         const searchInput = document.getElementById('kasbonCustomerSearch');
