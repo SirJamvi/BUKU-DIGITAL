@@ -108,7 +108,10 @@ class CashierClosingService
             ->where('affects_drawer', 1)
             ->where(function ($q) {
                 $q->where('flow_type', 'debt_settlement')
-                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+                  ->orWhere(function ($legacy) {
+                      $legacy->whereNull('flow_type')
+                             ->where('description', 'LIKE', '%Pelunasan%');
+                  });
             })
             ->whereDate('date', $date)
             ->sum('amount');

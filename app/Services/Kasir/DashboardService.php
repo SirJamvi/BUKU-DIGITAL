@@ -63,7 +63,10 @@ class DashboardService
                 ->where('date', $todayDate)
                 ->where(function ($q) {
                     $q->where('flow_type', 'debt_settlement')
-                      ->orWhere('description', 'LIKE', '%Pelunasan%');
+                      ->orWhere(function ($legacy) {
+                          $legacy->whereNull('flow_type')
+                                 ->where('description', 'LIKE', '%Pelunasan%');
+                      });
                 });
 
             if ($branchId) {
@@ -261,7 +264,7 @@ class DashboardService
                 'paymentMethods'           => $paymentMethods,
                 'kasbonByCustomer'         => $kasbonByCustomer,
                 'totalKasbonCount'         => $pendingKasbonRaw->count(),
-                'totalKasbonAmount'        => $pendingKasbonRaw->sum('total_amount'),
+                'totalKasbonAmount'        => $pendingKasbonRaw->sum(fn($tx) => (float) $tx->effective_payable_amount),
                 'customers'                => $customers,
             ];
         } catch (\Exception $e) {

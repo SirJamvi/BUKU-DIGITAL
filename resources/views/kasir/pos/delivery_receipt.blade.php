@@ -83,11 +83,24 @@
         $driverName = $firstTx->driver->name ?? 'Driver';
         $driverPhone = $firstTx->driver->phone ?? '-';
         $kasirName = $firstTx->createdBy->name ?? (Auth::user()?->name ?? 'Kasir');
-        $totalTripAmount = $transactions->sum('total_amount');
+        $prevMap = $previousKasbonsByCustomer ?? collect();
+
+        $totalTripAmount = (float) $transactions->sum(fn($t) => (float) $t->effective_payable_amount);
+        $totalPrevKasbonAmount = 0.0;
+        $prevKasbonShownForCust = [];
         $totalItemsCount = 0;
         foreach($transactions as $t) {
             $totalItemsCount += $t->details->sum('quantity');
+            $cid = $t->customer_id;
+            if ($cid && !in_array($cid, $prevKasbonShownForCust, true)) {
+                $prevKasbonShownForCust[] = $cid;
+                $custKbs = $prevMap->get($cid, collect());
+                $totalPrevKasbonAmount += (float) $custKbs->sum(fn($kb) => (float) $kb->effective_payable_amount);
+            }
         }
+        $grandCombinedCollectible = $totalTripAmount + $totalPrevKasbonAmount;
+        $prevKasbonRenderedInTable = [];
+        $prevKasbonRenderedInThermal = [];
     @endphp
 
     {{-- Top Action Bar --}}
@@ -143,9 +156,19 @@
                             <strong class="text-primary">{{ $totalItemsCount }} Item / Bal</strong>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span>Total Nilai Tagihan:</span>
+                            <span>Tagihan Order Trip Ini:</span>
                             <strong class="text-danger">Rp {{ number_format($totalTripAmount, 0, ',', '.') }}</strong>
                         </div>
+                        @if($totalPrevKasbonAmount > 0)
+                        <div class="d-flex justify-content-between">
+                            <span>Kasbon Lama Belum Lunas:</span>
+                            <strong class="text-warning text-dark">Rp {{ number_format($totalPrevKasbonAmount, 0, ',', '.') }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between border-top pt-1 mt-1">
+                            <span class="fw-bold">Total Tagih Gabungan:</span>
+                            <strong class="text-danger">Rp {{ number_format($grandCombinedCollectible, 0, ',', '.') }}</strong>
+                        </div>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -164,6 +187,19 @@
                     </thead>
                     <tbody>
                         @foreach($transactions as $idx => $trx)
+                        @php
+                            $trxPayable = (float) $trx->effective_payable_amount;
+                            $trxDepositUsed = (float) ($trx->deposit_used ?? 0);
+                            $cid = $trx->customer_id;
+                            $custOldKbs = ($cid && !in_array($cid, $prevKasbonRenderedInTable, true))
+                                ? $prevMap->get($cid, collect())
+                                : collect();
+                            if ($cid) {
+                                $prevKasbonRenderedInTable[] = $cid;
+                            }
+                            $custOldKbSum = (float) $custOldKbs->sum(fn($kb) => (float) $kb->effective_payable_amount);
+                            $custCombined = $trxPayable + $custOldKbSum;
+                        @endphp
                         <tr>
                             <td class="text-center fw-bold">{{ $idx + 1 }}</td>
                             <td>
@@ -185,9 +221,29 @@
                                 @if($trx->notes)
                                 <small class="text-muted fst-italic">Ket: {{ $trx->notes }}</small>
                                 @endif
+                                @if($custOldKbs->isNotEmpty())
+                                <div class="mt-1 p-1 rounded border border-warning bg-warning bg-opacity-10 small">
+                                    <strong class="text-dark"><i class="fas fa-exclamation-triangle text-warning me-1"></i>Kasbon Sebelumnya ({{ $custOldKbs->count() }} nota):</strong>
+                                    @foreach($custOldKbs as $kb)
+                                        <div class="text-muted" style="font-size: 0.78rem;">
+                                            &bull; #{{ str_pad($kb->id, 6, '0', STR_PAD_LEFT) }} ({{ $kb->transaction_date->format('d/m') }}): Rp {{ number_format($kb->effective_payable_amount, 0, ',', '.') }}
+                                        </div>
+                                    @endforeach
+                                </div>
+                                @endif
                             </td>
-                            <td class="text-end fw-bold text-danger fs-6">
-                                Rp {{ number_format($trx->total_amount, 0, ',', '.') }}
+                            <td class="text-end fw-bold fs-6">
+                                @if($trxDepositUsed > 0)
+                                    <div class="small text-muted text-decoration-line-through fw-normal">Rp {{ number_format($trx->total_amount, 0, ',', '.') }}</div>
+                                    <div class="small text-success fw-semibold" style="font-size: 0.75rem;">Deposit -Rp {{ number_format($trxDepositUsed, 0, ',', '.') }}</div>
+                                @endif
+                                <div class="text-danger">Rp {{ number_format($trxPayable, 0, ',', '.') }}</div>
+                                @if($custOldKbSum > 0)
+                                    <div class="small text-muted fw-normal" style="font-size: 0.78rem;">+ Kasbon lama: Rp {{ number_format($custOldKbSum, 0, ',', '.') }}</div>
+                                    <div class="small fw-bold text-dark border-top pt-1 mt-1" style="font-size: 0.82rem;">
+                                        Tagih Gabungan: Rp {{ number_format($custCombined, 0, ',', '.') }}
+                                    </div>
+                                @endif
                             </td>
                             <td class="text-center" style="height: 60px;">
                                 <div style="border-bottom: 1px dotted #999; margin-top: 35px;"></div>
@@ -224,6 +280,19 @@
 
         <div class="row justify-content-center">
             @foreach($transactions as $trx)
+            @php
+                $tPayable = (float) $trx->effective_payable_amount;
+                $tDepositUsed = (float) ($trx->deposit_used ?? 0);
+                $tCid = $trx->customer_id;
+                $tOldKbs = ($tCid && !in_array($tCid, $prevKasbonRenderedInThermal, true))
+                    ? $prevMap->get($tCid, collect())
+                    : collect();
+                if ($tCid) {
+                    $prevKasbonRenderedInThermal[] = $tCid;
+                }
+                $tOldKbSum = (float) $tOldKbs->sum(fn($kb) => (float) $kb->effective_payable_amount);
+                $tCombined = $tPayable + $tOldKbSum;
+            @endphp
             <div class="col-md-6 col-lg-5 mb-4">
                 <div class="receipt-card">
                     <div class="text-center pb-2 border-bottom mb-2">
@@ -264,10 +333,37 @@
                         @endforeach
                     </div>
 
-                    <div class="d-flex justify-content-between fw-bold mb-2" style="font-size: 10pt;">
-                        <span>TOTAL TAGIHAN:</span>
-                        <span class="text-danger">Rp {{ number_format($trx->total_amount, 0, ',', '.') }}</span>
+                    @if($tDepositUsed > 0)
+                    <div class="d-flex justify-content-between" style="font-size: 8.5pt;">
+                        <span>Subtotal Order:</span>
+                        <span>Rp {{ number_format($trx->total_amount, 0, ',', '.') }}</span>
                     </div>
+                    <div class="d-flex justify-content-between text-success" style="font-size: 8.5pt;">
+                        <span>Potong Deposit:</span>
+                        <span>-Rp {{ number_format($tDepositUsed, 0, ',', '.') }}</span>
+                    </div>
+                    @endif
+
+                    <div class="d-flex justify-content-between fw-bold mb-1" style="font-size: 10pt;">
+                        <span>TAGIHAN ORDER INI:</span>
+                        <span class="text-danger">Rp {{ number_format($tPayable, 0, ',', '.') }}</span>
+                    </div>
+
+                    @if($tOldKbs->isNotEmpty())
+                    <div class="border-top pt-1 mt-1 mb-2" style="font-size: 8.5pt;">
+                        <div class="fw-bold">Kasbon Sebelumnya ({{ $tOldKbs->count() }} nota):</div>
+                        @foreach($tOldKbs as $kb)
+                        <div class="d-flex justify-content-between text-muted">
+                            <span>#{{ str_pad($kb->id, 6, '0', STR_PAD_LEFT) }} ({{ $kb->transaction_date->format('d/m') }})</span>
+                            <span>Rp {{ number_format($kb->effective_payable_amount, 0, ',', '.') }}</span>
+                        </div>
+                        @endforeach
+                        <div class="d-flex justify-content-between fw-bold border-top pt-1 mt-1" style="font-size: 10pt;">
+                            <span>TOTAL TAGIH GABUNGAN:</span>
+                            <span class="text-danger">Rp {{ number_format($tCombined, 0, ',', '.') }}</span>
+                        </div>
+                    </div>
+                    @endif
 
                     <div class="text-center pt-2 border-top text-muted" style="font-size: 8pt;">
                         <p class="mb-1">Pembayaran via Driver saat barang diterima.</p>

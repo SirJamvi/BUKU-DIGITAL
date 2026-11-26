@@ -78,7 +78,7 @@
         flex-direction: column;
         max-height: 92vh;
         border: 0;
-        border-radius: var(--kasir-radius-lg);
+        border-radius: var(--kasir-radius-lg, 16px);
         overflow: hidden;
         box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);
     }
@@ -138,10 +138,10 @@
     .kd-settle-card {
         background: var(--kasir-surface);
         border: 1px solid var(--kasir-border);
-        border-radius: var(--kasir-radius-md);
+        border-radius: var(--kasir-radius-md, 12px);
         padding: 1rem 1.15rem;
         margin-bottom: 0.85rem;
-        box-shadow: var(--kasir-shadow-sm);
+        box-shadow: var(--kasir-shadow-sm, var(--kasir-shadow));
         transition: border-color 180ms ease, box-shadow 180ms ease;
     }
 
@@ -334,7 +334,7 @@
     .kd-settle-deposit-panel {
         background: #f0fdfa;
         border: 1px solid #99f6e4;
-        border-radius: var(--kasir-radius-md);
+        border-radius: var(--kasir-radius-md, 12px);
         padding: 1.25rem;
         margin-top: 0.85rem;
     }
@@ -671,6 +671,11 @@
         .kd-settle-body {
             padding: 0.75rem;
         }
+        .kd-settle-submit-btn {
+            white-space: normal;
+            text-align: center;
+            line-height: 1.25;
+        }
     }
 
     /* ============================================================ */
@@ -686,7 +691,7 @@
         flex-direction: column;
         max-height: 92vh;
         border: 0;
-        border-radius: var(--kasir-radius-lg);
+        border-radius: var(--kasir-radius-lg, 16px);
         overflow: hidden;
         box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);
     }
@@ -828,6 +833,169 @@
             height: var(--kd-vvh, 100vh);
             max-height: var(--kd-vvh, 100vh);
         }
+        .kd-kasbon-submit-btn {
+            white-space: normal;
+            text-align: center;
+            line-height: 1.25;
+        }
+    }
+
+    /* Deposit pada Ringkasan Piutang Kasbon Aktif & Modal Daftar Kasbon */
+    .kd-deposit-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: #f0fdfa;
+        color: #0f766e;
+        border: 1px solid #99f6e4;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        font-weight: 700;
+        padding: 0.2rem 0.6rem;
+        line-height: 1.3;
+    }
+
+    .kd-kasbon-deposit-btn {
+        min-height: 40px;
+        padding: 0.35rem 0.9rem;
+        border-radius: 8px;
+        border: 1.5px solid #0d9488;
+        background: #ffffff;
+        color: #0f766e;
+        font-size: 0.82rem;
+        font-weight: 600;
+        transition: all 150ms ease;
+    }
+
+    .kd-kasbon-deposit-btn:hover {
+        background: #f0fdfa;
+        color: #0f766e;
+    }
+
+    .kd-kasbon-deposit-btn.is-open {
+        background: #0d9488;
+        border-color: #0d9488;
+        color: #ffffff;
+    }
+
+    .kd-kasbon-deposit-panel,
+    .kd-kasbon-use-deposit-panel {
+        background: #f0fdfa;
+        border: 1px solid #99f6e4;
+        border-radius: 12px;
+        padding: 1rem 1.15rem;
+        margin-top: 0.75rem;
+    }
+
+    .kd-kasbon-auto-fifo-btn {
+        min-height: 38px;
+        padding: 0.35rem 0.8rem;
+        border-radius: 8px;
+        border: 1.5px solid #0d9488;
+        background: #0d9488;
+        color: #ffffff;
+        font-size: 0.8rem;
+        font-weight: 600;
+        transition: all 150ms ease;
+    }
+
+    .kd-kasbon-auto-fifo-btn:hover {
+        background: #0f766e;
+        border-color: #0f766e;
+        color: #ffffff;
+    }
+
+    /* Input >= 16px agar iPad Safari tidak auto-zoom saat fokus */
+    .kd-kasbon-received-input {
+        font-size: max(16px, 1.15rem) !important;
+        min-height: 44px;
+    }
+
+    .kd-kasbon-quick-btn {
+        min-height: 40px;
+        padding: 0.35rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid #99f6e4;
+        background: #ffffff;
+        color: #0f766e;
+        font-size: 0.8rem;
+        font-weight: 600;
+        transition: all 150ms ease;
+    }
+
+    .kd-kasbon-quick-btn:hover {
+        background: #ccfbf1;
+        border-color: #0d9488;
+    }
+
+    .kd-kasbon-dep-done-btn {
+        min-height: 38px;
+        padding: 0.3rem 0.8rem;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.82rem;
+    }
+
+    .kd-kasbon-deposit-btn:focus-visible,
+    .kd-kasbon-auto-fifo-btn:focus-visible,
+    .kd-kasbon-quick-btn:focus-visible,
+    .kd-kasbon-dep-done-btn:focus-visible {
+        outline: 3px solid rgba(13, 148, 136, 0.35);
+        outline-offset: 2px;
+    }
+
+    /* Kasbon Sebelumnya & Bukti Non-Tunai di Pengiriman Driver Berjalan */
+    .kd-trip-old-kasbon-box {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 10px;
+        padding: 0.75rem 0.9rem;
+        margin-bottom: 0.85rem;
+    }
+
+    .kd-trip-old-kasbon-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.45rem 0.6rem;
+        background: #ffffff;
+        border: 1px solid #fef3c7;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: border-color 140ms ease, background-color 140ms ease;
+    }
+
+    .kd-trip-old-kasbon-item.is-checked {
+        border-color: #0d9488;
+        background: #f0fdfa;
+    }
+
+    .kd-settle-proof-box {
+        background: #fff;
+        border: 1px solid var(--kasir-border);
+        border-radius: 10px;
+        padding: 0.65rem 0.8rem;
+    }
+
+    .kd-settle-result-grid--4 {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .kd-settle-modal.kd-settle-kbd .kd-settle-result-grid--4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    @media (max-width: 991.98px) {
+        .kd-settle-result-grid--4 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 575.98px) {
+        .kd-settle-result-grid--4 {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 @endpush
@@ -870,12 +1038,21 @@
                     $driverName = $firstTrx->driver->name ?? 'Driver';
                     $driverPhone = $firstTrx->driver->phone ?? '-';
                     $tripCode = $firstTrx->delivery_trip_code ?? $tripKey;
-                    $tripTotal = $tripTrx->sum('total_amount');
+                    $tripTotal = (float) $tripTrx->sum(fn($t) => (float) $t->effective_payable_amount);
                     $modalTripId = 'modalTrip_' . \Illuminate\Support\Str::slug($tripKey);
                     $totalQtyInTrip = 0;
+                    $tripPrevKasbonTotal = 0.0;
+                    $tripPrevShownCust = [];
                     foreach($tripTrx as $trxItem) {
                         $totalQtyInTrip += $trxItem->details->sum('quantity');
+                        if ($trxItem->customer_id && !in_array($trxItem->customer_id, $tripPrevShownCust, true) && isset($kasbonByCustomer)) {
+                            $tripPrevShownCust[] = $trxItem->customer_id;
+                            $cKbs = $kasbonByCustomer->get('cust_' . $trxItem->customer_id, collect());
+                            $tripPrevKasbonTotal += (float) $cKbs->sum(fn($kb) => (float) $kb->effective_payable_amount);
+                        }
                     }
+                    $tripCombinedTotal = $tripTotal + $tripPrevKasbonTotal;
+                    $tripCardCustShown = [];
                     $ageHours = $firstTrx->transaction_date ? (int) $firstTrx->transaction_date->diffInHours(now()) : 0;
                     $ageDays = $firstTrx->transaction_date ? (int) $firstTrx->transaction_date->diffInDays(now()) : 0;
                     $isOldTrip = $ageHours >= 24;
@@ -914,23 +1091,49 @@
                                 </div>
                                 <ul class="list-unstyled mb-0 small">
                                     @foreach($tripTrx as $trx)
-                                    <li class="d-flex justify-content-between align-items-start gap-2 py-1 {{ !$loop->last ? 'border-bottom' : '' }}">
-                                        <span class="fw-semibold text-dark" title="{{ $trx->customer->name ?? 'Pelanggan Umum' }}">
-                                            <i class="fas fa-map-marker-alt me-1" style="color: var(--kasir-primary);"></i>{{ $trx->customer->name ?? 'Pelanggan Umum' }}
-                                        </span>
-                                        <span class="fw-bold text-dark text-nowrap kasir-num">
-                                            Rp {{ number_format($trx->total_amount, 0, ',', '.') }}
-                                        </span>
+                                    @php
+                                        $trxNet = (float) $trx->effective_payable_amount;
+                                        $cPrevKbs = ($trx->customer_id && !in_array($trx->customer_id, $tripCardCustShown, true) && isset($kasbonByCustomer))
+                                            ? $kasbonByCustomer->get('cust_' . $trx->customer_id, collect())
+                                            : collect();
+                                        if ($trx->customer_id) {
+                                            $tripCardCustShown[] = $trx->customer_id;
+                                        }
+                                        $cPrevSum = (float) $cPrevKbs->sum(fn($kb) => (float) $kb->effective_payable_amount);
+                                    @endphp
+                                    <li class="py-1 {{ !$loop->last ? 'border-bottom' : '' }}">
+                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                            <span class="fw-semibold text-dark" title="{{ $trx->customer->name ?? 'Pelanggan Umum' }}">
+                                                <i class="fas fa-map-marker-alt me-1" style="color: var(--kasir-primary);"></i>{{ $trx->customer->name ?? 'Pelanggan Umum' }}
+                                            </span>
+                                            <span class="fw-bold text-dark text-nowrap kasir-num">
+                                                Rp {{ number_format($trxNet, 0, ',', '.') }}
+                                            </span>
+                                        </div>
+                                        @if($cPrevKbs->isNotEmpty())
+                                        <div class="d-flex justify-content-between align-items-center mt-1 ps-3 text-warning-emphasis" style="font-size: 0.72rem; color: #b45309;">
+                                            <span><i class="fas fa-history me-1"></i>+ Kasbon lalu ({{ $cPrevKbs->count() }} nota): Rp {{ number_format($cPrevSum, 0, ',', '.') }}</span>
+                                            <strong class="kasir-num">Tagih: Rp {{ number_format($trxNet + $cPrevSum, 0, ',', '.') }}</strong>
+                                        </div>
+                                        @endif
                                     </li>
                                     @endforeach
                                 </ul>
                             </div>
 
-                            <div class="d-flex justify-content-between align-items-center small pt-2 border-top mb-3">
-                                <span class="text-muted">Total muatan: <strong class="text-dark">{{ $totalQtyInTrip }} Item</strong></span>
-                                <span class="fw-bold fs-6 kasir-num" style="color: var(--kasir-success);">
-                                    Total: Rp {{ number_format($tripTotal, 0, ',', '.') }}
-                                </span>
+                            <div class="small pt-2 border-top mb-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">Total muatan: <strong class="text-dark">{{ $totalQtyInTrip }} Item</strong></span>
+                                    <span class="fw-bold fs-6 kasir-num" style="color: var(--kasir-success);">
+                                        Order Trip: Rp {{ number_format($tripTotal, 0, ',', '.') }}
+                                    </span>
+                                </div>
+                                @if($tripPrevKasbonTotal > 0)
+                                <div class="d-flex justify-content-between align-items-center mt-1 text-danger kasir-num" style="font-size: 0.78rem;">
+                                    <span>+ Kasbon Lalu: Rp {{ number_format($tripPrevKasbonTotal, 0, ',', '.') }}</span>
+                                    <strong>Gabungan: Rp {{ number_format($tripCombinedTotal, 0, ',', '.') }}</strong>
+                                </div>
+                                @endif
                             </div>
 
                             <div class="d-grid gap-2 mt-auto">
@@ -1012,7 +1215,10 @@
                         @php
                             $firstTx = $transactions->first();
                             $customerName = $firstTx->customer->name ?? 'Pelanggan Umum (Tanpa Nama)';
-                            $totalTagihanCust = $transactions->sum('total_amount');
+                            $custDepositBal = $firstTx->customer_id ? (float) ($firstTx->customer->deposit_balance ?? 0) : 0.0;
+                            $totalTagihanGross = (float) $transactions->sum('total_amount');
+                            $totalDepositUsedGroup = (float) $transactions->sum(fn($tx) => (float) ($tx->deposit_used ?? 0));
+                            $totalTagihanCust = (float) $transactions->sum(fn($tx) => (float) $tx->effective_payable_amount);
                             $oldestDate = $firstTx->transaction_date;
                             $oldestDays = $oldestDate ? (int) $oldestDate->diffInDays(now()) : 0;
                             $ageBadgeClass = $oldestDays > 90 ? 'kasir-badge-danger' : ($oldestDays >= 30 ? 'kasir-badge-warning' : 'kasir-badge-muted');
@@ -1025,6 +1231,14 @@
                                 @if($firstTx->customer && $firstTx->customer->phone)
                                 <div class="small text-muted">
                                     <i class="fab fa-whatsapp me-1" style="color: var(--kasir-success);"></i>{{ $firstTx->customer->phone }}
+                                </div>
+                                @endif
+                                @if($custDepositBal > 0)
+                                <div class="mt-1">
+                                    <span class="kd-deposit-badge kasir-num" title="Saldo deposit aktif pelanggan (berlaku lintas cabang)">
+                                        <i class="fas fa-wallet"></i>
+                                        <span>Saldo Deposit: Rp {{ number_format($custDepositBal, 0, ',', '.') }}</span>
+                                    </span>
                                 </div>
                                 @endif
                                 @if($branchesInGroup->isNotEmpty())
@@ -1049,8 +1263,22 @@
                                 <span class="kasir-badge-info mt-1">Hari Ini</span>
                                 @endif
                             </td>
-                            <td class="text-end fw-bold kasir-num" style="color: var(--kasir-danger);">
-                                Rp {{ number_format($totalTagihanCust, 0, ',', '.') }}
+                            <td class="text-end fw-bold kasir-num">
+                                @if($totalDepositUsedGroup > 0)
+                                <div class="small text-muted text-decoration-line-through fw-normal">
+                                    Rp {{ number_format($totalTagihanGross, 0, ',', '.') }}
+                                </div>
+                                <div style="color: var(--kasir-danger);">
+                                    Rp {{ number_format($totalTagihanCust, 0, ',', '.') }}
+                                </div>
+                                <div class="small fw-semibold" style="color: #0f766e; font-size: 0.72rem;">
+                                    Potong Deposit -Rp {{ number_format($totalDepositUsedGroup, 0, ',', '.') }}
+                                </div>
+                                @else
+                                <span style="color: var(--kasir-danger);">
+                                    Rp {{ number_format($totalTagihanCust, 0, ',', '.') }}
+                                </span>
+                                @endif
                             </td>
                             <td class="text-center pe-3">
                                 <div class="kd-kasbon-actions">
@@ -1321,12 +1549,23 @@
     $driverName = $firstTrx->driver->name ?? 'Driver';
     $tripCode = $firstTrx->delivery_trip_code ?? $tripKey;
     $modalTripId = 'modalTrip_' . \Illuminate\Support\Str::slug($tripKey);
-    $totalTripAmount = $tripTrx->sum('total_amount');
+    $totalTripAmount = (float) $tripTrx->sum(fn($t) => (float) $t->effective_payable_amount);
+    $modalPrevKasbonTotal = 0.0;
+    $modalPrevShownSub = [];
+    foreach ($tripTrx as $tItem) {
+        if ($tItem->customer_id && !in_array($tItem->customer_id, $modalPrevShownSub, true) && isset($kasbonByCustomer)) {
+            $modalPrevShownSub[] = $tItem->customer_id;
+            $cKbs = $kasbonByCustomer->get('cust_' . $tItem->customer_id, collect());
+            $modalPrevKasbonTotal += (float) $cKbs->sum(fn($kb) => (float) $kb->effective_payable_amount);
+        }
+    }
+    $modalCombinedTotal = $totalTripAmount + $modalPrevKasbonTotal;
+    $shownCustPrevInModal = [];
 @endphp
 <div class="modal fade kd-settle-modal" id="{{ $modalTripId }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog kd-settle-dialog modal-dialog-centered">
         <div class="modal-content kd-settle-content">
-            <form action="{{ route('kasir.transactions.completeDeliveryTrip') }}" method="POST" class="kd-settle-form" novalidate>
+            <form action="{{ route('kasir.transactions.completeDeliveryTrip') }}" method="POST" enctype="multipart/form-data" class="kd-settle-form" novalidate>
                 @csrf
                 <input type="hidden" name="trip_code" value="{{ $tripCode }}">
 
@@ -1345,11 +1584,18 @@
                 <div class="kd-settle-subheader">
                     <div class="kd-settle-subheader-hint">
                         <span class="text-dark fw-semibold">{{ $tripTrx->count() }} pesanan dalam pengiriman ini.</span>
-                        <div class="small text-muted">Pilih metode pembayaran riil tiap pelanggan setelah driver kembali.</div>
+                        <div class="small text-muted">Pilih metode pembayaran riil &amp; input uang dari driver (otomatis lunasi kasbon lama tertua + order ini + sisa deposit).</div>
                     </div>
                     <div class="text-md-end">
-                        <div class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Total Tagihan</div>
-                        <div class="fs-4 mb-0 text-danger fw-bold kasir-num">Rp {{ number_format($totalTripAmount, 0, ',', '.') }}</div>
+                        <div class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
+                            {{ $modalPrevKasbonTotal > 0 ? 'Tagihan Trip Ini / Gabungan' : 'Total Tagihan' }}
+                        </div>
+                        <div class="fs-4 mb-0 text-danger fw-bold kasir-num">
+                            Rp {{ number_format($totalTripAmount, 0, ',', '.') }}
+                            @if($modalPrevKasbonTotal > 0)
+                                <span class="fs-6 text-dark fw-semibold">/ Gabungan Rp {{ number_format($modalCombinedTotal, 0, ',', '.') }}</span>
+                            @endif
+                        </div>
                     </div>
                 </div>
 
@@ -1357,10 +1603,21 @@
                     @foreach($tripTrx as $trx)
                     @php
                         $depositUsed = (float) ($trx->deposit_used ?? 0);
-                        $effectivePayable = (float) $trx->effective_payable_amount;
+                        $effectivePayable = round((float) $trx->effective_payable_amount, 2);
                         $isFullDeposit = ($depositUsed > 0 && $effectivePayable <= 0);
-                        $custDepositBal = (float) ($trx->customer->deposit_balance ?? 0);
+                        $custDepositBal = round((float) ($trx->customer->deposit_balance ?? 0), 2);
                         $custName = $trx->customer->name ?? 'Pelanggan Umum';
+
+                        $custPrevKasbons = ($trx->customer_id && !in_array($trx->customer_id, $shownCustPrevInModal, true) && isset($kasbonByCustomer))
+                            ? $kasbonByCustomer->get('cust_' . $trx->customer_id, collect())
+                            : collect();
+                        if ($trx->customer_id) {
+                            $shownCustPrevInModal[] = $trx->customer_id;
+                        }
+                        $custPrevCount = $custPrevKasbons->count();
+                        $custPrevKasbonSum = round((float) $custPrevKasbons->sum(fn($kb) => (float) $kb->effective_payable_amount), 2);
+                        $combinedPayable = round($effectivePayable + $custPrevKasbonSum, 2);
+                        $autoOpenPanel = ($custPrevCount > 0 && !$isFullDeposit);
 
                         $methodOptions = [];
                         if (isset($paymentMethods) && $paymentMethods->isNotEmpty()) {
@@ -1389,11 +1646,22 @@
                             ];
                         }
 
-                        $denominations = [20000, 50000, 100000, 150000, 200000, 300000, 500000, 1000000];
-                        $quickAbove = array_values(array_filter($denominations, fn($v) => $v > (int) $effectivePayable));
+                        $denominations = [20000, 50000, 100000, 150000, 200000, 300000, 500000, 1000000, 1500000, 2000000];
+                        $baseQuickTarget = $custPrevCount > 0 ? $combinedPayable : $effectivePayable;
+                        $quickAbove = array_values(array_filter($denominations, fn($v) => $v > (int) $baseQuickTarget));
                         $quickNominals = array_slice($quickAbove, 0, 3);
                     @endphp
-                    <div class="kd-settle-card" id="settle_card_{{ $trx->id }}" data-trx-id="{{ $trx->id }}" data-payable="{{ $effectivePayable }}" data-customer-name="{{ $custName }}" data-full-deposit="{{ $isFullDeposit ? '1' : '0' }}">
+                    <div class="kd-settle-card {{ $autoOpenPanel ? 'kd-settle-card--deposit-open' : '' }}"
+                         id="settle_card_{{ $trx->id }}"
+                         data-trx-id="{{ $trx->id }}"
+                         data-payable="{{ $effectivePayable }}"
+                         data-old-kasbon-total="{{ $custPrevKasbonSum }}"
+                         data-old-kasbon-count="{{ $custPrevCount }}"
+                         data-combined-payable="{{ $combinedPayable }}"
+                         data-deposit-bal="{{ $custDepositBal }}"
+                         data-customer-name="{{ $custName }}"
+                         data-full-deposit="{{ $isFullDeposit ? '1' : '0' }}">
+                        <input type="hidden" name="order_settled[{{ $trx->id }}]" id="order_settled_{{ $trx->id }}" value="1">
                         <div class="kd-settle-row">
                             {{-- Kolom 1: Info Struk, Pelanggan & Barang --}}
                             <div class="kd-settle-col-info">
@@ -1405,6 +1673,11 @@
                                     @if($custDepositBal > 0)
                                         <span class="kasir-badge kasir-badge-info" title="Saldo deposit saat ini">
                                             <i class="fas fa-wallet"></i> Deposit: Rp {{ number_format($custDepositBal, 0, ',', '.') }}
+                                        </span>
+                                    @endif
+                                    @if($custPrevCount > 0)
+                                        <span class="kasir-badge-warning kasir-num" title="Pelanggan ini masih memiliki kasbon aktif sebelumnya">
+                                            <i class="fas fa-history"></i> {{ $custPrevCount }} Kasbon Lalu: Rp {{ number_format($custPrevKasbonSum, 0, ',', '.') }}
                                         </span>
                                     @endif
                                 </div>
@@ -1437,6 +1710,10 @@
                                     <div class="fw-bold text-danger fs-5">
                                         Rp {{ number_format($trx->total_amount, 0, ',', '.') }}
                                     </div>
+                                @endif
+                                @if($custPrevCount > 0 && !$isFullDeposit)
+                                    <div class="small text-muted mt-1" style="font-size: 0.75rem;">+ Kasbon lalu: Rp {{ number_format($custPrevKasbonSum, 0, ',', '.') }}</div>
+                                    <div class="small fw-bold text-dark" style="font-size: 0.82rem;">Gabungan: Rp {{ number_format($combinedPayable, 0, ',', '.') }}</div>
                                 @endif
                             </div>
 
@@ -1503,12 +1780,30 @@
                                             </button>
                                             <button type="button"
                                                     class="kd-settle-date-btn is-warn"
+                                                    id="date_nota_btn_{{ $trx->id }}"
                                                     data-trx-id="{{ $trx->id }}"
                                                     data-date-value="nota_date"
                                                     aria-pressed="false">
                                                 <i class="fas fa-history"></i>
                                                 <span>Koreksi Lupa Update (Tgl Nota: {{ $trx->transaction_date->format('d/m') }})</span>
                                             </button>
+                                        </div>
+                                    </div>
+
+                                    {{-- Upload 1 Bukti Pembayaran Non-Tunai (Wajib jika Transfer / DANA / QRIS) --}}
+                                    <div class="kd-settle-proof-box mt-2 d-none" id="trip_proof_wrap_{{ $trx->id }}">
+                                        <label for="trip_proof_{{ $trx->id }}" class="small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                                            <span><i class="fab fa-whatsapp text-success me-1"></i> Bukti Transfer / Pembayaran (WA):</span>
+                                            <span id="trip_proof_badge_{{ $trx->id }}"><span class="badge bg-danger text-white"><i class="fas fa-asterisk me-1"></i>WAJIB UPLOAD</span></span>
+                                        </label>
+                                        <input type="file"
+                                               name="payment_proofs[{{ $trx->id }}]"
+                                               id="trip_proof_{{ $trx->id }}"
+                                               class="form-control form-control-sm kd-settle-proof-inp border-danger border-2"
+                                               data-trx-id="{{ $trx->id }}"
+                                               accept="image/*">
+                                        <div id="trip_proof_help_{{ $trx->id }}" class="text-danger fw-semibold mt-1" style="font-size: 0.74rem;">
+                                            *Wajib lampirkan 1 screenshot bukti transfer pelanggan (berlaku untuk order ini, kasbon lama &amp; deposit jika ada).
                                         </div>
                                     </div>
                                 @endif
@@ -1539,12 +1834,19 @@
 
                             @if($trx->customer_id)
                                 <button type="button"
-                                        class="btn kd-settle-deposit-btn btn-toggle-deposit"
+                                        class="btn kd-settle-deposit-btn btn-toggle-deposit {{ $autoOpenPanel ? 'is-open' : '' }}"
                                         id="btn_dep_{{ $trx->id }}"
                                         data-trx-id="{{ $trx->id }}"
-                                        aria-expanded="false"
+                                        data-has-old-kasbon="{{ $custPrevCount > 0 ? '1' : '0' }}"
+                                        aria-expanded="{{ $autoOpenPanel ? 'true' : 'false' }}"
                                         aria-controls="deposit_panel_{{ $trx->id }}">
-                                    <i class="fas fa-piggy-bank me-1"></i> + Deposit Pelanggan
+                                    @if($autoOpenPanel)
+                                        <i class="fas fa-times me-1"></i> Tutup Panel Gabungan / Deposit
+                                    @elseif($custPrevCount > 0)
+                                        <i class="fas fa-wallet me-1"></i> Input Uang Driver / Gabung Kasbon
+                                    @else
+                                        <i class="fas fa-piggy-bank me-1"></i> + Deposit Pelanggan
+                                    @endif
                                 </button>
                             @endif
 
@@ -1554,15 +1856,17 @@
                             </div>
                         </div>
 
-                        {{-- Panel Deposit Pelanggan Full-Width (hanya muncul untuk pelanggan terdaftar) --}}
+                        {{-- Panel Input Uang Driver, Pelunasan Kasbon Lama (FIFO) & Deposit Pelanggan --}}
                         @if($trx->customer_id)
-                            <div class="kd-settle-deposit-panel d-none" id="deposit_panel_{{ $trx->id }}" data-trx-id="{{ $trx->id }}">
+                            <div class="kd-settle-deposit-panel {{ $autoOpenPanel ? '' : 'd-none' }}" id="deposit_panel_{{ $trx->id }}" data-trx-id="{{ $trx->id }}">
                                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 kd-settle-dep-head">
                                     <div>
                                         <h6 class="mb-0 fw-bold text-nowrap" style="color: #0f766e;">
-                                            <i class="fas fa-wallet me-2"></i>Titip Deposit Pelanggan &middot; {{ $custName }}
+                                            <i class="fas fa-wallet me-2"></i>{{ $custPrevCount > 0 ? 'Pembayaran Gabungan &amp; Deposit' : 'Titip Deposit Pelanggan' }} &middot; {{ $custName }}
                                         </h6>
-                                        <span class="small text-muted kd-settle-dep-subtitle">Kelebihan bayar otomatis tersimpan ke saldo deposit pelanggan</span>
+                                        <span class="small text-muted kd-settle-dep-subtitle">
+                                            {{ $custPrevCount > 0 ? 'Uang dari driver otomatis melunasi kasbon tertua (FIFO), order ini, lalu sisanya masuk deposit.' : 'Kelebihan bayar otomatis tersimpan ke saldo deposit pelanggan.' }}
+                                        </span>
                                     </div>
                                     <button type="button"
                                             class="btn btn-outline-secondary kd-settle-dep-done-btn"
@@ -1575,13 +1879,60 @@
                                 {{-- Hidden input nilai deposit bersih yang dikirim ke server --}}
                                 <input type="hidden" name="deposits[{{ $trx->id }}]" id="deposit_val_{{ $trx->id }}" value="0">
 
+                                @if($custPrevCount > 0)
+                                <div class="kd-trip-old-kasbon-box" id="old_kasbon_box_{{ $trx->id }}">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                        <span class="small fw-bold text-dark">
+                                            <i class="fas fa-history text-warning me-1"></i> Kasbon Sebelumnya ({{ $custPrevCount }} Nota &middot; Urutan Tertua / FIFO):
+                                        </span>
+                                        <span class="small fw-bold text-danger kasir-num">Total: Rp {{ number_format($custPrevKasbonSum, 0, ',', '.') }}</span>
+                                    </div>
+                                    <div class="d-flex flex-column gap-1">
+                                        @foreach($custPrevKasbons as $kb)
+                                        @php
+                                            $kbPayable = round((float) $kb->effective_payable_amount, 2);
+                                        @endphp
+                                        <label class="kd-trip-old-kasbon-item mb-0" for="trip_kb_{{ $trx->id }}_{{ $kb->id }}">
+                                            <span class="d-flex align-items-center gap-2 min-w-0">
+                                                <input type="checkbox"
+                                                       class="form-check-input kd-trip-kasbon-chk m-0"
+                                                       name="settled_kasbons[{{ $trx->id }}][]"
+                                                       value="{{ $kb->id }}"
+                                                       id="trip_kb_{{ $trx->id }}_{{ $kb->id }}"
+                                                       data-trx-id="{{ $trx->id }}"
+                                                       data-amount="{{ $kbPayable }}"
+                                                       data-receipt="#{{ str_pad($kb->id, 6, '0', STR_PAD_LEFT) }}"
+                                                       data-manual-skip="0">
+                                                <span class="small">
+                                                    <strong class="text-primary kasir-num">#{{ str_pad($kb->id, 6, '0', STR_PAD_LEFT) }}</strong>
+                                                    <span class="text-muted"> &middot; {{ $kb->transaction_date->format('d/m/Y H:i') }}</span>
+                                                    @if($kb->branch)
+                                                        <span class="badge bg-light text-dark border ms-1" style="font-size: 0.68rem;">{{ $kb->branch->name }}</span>
+                                                    @endif
+                                                </span>
+                                            </span>
+                                            <strong class="small text-danger text-nowrap kasir-num">Rp {{ number_format($kbPayable, 0, ',', '.') }}</strong>
+                                        </label>
+                                        @endforeach
+                                    </div>
+                                    <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">
+                                        *Ketik atau klik nominal uang dari driver di bawah agar sistem otomatis melunasi dari nota tertua. Anda juga bisa centang/lepas nota secara manual.
+                                    </small>
+                                </div>
+                                @endif
+
                                 {{-- 3 Kotak Informasi Utama --}}
                                 <div class="kd-settle-dep-grid">
                                     <div class="kd-settle-dep-box kd-settle-dep-tagihan-box">
-                                        <span class="kd-settle-dep-label">Tagihan Order Ini</span>
+                                        <span class="kd-settle-dep-label">{{ $custPrevCount > 0 ? 'Tagihan Gabungan' : 'Tagihan Order Ini' }}</span>
                                         <div class="kd-settle-dep-val text-danger kasir-num">
-                                            Rp {{ number_format($effectivePayable, 0, ',', '.') }}
+                                            Rp {{ number_format($custPrevCount > 0 ? $combinedPayable : $effectivePayable, 0, ',', '.') }}
                                         </div>
+                                        @if($custPrevCount > 0)
+                                        <div class="small text-muted kasir-num mt-1" style="font-size: 0.72rem;">
+                                            Order ini Rp {{ number_format($effectivePayable, 0, ',', '.') }} + Kasbon Rp {{ number_format($custPrevKasbonSum, 0, ',', '.') }}
+                                        </div>
+                                        @endif
                                     </div>
                                     <div class="kd-settle-dep-box kd-settle-dep-saldo-box">
                                         <span class="kd-settle-dep-label">Saldo Deposit Sekarang</span>
@@ -1590,7 +1941,7 @@
                                         </div>
                                     </div>
                                     <div class="kd-settle-dep-box kd-settle-dep-input-box">
-                                        <label for="driver_money_{{ $trx->id }}" class="kd-settle-dep-label">Uang Diterima Dari Driver</label>
+                                        <label for="driver_money_{{ $trx->id }}" class="kd-settle-dep-label" id="driver_money_lbl_{{ $trx->id }}">Uang Diterima Dari Driver</label>
                                         <div class="input-group input-group-lg">
                                             <span class="input-group-text bg-white fw-bold" style="color: #0f766e;">Rp</span>
                                             <input type="text"
@@ -1604,12 +1955,13 @@
                                                    id="driver_money_{{ $trx->id }}"
                                                    data-trx-id="{{ $trx->id }}"
                                                    data-payable="{{ $effectivePayable }}"
+                                                   data-old-kasbon-total="{{ $custPrevKasbonSum }}"
                                                    data-deposit-bal="{{ $custDepositBal }}"
                                                    placeholder="0"
                                                    aria-describedby="driver_help_{{ $trx->id }}">
                                         </div>
                                         <small id="driver_help_{{ $trx->id }}" class="text-muted d-block mt-1" style="font-size: 0.82rem;">
-                                            Ketik total uang tunai yang diserahkan driver
+                                            Ketik total uang yang diserahkan pelanggan / driver
                                         </small>
                                     </div>
                                 </div>
@@ -1617,23 +1969,52 @@
                                 {{-- Tombol Cepat Nominal --}}
                                 <div class="d-flex flex-wrap align-items-center gap-2 mt-3 kd-settle-quick-row">
                                     <span class="small fw-semibold text-muted me-1 flex-shrink-0">Isi cepat:</span>
-                                    <button type="button"
-                                            class="btn kd-settle-quick-btn kasir-num"
-                                            data-trx-id="{{ $trx->id }}"
-                                            data-amount="{{ (int) round($effectivePayable) }}">
-                                        Uang pas (Rp {{ number_format($effectivePayable, 0, ',', '.') }})
-                                    </button>
+                                    @if($custPrevCount > 0)
+                                        <button type="button"
+                                                class="btn kd-settle-quick-btn kasir-num"
+                                                data-trx-id="{{ $trx->id }}"
+                                                data-mode="order-only"
+                                                data-amount="{{ (int) round($effectivePayable) }}">
+                                            Order Ini Saja (Rp {{ number_format($effectivePayable, 0, ',', '.') }})
+                                        </button>
+                                        @if(abs($custPrevKasbonSum - $effectivePayable) > 0.01)
+                                            <button type="button"
+                                                    class="btn kd-settle-quick-btn kasir-num"
+                                                    data-trx-id="{{ $trx->id }}"
+                                                    data-mode="fifo"
+                                                    data-amount="{{ (int) round($custPrevKasbonSum) }}">
+                                                Kasbon Lalu Saja (Rp {{ number_format($custPrevKasbonSum, 0, ',', '.') }})
+                                            </button>
+                                        @endif
+                                        <button type="button"
+                                                class="btn kd-settle-quick-btn kasir-num fw-bold"
+                                                style="border-color: #0d9488; background: #ccfbf1;"
+                                                data-trx-id="{{ $trx->id }}"
+                                                data-mode="fifo"
+                                                data-amount="{{ (int) round($combinedPayable) }}">
+                                            Lunas + Kasbon (Rp {{ number_format($combinedPayable, 0, ',', '.') }})
+                                        </button>
+                                    @else
+                                        <button type="button"
+                                                class="btn kd-settle-quick-btn kasir-num"
+                                                data-trx-id="{{ $trx->id }}"
+                                                data-mode="order-only"
+                                                data-amount="{{ (int) round($effectivePayable) }}">
+                                            Uang pas (Rp {{ number_format($effectivePayable, 0, ',', '.') }})
+                                        </button>
+                                    @endif
                                     @foreach($quickNominals as $qNom)
                                         <button type="button"
                                                 class="btn kd-settle-quick-btn kasir-num"
                                                 data-trx-id="{{ $trx->id }}"
+                                                data-mode="fifo"
                                                 data-amount="{{ $qNom }}">
                                             Rp {{ number_format($qNom, 0, ',', '.') }}
                                         </button>
                                     @endforeach
                                 </div>
 
-                                {{-- Panel Ringkasan Perhitungan Otomatis (3 kotak putih) --}}
+                                {{-- Panel Ringkasan Perhitungan Otomatis (kotak putih) --}}
                                 <div class="summary-deposit-live mt-3" id="deposit_summary_{{ $trx->id }}"></div>
                             </div>
                         @endif
@@ -1649,6 +2030,10 @@
                                 <span class="kd-settle-sum-val text-success kasir-num" data-sum-cash>Rp 0</span>
                             </div>
                             <div class="kd-settle-sum-item" data-sum-noncash-wrap style="display: contents;"></div>
+                            <div class="kd-settle-sum-item d-none" data-sum-oldkasbon-wrap>
+                                <span class="kd-settle-sum-label">Kasbon Lama Lunas</span>
+                                <span class="kd-settle-sum-val text-primary kasir-num" data-sum-oldkasbon>Rp 0</span>
+                            </div>
                             <div class="kd-settle-sum-item">
                                 <span class="kd-settle-sum-label">Jadi Kasbon</span>
                                 <span class="kd-settle-sum-val text-danger kasir-num" data-sum-kasbon>Rp 0</span>
@@ -1669,7 +2054,7 @@
 
                     <div class="pt-1 border-top kd-settle-footer-info">
                         <small class="text-muted">
-                            <i class="fas fa-info-circle me-1"></i> Transaksi lunas otomatis tercatat ke <strong>Cash Flow</strong>. Transaksi 'Tetap Kasbon' masuk ke piutang kasbon di bawah.
+                            <i class="fas fa-info-circle me-1"></i> Transaksi lunas &amp; kasbon lama otomatis tercatat ke <strong>Cash Flow</strong>. Sisa lebih masuk <strong>Saldo Deposit</strong>.
                         </small>
                     </div>
                 </div>
@@ -1688,15 +2073,20 @@
 @php
 $firstTx = $transactions->first();
 $customerName = $firstTx->customer->name ?? 'Pelanggan Umum';
-$totalTagihanCust = $transactions->sum('total_amount');
+$hasRegisteredCustomer = !empty($firstTx->customer_id);
+$custDepositBal = $hasRegisteredCustomer ? round((float) ($firstTx->customer->deposit_balance ?? 0), 2) : 0.0;
+$totalTagihanCust = round((float) $transactions->sum(fn($tx) => (float) $tx->effective_payable_amount), 2);
 $oldestDate = $firstTx ? $firstTx->transaction_date : now();
 $modalId = 'modalGroup_' . $groupKey;
 @endphp
 <div class="modal fade kasbon-bulk-modal"
      id="{{ $modalId }}"
      data-group-key="{{ $groupKey }}"
-     data-total-pending="{{ (int) round($totalTagihanCust) }}"
+     data-total-pending="{{ $totalTagihanCust }}"
      data-total-count="{{ $transactions->count() }}"
+     data-deposit-balance="{{ $custDepositBal }}"
+     data-has-customer="{{ $hasRegisteredCustomer ? '1' : '0' }}"
+     data-customer-name="{{ $customerName }}"
      tabindex="-1"
      aria-hidden="true">
     <div class="modal-dialog kd-kasbon-dialog modal-dialog-centered">
@@ -1704,6 +2094,8 @@ $modalId = 'modalGroup_' . $groupKey;
             {{-- FORM DIMULAI DARI SINI, MEMBUNGKUS SELURUH MODAL --}}
             <form action="{{ route('kasir.transactions.bulkMarkAsPaid') }}" method="POST" enctype="multipart/form-data" id="bulk_form_{{ $groupKey }}" class="kasbon-bulk-form kd-kasbon-form" data-group-key="{{ $groupKey }}">
                 @csrf
+                <input type="hidden" name="deposit_amount" id="bulk_deposit_val_{{ $groupKey }}" value="0">
+
                 <div class="modal-header kd-kasbon-header">
                     <h5 class="modal-title fw-bold mb-0">
                         <i class="fas fa-user-clock me-2"></i>Daftar Kasbon: <strong>{{ $customerName }}</strong>
@@ -1716,6 +2108,21 @@ $modalId = 'modalGroup_' . $groupKey;
                         <span class="text-muted">Total {{ $transactions->count() }} transaksi tertunda.</span>
                         @if($firstTx->customer && $firstTx->customer->phone)
                         <div class="small text-muted"><i class="fab fa-whatsapp text-success me-1"></i> {{ $firstTx->customer->phone }}</div>
+                        @endif
+                        @if($hasRegisteredCustomer)
+                        <div class="mt-1">
+                            @if($custDepositBal > 0)
+                            <span class="kd-deposit-badge kasir-num">
+                                <i class="fas fa-wallet"></i>
+                                <span>Saldo Deposit: Rp {{ number_format($custDepositBal, 0, ',', '.') }}</span>
+                            </span>
+                            @else
+                            <span class="kasir-badge-muted kasir-num" style="font-size: 0.72rem;">
+                                <i class="fas fa-wallet"></i>
+                                <span>Saldo Deposit: Rp 0</span>
+                            </span>
+                            @endif
+                        </div>
                         @endif
                     </div>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1750,7 +2157,8 @@ $modalId = 'modalGroup_' . $groupKey;
                                 @foreach($transactions as $kasbon)
                                 @php
                                     $isMyBranch = (int) $kasbon->branch_id === (int) (auth()->user()->branch_id ?? 0);
-                                    $rawNominal = (int) round($kasbon->total_amount);
+                                    $txDepositUsed = (float) ($kasbon->deposit_used ?? 0);
+                                    $rawNominal = round((float) $kasbon->effective_payable_amount, 2);
                                 @endphp
                                 <tr class="kd-kasbon-row" data-amount="{{ $rawNominal }}">
                                     <td class="ps-3">
@@ -1790,7 +2198,17 @@ $modalId = 'modalGroup_' . $groupKey;
                                         <small class="text-muted fst-italic">{{ $kasbon->notes ?? '-' }}</small>
                                     </td>
                                     <td class="text-end fw-bold pe-4 kasir-num kd-kasbon-amount-cell">
-                                        Rp {{ number_format($kasbon->total_amount, 0, ',', '.') }}
+                                        @if($txDepositUsed > 0)
+                                            <div class="small text-muted text-decoration-line-through fw-normal">
+                                                Rp {{ number_format($kasbon->total_amount, 0, ',', '.') }}
+                                            </div>
+                                            <div>Rp {{ number_format($rawNominal, 0, ',', '.') }}</div>
+                                            <div class="small fw-semibold" style="color: #0f766e; font-size: 0.7rem;">
+                                                Deposit -Rp {{ number_format($txDepositUsed, 0, ',', '.') }}
+                                            </div>
+                                        @else
+                                            Rp {{ number_format($rawNominal, 0, ',', '.') }}
+                                        @endif
                                     </td>
                                 </tr>
                                 @endforeach
@@ -1800,13 +2218,16 @@ $modalId = 'modalGroup_' . $groupKey;
 
                     {{-- Panel Opsi Pelunasan Fleksibel (tetap di area scroll agar tombol bayar menempel sticky di bawah) --}}
                     <div class="bg-light p-3 border-top">
-                        <div class="row g-2 align-items-center">
+                        <div class="row g-2 align-items-start">
                             <div class="col-md-3">
                                 <label for="bulk_payment_method_{{ $groupKey }}" class="small fw-bold text-muted mb-1">Metode Bayar:</label>
                                 <select name="payment_method" id="bulk_payment_method_{{ $groupKey }}" class="form-select form-select-sm fw-bold border-primary kd-kasbon-method-sel" data-group-key="{{ $groupKey }}" required>
                                     <option value="cash">Cash / Tunai</option>
                                     <option value="transfer-bank">Transfer Bank</option>
                                     <option value="dana">DANA</option>
+                                    @if($hasRegisteredCustomer && $custDepositBal > 0)
+                                        <option value="deposit">Saldo Deposit (Rp {{ number_format($custDepositBal, 0, ',', '.') }})</option>
+                                    @endif
                                 </select>
                             </div>
                             <div class="col-md-5">
@@ -1818,12 +2239,140 @@ $modalId = 'modalGroup_' . $groupKey;
                                 <div id="bulk_warning_nota_{{ $groupKey }}" class="text-danger small mt-1 fw-bold d-none" style="font-size: 0.72rem;">
                                     <i class="fas fa-exclamation-triangle me-1"></i>Perhatian: Memilih opsi ini tidak akan menambah catatan Saldo Laci hari ini karena uang dianggap sudah masuk pada tanggal nota dibuat.
                                 </div>
+                                <div id="bulk_deposit_date_hint_{{ $groupKey }}" class="small mt-1 fw-semibold d-none" style="color: #0f766e; font-size: 0.72rem;">
+                                    <i class="fas fa-wallet me-1"></i>Pelunasan via Saldo Deposit memotong saldo titipan pelanggan tanpa menambah kas laci hari ini.
+                                </div>
                             </div>
                             <div class="col-md-4">
                                 <label for="bulk_notes_{{ $groupKey }}" class="small fw-bold text-muted mb-1">Catatan Pelunasan (Opsional):</label>
                                 <input type="text" id="bulk_notes_{{ $groupKey }}" name="settlement_notes" class="form-control form-control-sm kd-kasbon-note-inp" placeholder="Misal: Bukti transfer terlampir">
                             </div>
-                            <div class="col-12 mt-2 pt-2 border-top">
+
+                            {{-- PANEL 1: PELUNASAN MENGGUNAKAN SALDO DEPOSIT (MUNCUL SAAT METODE = DEPOSIT) --}}
+                            @if($hasRegisteredCustomer && $custDepositBal > 0)
+                            <div class="col-12 d-none" id="bulk_use_deposit_panel_{{ $groupKey }}">
+                                <div class="kd-kasbon-use-deposit-panel">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                        <div>
+                                            <h6 class="mb-0 fw-bold" style="color: #0f766e;">
+                                                <i class="fas fa-wallet me-2"></i>Pelunasan via Saldo Deposit &middot; {{ $customerName }}
+                                            </h6>
+                                            <span class="small text-muted">Hanya nota yang totalnya tidak melebihi saldo deposit yang dapat dilunasi.</span>
+                                        </div>
+                                        <button type="button"
+                                                class="btn kd-kasbon-auto-fifo-btn"
+                                                data-group-key="{{ $groupKey }}">
+                                            <i class="fas fa-magic me-1"></i> Pilih Otomatis Sesuai Saldo
+                                        </button>
+                                    </div>
+
+                                    <div class="kd-settle-result-grid">
+                                        <div class="kd-settle-dep-box">
+                                            <span class="kd-settle-dep-label">Saldo Deposit Tersedia</span>
+                                            <div class="kd-settle-dep-val kasir-num" style="color: #0f766e;">
+                                                Rp {{ number_format($custDepositBal, 0, ',', '.') }}
+                                            </div>
+                                        </div>
+                                        <div class="kd-settle-dep-box">
+                                            <span class="kd-settle-dep-label">Total Nota Dipilih</span>
+                                            <div class="kd-settle-dep-val text-dark kasir-num" id="bulk_use_dep_selected_{{ $groupKey }}">
+                                                Rp 0
+                                            </div>
+                                        </div>
+                                        <div class="kd-settle-dep-box">
+                                            <span class="kd-settle-dep-label" id="bulk_use_dep_rem_label_{{ $groupKey }}">Sisa Saldo Setelah Lunas</span>
+                                            <div class="kd-settle-dep-val text-success kasir-num" id="bulk_use_dep_remaining_{{ $groupKey }}">
+                                                Rp {{ number_format($custDepositBal, 0, ',', '.') }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="bulk_use_dep_shortfall_{{ $groupKey }}" class="alert alert-danger alert-permanent py-2 px-3 mt-3 mb-0 d-none" style="font-size: 0.8rem;" role="alert"></div>
+                                </div>
+                            </div>
+                            @endif
+
+                            {{-- PANEL 2: KELEBIHAN BAYAR MASUK DEPOSIT (CASH / TRANSFER BANK / DANA) --}}
+                            @if($hasRegisteredCustomer)
+                            <div class="col-12 mt-2 pt-2 border-top" id="bulk_overpay_wrap_{{ $groupKey }}">
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <button type="button"
+                                            class="btn kd-kasbon-deposit-btn"
+                                            id="bulk_btn_dep_{{ $groupKey }}"
+                                            data-group-key="{{ $groupKey }}"
+                                            aria-expanded="false"
+                                            aria-controls="bulk_deposit_panel_{{ $groupKey }}">
+                                        <i class="fas fa-piggy-bank me-1"></i> + Kelebihan Bayar ke Deposit
+                                    </button>
+                                    <span class="small text-muted">
+                                        Isi jika pelanggan membayar / transfer lebih dari total nota terpilih agar selisihnya masuk saldo deposit.
+                                    </span>
+                                </div>
+
+                                <div class="kd-kasbon-deposit-panel d-none" id="bulk_deposit_panel_{{ $groupKey }}" data-group-key="{{ $groupKey }}">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                        <div>
+                                            <h6 class="mb-0 fw-bold" style="color: #0f766e;">
+                                                <i class="fas fa-piggy-bank me-2"></i>Titip Kelebihan Bayar ke Deposit &middot; {{ $customerName }}
+                                            </h6>
+                                            <span class="small text-muted">Kelebihan pembayaran otomatis disimpan sebagai saldo deposit pelanggan.</span>
+                                        </div>
+                                        <button type="button"
+                                                class="btn btn-outline-secondary kd-kasbon-dep-done-btn"
+                                                data-group-key="{{ $groupKey }}"
+                                                aria-label="Selesai mengetik dan tutup keyboard">
+                                            <i class="fas fa-check me-1"></i> Selesai
+                                        </button>
+                                    </div>
+
+                                    <div class="kd-settle-dep-grid">
+                                        <div class="kd-settle-dep-box">
+                                            <span class="kd-settle-dep-label">Total Nota Dipilih</span>
+                                            <div class="kd-settle-dep-val text-danger kasir-num" id="bulk_dep_payable_display_{{ $groupKey }}">
+                                                Rp 0
+                                            </div>
+                                        </div>
+                                        <div class="kd-settle-dep-box">
+                                            <span class="kd-settle-dep-label">Saldo Deposit Sekarang</span>
+                                            <div class="kd-settle-dep-val kasir-num" style="color: #0f766e;">
+                                                Rp {{ number_format($custDepositBal, 0, ',', '.') }}
+                                            </div>
+                                        </div>
+                                        <div class="kd-settle-dep-box">
+                                            <label for="bulk_received_money_{{ $groupKey }}" class="kd-settle-dep-label" id="bulk_received_label_{{ $groupKey }}">
+                                                Uang Tunai Diterima
+                                            </label>
+                                            <div class="input-group">
+                                                <span class="input-group-text bg-white fw-bold" style="color: #0f766e;">Rp</span>
+                                                <input type="text"
+                                                       inputmode="numeric"
+                                                       pattern="[0-9]*"
+                                                       enterkeyhint="done"
+                                                       autocomplete="off"
+                                                       autocapitalize="off"
+                                                       spellcheck="false"
+                                                       class="form-control fw-bold kasir-num kd-kasbon-received-input"
+                                                       id="bulk_received_money_{{ $groupKey }}"
+                                                       data-group-key="{{ $groupKey }}"
+                                                       placeholder="0"
+                                                       aria-describedby="bulk_received_help_{{ $groupKey }}">
+                                            </div>
+                                            <small id="bulk_received_help_{{ $groupKey }}" class="text-muted d-block mt-1" style="font-size: 0.78rem;">
+                                                Ketik total uang yang dibayarkan pelanggan
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    {{-- Tombol Cepat Nominal (dinamis mengikuti total nota terpilih) --}}
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3" id="bulk_quick_nominals_{{ $groupKey }}"></div>
+
+                                    {{-- Ringkasan Perhitungan Live (3 kotak) --}}
+                                    <div class="mt-3" id="bulk_deposit_summary_{{ $groupKey }}"></div>
+                                </div>
+                            </div>
+                            @endif
+
+                            <div class="col-12 mt-2 pt-2 border-top" id="bulk_proof_wrap_{{ $groupKey }}">
                                 <label for="bulk_payment_proof_{{ $groupKey }}" class="small fw-bold text-dark mb-1 d-flex justify-content-between align-items-center">
                                     <span><i class="fab fa-whatsapp text-success me-1"></i> Bukti Pembayaran / Transfer Non-Tunai (WhatsApp):</span>
                                     <span id="bulk_proof_required_badge_{{ $groupKey }}"><span class="badge bg-light text-muted border">Opsional (Cash)</span></span>
@@ -1851,6 +2400,7 @@ $modalId = 'modalGroup_' . $groupKey;
                             <span class="small text-muted fw-semibold">Total dipilih</span>
                             <span class="kd-kasbon-summary-total kasir-num" data-kasbon-selected-total>Rp 0</span>
                         </div>
+                        <div class="small fw-semibold kasir-num d-none" data-kasbon-deposit-pill></div>
                         <div class="small text-muted kasir-num" data-kasbon-remaining>
                             Sisa kasbon setelah pelunasan: <strong>Rp {{ number_format($totalTagihanCust, 0, ',', '.') }}</strong>
                         </div>
@@ -2179,27 +2729,259 @@ $modalId = 'modalGroup_' . $groupKey;
     };
 
     /**
+     * Render tombol isi cepat nominal kelebihan bayar deposit di modal Daftar Kasbon
+     */
+    function renderBulkQuickNominals(groupKey, selectedTotal) {
+        const container = document.getElementById('bulk_quick_nominals_' + groupKey);
+        if (!container) return;
+
+        const roundedTotal = Math.round(selectedTotal || 0);
+        if (container.dataset.renderedTotal === String(roundedTotal)) {
+            return;
+        }
+        container.dataset.renderedTotal = String(roundedTotal);
+
+        if (roundedTotal <= 0) {
+            container.innerHTML = '<span class="small text-muted"><i class="fas fa-info-circle me-1"></i>Centang nota di atas untuk memunculkan tombol nominal cepat.</span>';
+            return;
+        }
+
+        const denominations = [20000, 50000, 100000, 150000, 200000, 250000, 300000, 500000, 1000000, 1500000, 2000000, 5000000];
+        let quickAbove = denominations.filter(function(v) { return v > roundedTotal; }).slice(0, 3);
+        if (quickAbove.length < 3) {
+            const step = roundedTotal >= 1000000 ? 500000 : 100000;
+            let nextVal = Math.ceil((roundedTotal + 1) / step) * step;
+            while (quickAbove.length < 3) {
+                if (quickAbove.indexOf(nextVal) === -1 && nextVal > roundedTotal) {
+                    quickAbove.push(nextVal);
+                }
+                nextVal += step;
+            }
+        }
+
+        let html = '<span class="small fw-semibold text-muted me-1 flex-shrink-0">Isi cepat:</span>';
+        html += `<button type="button" class="btn kd-kasbon-quick-btn kasir-num" data-group-key="${groupKey}" data-amount="${roundedTotal}">Uang pas (Rp ${formatRupiahVal(roundedTotal)})</button>`;
+        quickAbove.forEach(function(nom) {
+            html += `<button type="button" class="btn kd-kasbon-quick-btn kasir-num" data-group-key="${groupKey}" data-amount="${nom}">Rp ${formatRupiahVal(nom)}</button>`;
+        });
+        container.innerHTML = html;
+    }
+
+    /**
+     * Hitung kelebihan bayar masuk deposit pada modal Daftar Kasbon
+     */
+    function calcBulkDepositOverpayment(modalEl, groupKey, selectedTotal, depositBalance, isDepositMethod) {
+        const depositInput = document.getElementById('bulk_deposit_val_' + groupKey);
+        const receivedInput = document.getElementById('bulk_received_money_' + groupKey);
+        const summaryEl = document.getElementById('bulk_deposit_summary_' + groupKey);
+        const payableDisplay = document.getElementById('bulk_dep_payable_display_' + groupKey);
+
+        if (payableDisplay) {
+            payableDisplay.textContent = 'Rp ' + formatRupiahVal(selectedTotal);
+        }
+
+        if (!depositInput) return 0;
+
+        if (isDepositMethod) {
+            depositInput.value = 0;
+            if (summaryEl) summaryEl.innerHTML = '';
+            return 0;
+        }
+
+        const rawTrimmed = receivedInput ? receivedInput.value.replace(/[^0-9]/g, '') : '';
+        if (!rawTrimmed) {
+            depositInput.value = 0;
+            if (summaryEl) summaryEl.innerHTML = '';
+            return 0;
+        }
+
+        if (selectedTotal <= 0) {
+            depositInput.value = 0;
+            if (summaryEl) {
+                summaryEl.innerHTML = `
+                    <div class="alert alert-info alert-permanent py-2 px-3 mb-0 d-flex align-items-center gap-2" style="font-size: 0.82rem;">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Centang minimal 1 nota di atas agar sistem dapat menghitung kelebihan bayar yang masuk ke saldo deposit.</span>
+                    </div>
+                `;
+            }
+            return 0;
+        }
+
+        const receivedMoney = parseFloat(rawTrimmed);
+        if (receivedMoney >= selectedTotal) {
+            const depositBaru = Math.round((receivedMoney - selectedTotal) * 100) / 100;
+            const saldoAkhir = Math.round((depositBalance + depositBaru) * 100) / 100;
+            depositInput.value = depositBaru;
+
+            if (summaryEl) {
+                summaryEl.innerHTML = `
+                    <div class="kd-settle-result-grid">
+                        <div class="kd-settle-dep-box">
+                            <span class="kd-settle-dep-label">Lunas Kasbon Terpilih</span>
+                            <div class="kd-settle-dep-val text-success kasir-num">Rp ${formatRupiahVal(selectedTotal)}</div>
+                        </div>
+                        <div class="kd-settle-dep-box">
+                            <span class="kd-settle-dep-label">Lebih Bayar, Masuk Deposit</span>
+                            <div class="kd-settle-dep-val kasir-num" style="color: #0f766e;">+Rp ${formatRupiahVal(depositBaru)}</div>
+                        </div>
+                        <div class="kd-settle-dep-box">
+                            <span class="kd-settle-dep-label">Saldo Deposit Setelah Ini</span>
+                            <div class="kd-settle-dep-val text-dark kasir-num">Rp ${formatRupiahVal(saldoAkhir)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+            return depositBaru;
+        }
+
+        depositInput.value = 0;
+        const kurang = Math.round((selectedTotal - receivedMoney) * 100) / 100;
+        if (summaryEl) {
+            summaryEl.innerHTML = `
+                <div class="alert alert-warning alert-permanent py-2 px-3 mb-0 d-flex align-items-center gap-2" style="font-size: 0.82rem;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Nominal diterima <strong>kurang Rp ${formatRupiahVal(kurang)}</strong> dari total nota terpilih (Rp ${formatRupiahVal(selectedTotal)}). Tidak ada kelebihan untuk disimpan sebagai deposit.</span>
+                </div>
+            `;
+        }
+        return 0;
+    }
+
+    /**
+     * Gulir halus area scroll modal Daftar Kasbon jika panel baru dibuka di bawah area pandang
+     */
+    function scrollKasbonPanelIntoView(modalEl, panelEl) {
+        if (!modalEl || !panelEl || panelEl.classList.contains('d-none')) return;
+        const scrollArea = modalEl.querySelector('.kd-kasbon-scroll-area');
+        if (!scrollArea || typeof scrollArea.getBoundingClientRect !== 'function' || typeof panelEl.getBoundingClientRect !== 'function') {
+            return;
+        }
+        const areaRect = scrollArea.getBoundingClientRect();
+        const panelRect = panelEl.getBoundingClientRect();
+        const overflowBottom = panelRect.bottom - areaRect.bottom;
+        const overflowTop = areaRect.top - panelRect.top;
+        if (overflowBottom > 0 && typeof scrollArea.scrollBy === 'function') {
+            scrollArea.scrollBy({ top: overflowBottom + 16, behavior: 'smooth' });
+        } else if (overflowTop > 0 && typeof scrollArea.scrollBy === 'function') {
+            scrollArea.scrollBy({ top: -(overflowTop + 16), behavior: 'smooth' });
+        }
+    }
+
+    /**
+     * Toggle panel kelebihan bayar -> deposit di modal Daftar Kasbon
+     */
+    window.toggleBulkDepositPanel = function(groupKey, forceClose) {
+        const panel = document.getElementById('bulk_deposit_panel_' + groupKey);
+        const btn = document.getElementById('bulk_btn_dep_' + groupKey);
+        const receivedInput = document.getElementById('bulk_received_money_' + groupKey);
+        const depositInput = document.getElementById('bulk_deposit_val_' + groupKey);
+        const summaryEl = document.getElementById('bulk_deposit_summary_' + groupKey);
+        const modalEl = document.getElementById('modalGroup_' + groupKey);
+        if (!panel) return;
+
+        const willOpen = forceClose ? false : panel.classList.contains('d-none');
+
+        if (willOpen) {
+            panel.classList.remove('d-none');
+            void panel.offsetHeight;
+
+            if (btn) {
+                btn.setAttribute('aria-expanded', 'true');
+                btn.classList.add('is-open');
+                btn.innerHTML = '<i class="fas fa-times me-1"></i> Tutup Form Kelebihan Deposit';
+            }
+            if (receivedInput) {
+                receivedInput.focus({ preventScroll: true });
+                selectAllInputSafely(receivedInput);
+                updateKeyboardCompactState(receivedInput);
+            }
+            scrollKasbonPanelIntoView(modalEl, panel);
+        } else {
+            if (receivedInput) {
+                receivedInput.blur();
+                receivedInput.value = '';
+            }
+            if (depositInput) depositInput.value = 0;
+            if (summaryEl) summaryEl.innerHTML = '';
+
+            panel.classList.add('d-none');
+            if (btn) {
+                btn.setAttribute('aria-expanded', 'false');
+                btn.classList.remove('is-open');
+                btn.innerHTML = '<i class="fas fa-piggy-bank me-1"></i> + Kelebihan Bayar ke Deposit';
+            }
+            updateKeyboardCompactState(null);
+        }
+
+        if (modalEl) syncBulkModalState(modalEl);
+    };
+
+    /**
+     * Pilih nota otomatis dari yang paling tua (FIFO) selama total <= saldo deposit
+     */
+    window.autoSelectKasbonByDeposit = function(groupKey) {
+        const modalEl = document.getElementById('modalGroup_' + groupKey);
+        if (!modalEl) return;
+
+        const depositBalance = parseFloat(modalEl.getAttribute('data-deposit-balance') || '0');
+        const allItems = Array.from(modalEl.querySelectorAll('.item-checkbox'));
+        let runningTotal = 0;
+        let pickedCount = 0;
+
+        allItems.forEach(function(cb) {
+            const amt = parseFloat(cb.getAttribute('data-amount') || '0');
+            if (runningTotal + amt <= depositBalance + 0.001) {
+                cb.checked = true;
+                runningTotal = Math.round((runningTotal + amt) * 100) / 100;
+                pickedCount++;
+            } else {
+                cb.checked = false;
+            }
+        });
+
+        syncBulkModalState(modalEl);
+
+        if (pickedCount === 0 && allItems.length > 0) {
+            kasirNotify(
+                'info',
+                'Saldo Deposit Belum Cukup',
+                `Saldo deposit saat ini (Rp ${formatRupiahVal(depositBalance)}) belum mencukupi untuk melunasi satu nota kasbon secara penuh.`
+            );
+        }
+    };
+
+    /**
      * Sinkronisasi state terpadu per-modal Daftar Kasbon:
-     * 1. Hitung ulang total dari DOM seluruh checkbox tercentang (berbasis data-amount mentah)
+     * 1. Hitung ulang total dari DOM seluruh checkbox tercentang (berbasis data-amount bersih)
      * 2. Perbarui highlight baris, select-all (termasuk indeterminate), dan bar ringkasan
-     * 3. Gabungkan aturan wajib bukti Non-Tunai + minimal 1 nota dipilih pada tombol submit
+     * 3. Tangani metode Saldo Deposit (kunci jika total > saldo) & kelebihan bayar masuk Deposit (Cash/Transfer/DANA)
+     * 4. Gabungkan aturan wajib bukti Non-Tunai + saldo deposit + minimal 1 nota pada tombol submit
      */
     window.syncBulkModalState = function(modalEl) {
         if (!modalEl) return;
 
         const groupKey = modalEl.getAttribute('data-group-key') || '';
         const totalPending = parseFloat(modalEl.getAttribute('data-total-pending') || '0');
+        const depositBalance = parseFloat(modalEl.getAttribute('data-deposit-balance') || '0');
         const allItems = Array.from(modalEl.querySelectorAll('.item-checkbox'));
         const totalCount = parseInt(modalEl.getAttribute('data-total-count') || String(allItems.length), 10);
 
         let selectedCount = 0;
         let selectedTotal = 0;
+        let fifoCount = 0;
+        let fifoTotal = 0;
 
         allItems.forEach(function(cb) {
             const row = cb.closest('.kd-kasbon-row');
+            const amt = parseFloat(cb.getAttribute('data-amount') || '0');
+            if (fifoTotal + amt <= depositBalance + 0.001) {
+                fifoTotal = Math.round((fifoTotal + amt) * 100) / 100;
+                fifoCount++;
+            }
             if (cb.checked) {
                 selectedCount++;
-                selectedTotal += parseFloat(cb.getAttribute('data-amount') || '0');
+                selectedTotal = Math.round((selectedTotal + amt) * 100) / 100;
                 if (row) row.classList.add('is-selected');
             } else {
                 if (row) row.classList.remove('is-selected');
@@ -2217,6 +2999,7 @@ $modalId = 'modalGroup_' . $groupKey;
         const countEl = modalEl.querySelector('[data-kasbon-count]');
         const totalEl = modalEl.querySelector('[data-kasbon-selected-total]');
         const remEl = modalEl.querySelector('[data-kasbon-remaining]');
+        const depPillEl = modalEl.querySelector('[data-kasbon-deposit-pill]');
         const summaryBar = modalEl.querySelector('.kd-kasbon-summary-bar');
 
         if (countEl) {
@@ -2225,24 +3008,40 @@ $modalId = 'modalGroup_' . $groupKey;
         if (totalEl) {
             totalEl.textContent = 'Rp ' + formatRupiahVal(selectedTotal);
         }
+        // Aturan metode bayar, deposit & wajib bukti Non-Tunai
+        const methodSelect = modalEl.querySelector('.kd-kasbon-method-sel') || (groupKey ? document.getElementById('bulk_payment_method_' + groupKey) : null);
+        const method = methodSelect ? methodSelect.value : 'cash';
+        const isCash = (method === 'cash');
+        const isDeposit = (method === 'deposit');
+        const isDepositInsufficient = isDeposit && (selectedTotal > depositBalance + 0.001);
+
         if (remEl) {
-            if (totalCount > 0 && selectedCount === totalCount) {
+            if (isDepositInsufficient) {
+                remEl.innerHTML = '<span class="text-danger fw-semibold"><i class="fas fa-sliders-h me-1"></i>Kurangi centang / klik Pilih Otomatis</span>';
+            } else if (totalCount > 0 && selectedCount === totalCount) {
                 remEl.innerHTML = '<span class="kasir-badge kasir-badge-success"><i class="fas fa-check-circle"></i> Lunas semua</span>';
             } else {
-                const remaining = Math.max(0, totalPending - selectedTotal);
+                const remaining = Math.max(0, Math.round((totalPending - selectedTotal) * 100) / 100);
                 remEl.innerHTML = 'Sisa kasbon setelah pelunasan: <strong>Rp ' + formatRupiahVal(remaining) + '</strong>';
             }
         }
-        if (summaryBar) {
-            summaryBar.style.borderColor = selectedCount > 0 ? 'var(--kasir-primary)' : 'var(--kasir-brand-border)';
-        }
 
-        // Aturan metode bayar & wajib bukti Non-Tunai
-        const methodSelect = modalEl.querySelector('.kd-kasbon-method-sel') || (groupKey ? document.getElementById('bulk_payment_method_' + groupKey) : null);
-        const method = methodSelect ? methodSelect.value : 'cash';
         const selectDate = modalEl.querySelector('.kd-kasbon-date-sel') || (groupKey ? document.getElementById('bulk_settlement_date_mode_' + groupKey) : null);
         const optNota = groupKey ? document.getElementById('bulk_opt_nota_date_' + groupKey) : null;
         const warn = groupKey ? document.getElementById('bulk_warning_nota_' + groupKey) : null;
+        const depDateHint = groupKey ? document.getElementById('bulk_deposit_date_hint_' + groupKey) : null;
+        const useDepPanel = groupKey ? document.getElementById('bulk_use_deposit_panel_' + groupKey) : null;
+        const useDepSelectedEl = groupKey ? document.getElementById('bulk_use_dep_selected_' + groupKey) : null;
+        const useDepRemEl = groupKey ? document.getElementById('bulk_use_dep_remaining_' + groupKey) : null;
+        const useDepRemLabelEl = groupKey ? document.getElementById('bulk_use_dep_rem_label_' + groupKey) : null;
+        const useDepShortfallEl = groupKey ? document.getElementById('bulk_use_dep_shortfall_' + groupKey) : null;
+        const overpayWrap = groupKey ? document.getElementById('bulk_overpay_wrap_' + groupKey) : null;
+        const overpayPanel = groupKey ? document.getElementById('bulk_deposit_panel_' + groupKey) : null;
+        const overpayBtn = groupKey ? document.getElementById('bulk_btn_dep_' + groupKey) : null;
+        const receivedLabel = groupKey ? document.getElementById('bulk_received_label_' + groupKey) : null;
+        const receivedHelp = groupKey ? document.getElementById('bulk_received_help_' + groupKey) : null;
+        const receivedInput = groupKey ? document.getElementById('bulk_received_money_' + groupKey) : null;
+        const proofWrap = groupKey ? document.getElementById('bulk_proof_wrap_' + groupKey) : null;
         const proofInput = modalEl.querySelector('.kd-kasbon-proof-inp') || (groupKey ? document.getElementById('bulk_payment_proof_' + groupKey) : null);
         const proofBadge = groupKey ? document.getElementById('bulk_proof_required_badge_' + groupKey) : null;
         const proofHelp = groupKey ? document.getElementById('bulk_proof_help_' + groupKey) : null;
@@ -2250,11 +3049,11 @@ $modalId = 'modalGroup_' . $groupKey;
         const methodNameSpan = groupKey ? document.getElementById('bulk_proof_method_name_' + groupKey) : null;
         const btnSubmit = modalEl.querySelector('.kd-kasbon-submit-btn') || (groupKey ? document.getElementById('bulk_btn_submit_' + groupKey) : null);
 
-        const isCash = (method === 'cash');
         const hasFile = !!(proofInput && proofInput.files && proofInput.files.length > 0);
 
+        // Panel Alokasi Tanggal
         if (optNota && selectDate) {
-            if (isCash) {
+            if (isCash || isDeposit) {
                 optNota.disabled = true;
                 optNota.style.display = 'none';
                 selectDate.value = 'today';
@@ -2266,9 +3065,90 @@ $modalId = 'modalGroup_' . $groupKey;
                     warn.classList.toggle('d-none', selectDate.value !== 'nota_date');
                 }
             }
+            selectDate.disabled = isDeposit;
+        }
+        if (depDateHint) {
+            depDateHint.classList.toggle('d-none', !isDeposit);
         }
 
-        if (isCash) {
+        // Panel 1: Pelunasan via Saldo Deposit
+        if (useDepPanel) {
+            useDepPanel.classList.toggle('d-none', !isDeposit);
+            if (isDeposit) {
+                if (useDepSelectedEl) {
+                    useDepSelectedEl.textContent = 'Rp ' + formatRupiahVal(selectedTotal);
+                    useDepSelectedEl.className = 'kd-settle-dep-val kasir-num ' + (isDepositInsufficient ? 'text-danger' : 'text-dark');
+                }
+                if (useDepRemEl && useDepRemLabelEl) {
+                    if (isDepositInsufficient) {
+                        const shortfall = Math.round((selectedTotal - depositBalance) * 100) / 100;
+                        useDepRemLabelEl.textContent = 'Kekurangan Saldo Deposit';
+                        useDepRemEl.textContent = '-Rp ' + formatRupiahVal(shortfall);
+                        useDepRemEl.className = 'kd-settle-dep-val text-danger kasir-num';
+                    } else {
+                        const remDep = Math.max(0, Math.round((depositBalance - selectedTotal) * 100) / 100);
+                        useDepRemLabelEl.textContent = 'Sisa Saldo Setelah Lunas';
+                        useDepRemEl.textContent = 'Rp ' + formatRupiahVal(remDep);
+                        useDepRemEl.className = 'kd-settle-dep-val text-success kasir-num';
+                    }
+                }
+                if (useDepShortfallEl) {
+                    if (isDepositInsufficient) {
+                        const shortfall = Math.round((selectedTotal - depositBalance) * 100) / 100;
+                        const fifoHint = fifoCount > 0
+                            ? `Klik <strong>"Pilih Otomatis Sesuai Saldo"</strong> untuk melunasi <strong>${fifoCount} nota</strong> (Rp ${formatRupiahVal(fifoTotal)}).`
+                            : 'Saldo deposit saat ini belum cukup untuk 1 nota penuh.';
+                        useDepShortfallEl.innerHTML = `<i class="fas fa-lock me-1"></i> <strong>Saldo Deposit Tidak Mencukupi:</strong> Total ${selectedCount} nota terpilih (<strong>Rp ${formatRupiahVal(selectedTotal)}</strong>) melebihi saldo deposit <strong>Rp ${formatRupiahVal(depositBalance)}</strong> (kurang <strong>Rp ${formatRupiahVal(shortfall)}</strong>). Kurangi centang nota agar tidak melebihi saldo. ${fifoHint}`;
+                        useDepShortfallEl.classList.remove('d-none');
+                    } else {
+                        useDepShortfallEl.classList.add('d-none');
+                        useDepShortfallEl.innerHTML = '';
+                    }
+                }
+            }
+        }
+
+        // Panel 2: Kelebihan Bayar -> Deposit (hanya saat bukan metode deposit)
+        if (overpayWrap) {
+            if (isDeposit) {
+                overpayWrap.classList.add('d-none');
+                if (overpayPanel && !overpayPanel.classList.contains('d-none')) {
+                    overpayPanel.classList.add('d-none');
+                    if (receivedInput) receivedInput.value = '';
+                    if (overpayBtn) {
+                        overpayBtn.setAttribute('aria-expanded', 'false');
+                        overpayBtn.classList.remove('is-open');
+                        overpayBtn.innerHTML = '<i class="fas fa-piggy-bank me-1"></i> + Kelebihan Bayar ke Deposit';
+                    }
+                }
+            } else {
+                overpayWrap.classList.remove('d-none');
+                const methodLabelText = methodSelect ? methodSelect.options[methodSelect.selectedIndex].text : 'Pembayaran';
+                if (receivedLabel) {
+                    receivedLabel.textContent = isCash ? 'Uang Tunai Diterima' : ('Nominal ' + methodLabelText + ' Diterima');
+                }
+                if (receivedHelp) {
+                    receivedHelp.textContent = isCash
+                        ? 'Ketik total uang tunai yang dibayarkan pelanggan'
+                        : 'Ketik total nominal transfer / DANA yang masuk';
+                }
+                renderBulkQuickNominals(groupKey, selectedTotal);
+            }
+        }
+
+        const depositOverpayment = calcBulkDepositOverpayment(modalEl, groupKey, selectedTotal, depositBalance, isDeposit);
+
+        // Panel Bukti Pembayaran Non-Tunai
+        if (proofWrap) {
+            proofWrap.classList.toggle('d-none', isDeposit);
+        }
+        if (isDeposit) {
+            if (proofInput) {
+                proofInput.removeAttribute('required');
+                proofInput.classList.remove('border-danger', 'border-2', 'border-success');
+            }
+            if (proofAlert) proofAlert.classList.add('d-none');
+        } else if (isCash) {
             if (proofInput) {
                 proofInput.removeAttribute('required');
                 proofInput.classList.remove('border-danger', 'border-2', 'border-success');
@@ -2299,7 +3179,8 @@ $modalId = 'modalGroup_' . $groupKey;
                     proofBadge.innerHTML = '<span class="badge bg-success text-white"><i class="fas fa-check me-1"></i>File Bukti Terlampir</span>';
                 }
                 if (proofHelp) {
-                    proofHelp.innerHTML = '<strong class="text-success"><i class="fas fa-check-circle me-1"></i>Bukti siap diunggah:</strong> ' + proofInput.files[0].name;
+                    const depExtraNote = depositOverpayment > 0 ? ' (berlaku sekaligus untuk pelunasan &amp; kelebihan deposit)' : '';
+                    proofHelp.innerHTML = '<strong class="text-success"><i class="fas fa-check-circle me-1"></i>Bukti siap diunggah:</strong> ' + proofInput.files[0].name + depExtraNote;
                 }
                 if (proofAlert) {
                     proofAlert.classList.add('d-none');
@@ -2313,7 +3194,7 @@ $modalId = 'modalGroup_' . $groupKey;
                     proofBadge.innerHTML = '<span class="badge bg-danger text-white"><i class="fas fa-exclamation-circle me-1"></i>WAJIB UPLOAD BUKTI NOTA</span>';
                 }
                 if (proofHelp) {
-                    proofHelp.innerHTML = '<strong class="text-danger">*Wajib diunggah!</strong> Lampirkan screenshot bukti transfer pelanggan untuk membuka tombol pelunasan.';
+                    proofHelp.innerHTML = '<strong class="text-danger">*Wajib diunggah!</strong> Lampirkan 1 screenshot bukti transfer pelanggan (berlaku sekaligus untuk nota terpilih &amp; kelebihan deposit jika ada).';
                 }
                 if (proofAlert) {
                     proofAlert.classList.remove('d-none');
@@ -2321,17 +3202,56 @@ $modalId = 'modalGroup_' . $groupKey;
             }
         }
 
-        // Gabungkan 2 aturan penguncian tombol submit:
-        // (1) minimal 1 nota dipilih AND (2) Cash atau bukti terlampir
+        // Pill Deposit di Footer Sticky
+        if (depPillEl) {
+            if (isDeposit) {
+                depPillEl.classList.remove('d-none');
+                if (isDepositInsufficient) {
+                    const shortfall = Math.round((selectedTotal - depositBalance) * 100) / 100;
+                    depPillEl.innerHTML = `<span class="kasir-badge-danger"><i class="fas fa-exclamation-triangle"></i> Saldo kurang Rp ${formatRupiahVal(shortfall)}</span>`;
+                } else {
+                    const remDep = Math.max(0, Math.round((depositBalance - selectedTotal) * 100) / 100);
+                    depPillEl.innerHTML = `<span class="kd-deposit-badge"><i class="fas fa-wallet"></i> Sisa deposit: Rp ${formatRupiahVal(remDep)}</span>`;
+                }
+            } else if (depositOverpayment > 0) {
+                depPillEl.classList.remove('d-none');
+                depPillEl.innerHTML = `<span class="kd-deposit-badge"><i class="fas fa-piggy-bank"></i> Masuk Deposit: +Rp ${formatRupiahVal(depositOverpayment)}</span>`;
+            } else {
+                depPillEl.classList.add('d-none');
+                depPillEl.innerHTML = '';
+            }
+        }
+
+        if (summaryBar) {
+            summaryBar.style.borderColor = isDepositInsufficient
+                ? 'var(--kasir-danger)'
+                : (selectedCount > 0 ? 'var(--kasir-primary)' : 'var(--kasir-brand-border)');
+        }
+
+        // Gabungkan 3 aturan penguncian tombol submit:
+        // (1) minimal 1 nota dipilih, (2) jika deposit: saldo mencukupi, (3) jika non-tunai non-deposit: bukti terlampir
         if (btnSubmit) {
             if (selectedCount === 0) {
                 btnSubmit.disabled = true;
                 btnSubmit.className = 'btn btn-secondary text-white fw-bold kd-kasbon-submit-btn opacity-75';
                 btnSubmit.innerHTML = '<i class="fas fa-ban me-1"></i> Pilih nota yang akan dilunasi';
-            } else if (!isCash && !hasFile) {
+            } else if (isDepositInsufficient) {
+                const shortfall = Math.round((selectedTotal - depositBalance) * 100) / 100;
+                btnSubmit.disabled = true;
+                btnSubmit.className = 'btn btn-secondary text-white fw-bold kd-kasbon-submit-btn opacity-75';
+                btnSubmit.innerHTML = `<i class="fas fa-lock me-1"></i> Saldo Deposit Kurang Rp ${formatRupiahVal(shortfall)}`;
+            } else if (!isCash && !isDeposit && !hasFile) {
                 btnSubmit.disabled = true;
                 btnSubmit.className = 'btn btn-secondary text-white fw-bold kd-kasbon-submit-btn opacity-75';
                 btnSubmit.innerHTML = '<i class="fas fa-lock me-1"></i> Tombol Terkunci (Wajib Upload Bukti)';
+            } else if (isDeposit) {
+                btnSubmit.disabled = false;
+                btnSubmit.className = 'btn btn-success fw-bold kd-kasbon-submit-btn';
+                btnSubmit.innerHTML = `<i class="fas fa-wallet me-1"></i> Lunasi ${selectedCount} Nota via Deposit &middot; Rp ${formatRupiahVal(selectedTotal)}`;
+            } else if (depositOverpayment > 0) {
+                btnSubmit.disabled = false;
+                btnSubmit.className = 'btn btn-success fw-bold kd-kasbon-submit-btn';
+                btnSubmit.innerHTML = `<i class="fas fa-check-double me-1"></i> Lunasi ${selectedCount} Nota + Deposit Rp ${formatRupiahVal(depositOverpayment)}`;
             } else {
                 btnSubmit.disabled = false;
                 btnSubmit.className = 'btn btn-success fw-bold kd-kasbon-submit-btn';
@@ -2901,8 +3821,8 @@ $modalId = 'modalGroup_' . $groupKey;
                 openKasbonModal.style.setProperty('--kd-vvh', Math.round(vv.height) + 'px');
                 openKasbonModal.style.setProperty('--kd-vvtop', Math.max(0, Math.round(vv.offsetTop)) + 'px');
             }
-            const isKasbonNoteFocused = !!(activeEl && activeEl.classList && activeEl.classList.contains('kd-kasbon-note-inp'));
-            const compactKasbon = heightDropped || (isTouchCoarseDevice() && isKasbonNoteFocused);
+            const isKasbonInputFocused = !!(activeEl && activeEl.classList && (activeEl.classList.contains('kd-kasbon-note-inp') || activeEl.classList.contains('kd-kasbon-received-input')));
+            const compactKasbon = heightDropped || (isTouchCoarseDevice() && isKasbonInputFocused);
             openKasbonModal.classList.toggle('kd-kasbon-kbd', compactKasbon);
         }
     }
@@ -2981,6 +3901,73 @@ $modalId = 'modalGroup_' . $groupKey;
         window.visualViewport.addEventListener('scroll', onViewportUpdate);
     }
 
+    function getTripDepClosedLabel(btn) {
+        const hasOld = btn && btn.getAttribute('data-has-old-kasbon') === '1';
+        return hasOld
+            ? '<i class="fas fa-wallet me-1"></i> Input Uang Driver / Gabung Kasbon'
+            : '<i class="fas fa-piggy-bank me-1"></i> + Deposit Pelanggan';
+    }
+
+    function syncTripProofUi(trxId) {
+        const paySel = document.getElementById('pay_sel_' + trxId);
+        const proofWrap = document.getElementById('trip_proof_wrap_' + trxId);
+        const proofInput = document.getElementById('trip_proof_' + trxId);
+        const proofBadge = document.getElementById('trip_proof_badge_' + trxId);
+        const proofHelp = document.getElementById('trip_proof_help_' + trxId);
+        const card = document.getElementById('settle_card_' + trxId);
+        if (!paySel || !proofWrap) return;
+
+        const slug = (paySel.value || '').toLowerCase();
+        const isNonCash = slug && slug !== 'cash' && slug !== 'kasbon' && slug !== 'deposit';
+
+        if (!isNonCash) {
+            proofWrap.classList.add('d-none');
+            if (proofInput) {
+                proofInput.removeAttribute('required');
+                proofInput.classList.remove('border-danger', 'border-success', 'border-2');
+            }
+            return;
+        }
+
+        // Cek apakah ada uang masuk pada kartu ini (order ini lunas / kasbon lama lunas / deposit baru)
+        const orderSettledInp = document.getElementById('order_settled_' + trxId);
+        const orderSettled = !orderSettledInp || orderSettledInp.value === '1';
+        const depInput = document.getElementById('deposit_val_' + trxId);
+        const depAmt = depInput ? parseFloat(depInput.value || '0') : 0;
+        const checkedOldCount = card ? card.querySelectorAll('.kd-trip-kasbon-chk:checked').length : 0;
+        const hasMoney = orderSettled || checkedOldCount > 0 || depAmt > 0;
+
+        proofWrap.classList.toggle('d-none', !hasMoney);
+        if (!hasMoney) {
+            if (proofInput) {
+                proofInput.removeAttribute('required');
+            }
+            return;
+        }
+
+        const hasFile = !!(proofInput && proofInput.files && proofInput.files.length > 0);
+        if (proofInput) {
+            proofInput.setAttribute('required', 'required');
+            proofInput.classList.toggle('border-success', hasFile);
+            proofInput.classList.toggle('border-danger', !hasFile);
+            proofInput.classList.add('border-2');
+        }
+        if (proofBadge) {
+            proofBadge.innerHTML = hasFile
+                ? '<span class="badge bg-success text-white"><i class="fas fa-check me-1"></i>Bukti Terlampir</span>'
+                : '<span class="badge bg-danger text-white"><i class="fas fa-asterisk me-1"></i>WAJIB UPLOAD</span>';
+        }
+        if (proofHelp) {
+            if (hasFile) {
+                proofHelp.className = 'text-success fw-semibold mt-1';
+                proofHelp.innerHTML = '<i class="fas fa-check-circle me-1"></i>Bukti siap diunggah: ' + proofInput.files[0].name;
+            } else {
+                proofHelp.className = 'text-danger fw-semibold mt-1';
+                proofHelp.innerHTML = '*Wajib lampirkan 1 screenshot bukti transfer pelanggan (berlaku untuk order ini, kasbon lama &amp; deposit jika ada).';
+            }
+        }
+    }
+
     window.toggleTripDepositPanel = function(trxId) {
         const panel = document.getElementById('deposit_panel_' + trxId);
         const btn = document.getElementById('btn_dep_' + trxId);
@@ -2999,7 +3986,7 @@ $modalId = 'modalGroup_' . $groupKey;
             if (btn) {
                 btn.setAttribute('aria-expanded', 'true');
                 btn.classList.add('is-open');
-                btn.innerHTML = '<i class="fas fa-times me-1"></i> Tutup form deposit';
+                btn.innerHTML = '<i class="fas fa-times me-1"></i> Tutup Panel Gabungan / Deposit';
             }
 
             const driverInput = document.getElementById('driver_money_' + trxId);
@@ -3012,6 +3999,8 @@ $modalId = 'modalGroup_' . $groupKey;
         } else {
             const driverInput = document.getElementById('driver_money_' + trxId);
             const depositInput = document.getElementById('deposit_val_' + trxId);
+            const orderSettledInput = document.getElementById('order_settled_' + trxId);
+            const paySel = document.getElementById('pay_sel_' + trxId);
             const summaryEl = document.getElementById('deposit_summary_' + trxId);
 
             if (driverInput) {
@@ -3019,6 +4008,17 @@ $modalId = 'modalGroup_' . $groupKey;
                 driverInput.value = '';
             }
             if (depositInput) depositInput.value = 0;
+            if (orderSettledInput) {
+                orderSettledInput.value = (paySel && paySel.value === 'kasbon') ? '0' : '1';
+            }
+            if (card) {
+                card.querySelectorAll('.kd-trip-kasbon-chk').forEach(function(cb) {
+                    cb.checked = false;
+                    cb.setAttribute('data-manual-skip', '0');
+                    const rowItem = cb.closest('.kd-trip-old-kasbon-item');
+                    if (rowItem) rowItem.classList.remove('is-checked');
+                });
+            }
             if (summaryEl) summaryEl.innerHTML = '';
 
             panel.classList.add('d-none');
@@ -3026,43 +4026,176 @@ $modalId = 'modalGroup_' . $groupKey;
             if (btn) {
                 btn.setAttribute('aria-expanded', 'false');
                 btn.classList.remove('is-open');
-                btn.innerHTML = '<i class="fas fa-piggy-bank me-1"></i> + Deposit Pelanggan';
+                btn.innerHTML = getTripDepClosedLabel(btn);
             }
 
+            syncTripProofUi(trxId);
             updateKeyboardCompactState(null);
             if (modalEl) recalcTripModalSummary(modalEl);
         }
     };
 
-    window.calcTripDeposit = function(trxId) {
+    window.calcTripAllocation = function(trxId) {
+        const card = document.getElementById('settle_card_' + trxId);
+        const paySel = document.getElementById('pay_sel_' + trxId);
         const driverInput = document.getElementById('driver_money_' + trxId);
         const depositInput = document.getElementById('deposit_val_' + trxId);
+        const orderSettledInput = document.getElementById('order_settled_' + trxId);
         const summaryEl = document.getElementById('deposit_summary_' + trxId);
-        if (!driverInput || !depositInput) return;
+        if (!card) return;
 
-        const payable = parseFloat(driverInput.getAttribute('data-payable') || '0');
-        const saldoAwal = parseFloat(driverInput.getAttribute('data-deposit-bal') || '0');
-        const rawTrimmed = driverInput.value.replace(/[^0-9]/g, '');
-        const driverMoney = rawTrimmed ? parseFloat(rawTrimmed) : 0;
+        const oldKasbonCheckboxes = Array.from(card.querySelectorAll('.kd-trip-kasbon-chk'));
+        const isKasbonMethod = !paySel || paySel.value === 'kasbon';
 
-        if (!rawTrimmed) {
-            depositInput.value = 0;
+        if (isKasbonMethod) {
+            oldKasbonCheckboxes.forEach(function(cb) {
+                cb.checked = false;
+                cb.setAttribute('data-manual-skip', '0');
+                const rowItem = cb.closest('.kd-trip-old-kasbon-item');
+                if (rowItem) rowItem.classList.remove('is-checked');
+            });
+            if (orderSettledInput) orderSettledInput.value = '0';
+            if (depositInput) depositInput.value = 0;
             if (summaryEl) summaryEl.innerHTML = '';
+            syncTripProofUi(trxId);
             return;
         }
 
-        if (driverMoney >= payable) {
-            const depositBaru = driverMoney - payable;
-            const saldoAkhir = saldoAwal + depositBaru;
-            const lunasOrder = payable;
-            depositInput.value = depositBaru;
+        const payable = parseFloat(card.getAttribute('data-payable') || (driverInput ? driverInput.getAttribute('data-payable') : '0') || '0');
+        const saldoAwal = parseFloat(card.getAttribute('data-deposit-bal') || (driverInput ? driverInput.getAttribute('data-deposit-bal') : '0') || '0');
+        const rawTrimmed = driverInput ? driverInput.value.replace(/[^0-9]/g, '') : '';
+
+        if (!rawTrimmed) {
+            if (orderSettledInput) orderSettledInput.value = '1';
+            if (depositInput) depositInput.value = 0;
+
+            let manualOldCount = 0;
+            let manualOldSum = 0;
+            oldKasbonCheckboxes.forEach(function(cb) {
+                const rowItem = cb.closest('.kd-trip-old-kasbon-item');
+                if (cb.checked) {
+                    manualOldCount++;
+                    manualOldSum = Math.round((manualOldSum + parseFloat(cb.getAttribute('data-amount') || '0')) * 100) / 100;
+                    if (rowItem) rowItem.classList.add('is-checked');
+                } else {
+                    if (rowItem) rowItem.classList.remove('is-checked');
+                }
+            });
 
             if (summaryEl) {
+                if (manualOldCount > 0) {
+                    const totalManual = Math.round((manualOldSum + payable) * 100) / 100;
+                    summaryEl.innerHTML = `
+                        <div class="kd-settle-result-grid">
+                            <div class="kd-settle-dep-box">
+                                <span class="kd-settle-dep-label">Kasbon Lalu (${manualOldCount} Nota)</span>
+                                <div class="kd-settle-dep-val text-primary kasir-num">Rp ${formatRupiahVal(manualOldSum)}</div>
+                            </div>
+                            <div class="kd-settle-dep-box">
+                                <span class="kd-settle-dep-label">Order Trip Ini</span>
+                                <div class="kd-settle-dep-val text-success kasir-num">Lunas Rp ${formatRupiahVal(payable)}</div>
+                            </div>
+                            <div class="kd-settle-dep-box">
+                                <span class="kd-settle-dep-label">Total Uang Masuk</span>
+                                <div class="kd-settle-dep-val text-dark kasir-num">Rp ${formatRupiahVal(totalManual)}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    summaryEl.innerHTML = '';
+                }
+            }
+            syncTripProofUi(trxId);
+            return;
+        }
+
+        // Alokasi FIFO Oldest-First: (1) Kasbon Sebelumnya -> (2) Order Ini -> (3) Deposit Pelanggan
+        const driverMoney = parseFloat(rawTrimmed);
+        let remaining = driverMoney;
+        let oldSettledCount = 0;
+        let oldSettledSum = 0;
+
+        oldKasbonCheckboxes.forEach(function(cb) {
+            const amt = parseFloat(cb.getAttribute('data-amount') || '0');
+            const skip = cb.getAttribute('data-manual-skip') === '1';
+            const rowItem = cb.closest('.kd-trip-old-kasbon-item');
+
+            if (!skip && remaining + 0.001 >= amt) {
+                cb.checked = true;
+                remaining = Math.max(0, Math.round((remaining - amt) * 100) / 100);
+                oldSettledCount++;
+                oldSettledSum = Math.round((oldSettledSum + amt) * 100) / 100;
+                if (rowItem) rowItem.classList.add('is-checked');
+            } else {
+                cb.checked = false;
+                if (rowItem) rowItem.classList.remove('is-checked');
+            }
+        });
+
+        let orderSettled = false;
+        let orderPaidAmt = 0;
+        if (remaining + 0.001 >= payable) {
+            orderSettled = true;
+            orderPaidAmt = payable;
+            remaining = Math.max(0, Math.round((remaining - payable) * 100) / 100);
+        }
+
+        if (orderSettledInput) {
+            orderSettledInput.value = orderSettled ? '1' : '0';
+        }
+
+        const depositBaru = remaining > 0 ? remaining : 0;
+        if (depositInput) {
+            depositInput.value = depositBaru;
+        }
+        const saldoAkhir = Math.round((saldoAwal + depositBaru) * 100) / 100;
+
+        if (summaryEl) {
+            if (oldKasbonCheckboxes.length > 0) {
+                const orderBoxHtml = orderSettled
+                    ? `<div class="kd-settle-dep-val text-success kasir-num">Lunas Rp ${formatRupiahVal(orderPaidAmt)}</div>`
+                    : `<div class="kd-settle-dep-val kasir-num" style="color: #b45309;">Jadi Kasbon (Rp ${formatRupiahVal(payable)})</div>`;
+
+                const warnHtml = (!orderSettled && oldSettledCount === 0)
+                    ? `<div class="alert alert-warning alert-permanent py-2 px-3 mt-2 mb-0 d-flex align-items-center gap-2" style="font-size: 0.82rem;">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Uang diterima (<strong>Rp ${formatRupiahVal(driverMoney)}</strong>) belum cukup melunasi 1 nota penuh. Order ini dicatat <strong>Kasbon</strong> dan uang sebesar Rp ${formatRupiahVal(depositBaru)} masuk ke <strong>Saldo Deposit</strong>.</span>
+                       </div>`
+                    : (!orderSettled
+                        ? `<div class="alert alert-info alert-permanent py-2 px-3 mt-2 mb-0 d-flex align-items-center gap-2" style="font-size: 0.82rem;">
+                                <i class="fas fa-history"></i>
+                                <span>Prioritas FIFO: <strong>${oldSettledCount} kasbon lama lunas (Rp ${formatRupiahVal(oldSettledSum)})</strong>. Sisa uang tidak cukup untuk order ini (Rp ${formatRupiahVal(payable)}), sehingga order ini dicatat <strong>Kasbon</strong>${depositBaru > 0 ? ` dan sisa <strong>+Rp ${formatRupiahVal(depositBaru)}</strong> masuk Deposit` : ''}.</span>
+                           </div>`
+                        : '');
+
+                summaryEl.innerHTML = `
+                    <div class="kd-settle-result-grid kd-settle-result-grid--4">
+                        <div class="kd-settle-dep-box">
+                            <span class="kd-settle-dep-label">Kasbon Lalu (${oldSettledCount} Nota)</span>
+                            <div class="kd-settle-dep-val ${oldSettledSum > 0 ? 'text-primary' : 'text-muted'} kasir-num">Rp ${formatRupiahVal(oldSettledSum)}</div>
+                        </div>
+                        <div class="kd-settle-dep-box">
+                            <span class="kd-settle-dep-label">Order Trip Ini</span>
+                            ${orderBoxHtml}
+                        </div>
+                        <div class="kd-settle-dep-box">
+                            <span class="kd-settle-dep-label">Masuk Deposit</span>
+                            <div class="kd-settle-dep-val kasir-num" style="color: #0f766e;">+Rp ${formatRupiahVal(depositBaru)}</div>
+                            <div class="small text-muted kasir-num" style="font-size: 0.72rem;">Saldo baru: Rp ${formatRupiahVal(saldoAkhir)}</div>
+                        </div>
+                        <div class="kd-settle-dep-box">
+                            <span class="kd-settle-dep-label">Total Uang Masuk</span>
+                            <div class="kd-settle-dep-val text-dark kasir-num">Rp ${formatRupiahVal(driverMoney)}</div>
+                        </div>
+                    </div>
+                    ${warnHtml}
+                `;
+            } else if (orderSettled) {
                 summaryEl.innerHTML = `
                     <div class="kd-settle-result-grid">
                         <div class="kd-settle-dep-box">
                             <span class="kd-settle-dep-label">Lunas Untuk Order Ini</span>
-                            <div class="kd-settle-dep-val text-success kasir-num">Rp ${formatRupiahVal(lunasOrder)}</div>
+                            <div class="kd-settle-dep-val text-success kasir-num">Rp ${formatRupiahVal(orderPaidAmt)}</div>
                         </div>
                         <div class="kd-settle-dep-box">
                             <span class="kd-settle-dep-label">Lebih Bayar, Masuk Deposit</span>
@@ -3074,20 +4207,20 @@ $modalId = 'modalGroup_' . $groupKey;
                         </div>
                     </div>
                 `;
-            }
-        } else {
-            depositInput.value = 0;
-            const kurang = payable - driverMoney;
-            if (summaryEl) {
+            } else {
+                const kurang = Math.round((payable - driverMoney) * 100) / 100;
                 summaryEl.innerHTML = `
                     <div class="alert alert-warning alert-permanent py-2 px-3 mb-0 d-flex align-items-center gap-2" style="font-size: 0.85rem;">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <span>Uang diterima <strong>kurang Rp ${formatRupiahVal(kurang)}</strong> dari tagihan (Rp ${formatRupiahVal(payable)}). Tidak ada kelebihan untuk disimpan sebagai deposit.</span>
+                        <span>Uang diterima <strong>kurang Rp ${formatRupiahVal(kurang)}</strong> dari tagihan (Rp ${formatRupiahVal(payable)}). Order ini akan dicatat <strong>Kasbon</strong> dan uang Rp ${formatRupiahVal(depositBaru)} tersimpan ke Saldo Deposit.</span>
                     </div>
                 `;
             }
         }
+
+        syncTripProofUi(trxId);
     };
+    window.calcTripDeposit = window.calcTripAllocation;
 
     window.toggleTripDepositBtn = function(trxId) {
         const paySel = document.getElementById('pay_sel_' + trxId);
@@ -3096,12 +4229,43 @@ $modalId = 'modalGroup_' . $groupKey;
         const card = document.getElementById('settle_card_' + trxId);
         const kasbonAlert = document.getElementById('kasbon_alert_' + trxId);
         const dateWrap = document.getElementById('date_wrap_' + trxId);
+        const dateModeSel = document.getElementById('date_mode_sel_' + trxId);
+        const dateNotaBtn = document.getElementById('date_nota_btn_' + trxId);
+        const orderSettledInput = document.getElementById('order_settled_' + trxId);
+        const driverHelp = document.getElementById('driver_help_' + trxId);
+        const driverLbl = document.getElementById('driver_money_lbl_' + trxId);
         if (!paySel) return;
 
-        const isKasbon = (paySel.value === 'kasbon');
+        const slug = (paySel.value || '').toLowerCase();
+        const isKasbon = (slug === 'kasbon');
+        const isCash = (slug === 'cash');
 
         if (kasbonAlert) kasbonAlert.classList.toggle('d-none', !isKasbon);
         if (dateWrap) dateWrap.classList.toggle('d-none', isKasbon);
+
+        if (!isKasbon && dateNotaBtn && dateModeSel) {
+            if (isCash) {
+                dateNotaBtn.classList.add('d-none');
+                dateNotaBtn.disabled = true;
+                dateModeSel.value = 'today';
+                syncCardDateButtons(trxId);
+            } else {
+                dateNotaBtn.classList.remove('d-none');
+                dateNotaBtn.disabled = false;
+            }
+        }
+
+        if (driverLbl && driverHelp) {
+            if (isCash) {
+                driverLbl.textContent = 'Uang Tunai Diterima Dari Driver';
+                driverHelp.textContent = 'Ketik total uang tunai yang diserahkan driver / pelanggan';
+            } else if (!isKasbon) {
+                const selectedOpt = paySel.options[paySel.selectedIndex];
+                const label = selectedOpt ? (selectedOpt.getAttribute('data-label') || selectedOpt.text) : slug.toUpperCase();
+                driverLbl.textContent = 'Nominal ' + label + ' Diterima';
+                driverHelp.textContent = 'Ketik total nominal transfer / ' + label + ' yang masuk';
+            }
+        }
 
         if (isKasbon) {
             const driverInput = document.getElementById('driver_money_' + trxId);
@@ -3112,19 +4276,31 @@ $modalId = 'modalGroup_' . $groupKey;
                 driverInput.value = '';
             }
             if (depositInput) depositInput.value = 0;
+            if (orderSettledInput) orderSettledInput.value = '0';
             if (summaryEl) summaryEl.innerHTML = '';
+
+            if (card) {
+                card.querySelectorAll('.kd-trip-kasbon-chk').forEach(function(cb) {
+                    cb.checked = false;
+                    cb.setAttribute('data-manual-skip', '0');
+                    const rowItem = cb.closest('.kd-trip-old-kasbon-item');
+                    if (rowItem) rowItem.classList.remove('is-checked');
+                });
+                card.classList.remove('kd-settle-card--deposit-open');
+            }
 
             if (btnDep) {
                 btnDep.classList.add('d-none');
                 btnDep.classList.remove('is-open');
                 btnDep.setAttribute('aria-expanded', 'false');
-                btnDep.innerHTML = '<i class="fas fa-piggy-bank me-1"></i> + Deposit Pelanggan';
+                btnDep.innerHTML = getTripDepClosedLabel(btnDep);
             }
             if (panel) panel.classList.add('d-none');
-            if (card) card.classList.remove('kd-settle-card--deposit-open');
+            syncTripProofUi(trxId);
             updateKeyboardCompactState(null);
         } else {
             if (btnDep) btnDep.classList.remove('d-none');
+            calcTripAllocation(trxId);
         }
     };
 
@@ -3165,7 +4341,9 @@ $modalId = 'modalGroup_' . $groupKey;
 
         let cashTotal = 0;
         let kasbonTotal = 0;
+        let oldKasbonTotal = 0;
         let depositTotal = 0;
+        let missingProofCount = 0;
         const nonCashTotals = {};
 
         modalEl.querySelectorAll('.kd-settle-card').forEach(function(card) {
@@ -3175,36 +4353,72 @@ $modalId = 'modalGroup_' . $groupKey;
 
             const depInput = document.getElementById('deposit_val_' + trxId);
             const depAmt = depInput ? parseFloat(depInput.value || '0') : 0;
-            depositTotal += depAmt;
+            depositTotal = Math.round((depositTotal + depAmt) * 100) / 100;
 
-            if (isFullDeposit) return;
+            if (isFullDeposit) {
+                cashTotal = Math.round((cashTotal + depAmt) * 100) / 100;
+                return;
+            }
 
             const paySel = document.getElementById('pay_sel_' + trxId);
             if (!paySel || !paySel.value) return;
 
             const slug = paySel.value.toLowerCase();
             if (slug === 'kasbon') {
-                kasbonTotal += payable;
-            } else if (slug === 'cash') {
-                cashTotal += payable;
+                kasbonTotal = Math.round((kasbonTotal + payable) * 100) / 100;
+                return;
+            }
+
+            const orderSettledInp = document.getElementById('order_settled_' + trxId);
+            const isOrderSettled = !orderSettledInp || orderSettledInp.value === '1';
+            const orderPaid = isOrderSettled ? payable : 0;
+            if (!isOrderSettled) {
+                kasbonTotal = Math.round((kasbonTotal + payable) * 100) / 100;
+            }
+
+            let cardOldSum = 0;
+            card.querySelectorAll('.kd-trip-kasbon-chk:checked').forEach(function(cb) {
+                cardOldSum = Math.round((cardOldSum + parseFloat(cb.getAttribute('data-amount') || '0')) * 100) / 100;
+            });
+            oldKasbonTotal = Math.round((oldKasbonTotal + cardOldSum) * 100) / 100;
+
+            const cardMoney = Math.round((orderPaid + cardOldSum + depAmt) * 100) / 100;
+
+            if (slug === 'cash') {
+                cashTotal = Math.round((cashTotal + cardMoney) * 100) / 100;
             } else {
                 const selectedOpt = paySel.options[paySel.selectedIndex];
                 const label = selectedOpt ? (selectedOpt.getAttribute('data-label') || selectedOpt.text) : slug.toUpperCase();
                 if (!nonCashTotals[slug]) {
                     nonCashTotals[slug] = { label: label, total: 0 };
                 }
-                nonCashTotals[slug].total += payable;
+                nonCashTotals[slug].total = Math.round((nonCashTotals[slug].total + cardMoney) * 100) / 100;
+
+                if (cardMoney > 0) {
+                    const proofInp = document.getElementById('trip_proof_' + trxId);
+                    if (!proofInp || !proofInp.files || proofInp.files.length === 0) {
+                        missingProofCount++;
+                    }
+                }
             }
         });
 
         const elCash = modalEl.querySelector('[data-sum-cash]');
         const elNonCashWrap = modalEl.querySelector('[data-sum-noncash-wrap]');
+        const elOldKasbonWrap = modalEl.querySelector('[data-sum-oldkasbon-wrap]');
+        const elOldKasbon = modalEl.querySelector('[data-sum-oldkasbon]');
         const elKasbon = modalEl.querySelector('[data-sum-kasbon]');
         const elDepWrap = modalEl.querySelector('[data-sum-deposit-wrap]');
         const elDep = modalEl.querySelector('[data-sum-deposit]');
+        const submitBtn = modalEl.querySelector('.kd-settle-submit-btn');
 
         if (elCash) elCash.textContent = 'Rp ' + formatRupiahVal(cashTotal);
         if (elKasbon) elKasbon.textContent = 'Rp ' + formatRupiahVal(kasbonTotal);
+
+        if (elOldKasbonWrap && elOldKasbon) {
+            elOldKasbonWrap.classList.toggle('d-none', oldKasbonTotal <= 0);
+            elOldKasbon.textContent = 'Rp ' + formatRupiahVal(oldKasbonTotal);
+        }
 
         if (elNonCashWrap) {
             let html = '';
@@ -3225,6 +4439,22 @@ $modalId = 'modalGroup_' . $groupKey;
         if (elDepWrap && elDep) {
             elDepWrap.classList.toggle('d-none', depositTotal <= 0);
             elDep.textContent = '+Rp ' + formatRupiahVal(depositTotal);
+        }
+
+        if (submitBtn) {
+            const settleForm = modalEl.querySelector('.kd-settle-form');
+            const isSubmitting = settleForm && settleForm.dataset.kdSubmitting === '1';
+            if (!isSubmitting) {
+                if (missingProofCount > 0) {
+                    submitBtn.disabled = true;
+                    submitBtn.className = 'btn btn-secondary text-white fw-bold kd-settle-submit-btn opacity-75';
+                    submitBtn.innerHTML = `<i class="fas fa-lock me-1"></i> Terkunci (Upload ${missingProofCount} Bukti Transfer)`;
+                } else {
+                    submitBtn.disabled = false;
+                    submitBtn.className = 'btn kd-settle-submit-btn';
+                    submitBtn.innerHTML = '<i class="fas fa-check-circle me-1"></i> Simpan Semua Pelunasan &amp; Selesaikan';
+                }
+            }
         }
     };
 
@@ -3266,7 +4496,7 @@ $modalId = 'modalGroup_' . $groupKey;
 
     // Cegah tombol isi cepat mengambil fokus agar keyboard tablet tidak turun saat diketuk
     const preventFocusLossForQuickBtn = function(e) {
-        if (e.target.closest('.kd-settle-quick-btn')) {
+        if (e.target.closest('.kd-settle-quick-btn, .kd-kasbon-quick-btn')) {
             e.preventDefault();
         }
     };
@@ -3282,13 +4512,16 @@ $modalId = 'modalGroup_' . $groupKey;
             const panel = e.target.closest('.kd-settle-deposit-panel');
             const modalEl = e.target.closest('.kd-settle-modal');
             scheduleDepositScroll(modalEl, panel);
-        } else if (e.target.classList && e.target.classList.contains('kd-kasbon-note-inp')) {
+        } else if (e.target.classList && (e.target.classList.contains('kd-kasbon-note-inp') || e.target.classList.contains('kd-kasbon-received-input'))) {
+            if (e.target.value === '0') {
+                selectAllInputSafely(e.target);
+            }
             updateKeyboardCompactState(e.target);
         }
     });
 
     document.addEventListener('focusout', function(e) {
-        if (e.target.classList && (e.target.classList.contains('kd-settle-driver-input') || e.target.classList.contains('kd-kasbon-note-inp'))) {
+        if (e.target.classList && (e.target.classList.contains('kd-settle-driver-input') || e.target.classList.contains('kd-kasbon-note-inp') || e.target.classList.contains('kd-kasbon-received-input'))) {
             setTimeout(function() {
                 updateKeyboardCompactState();
             }, 60);
@@ -3355,11 +4588,18 @@ $modalId = 'modalGroup_' . $groupKey;
             return;
         }
 
-        // 6. Tombol Cepat Nominal Deposit
+        // 6. Tombol Cepat Nominal Deposit & Tagihan Gabungan
         const quickBtn = e.target.closest('.kd-settle-quick-btn');
         if (quickBtn) {
             const trxId = quickBtn.getAttribute('data-trx-id');
             const amt = parseFloat(quickBtn.getAttribute('data-amount') || '0');
+            const mode = quickBtn.getAttribute('data-mode') || 'fifo';
+            const card = document.getElementById('settle_card_' + trxId);
+            if (card) {
+                card.querySelectorAll('.kd-trip-kasbon-chk').forEach(function(cb) {
+                    cb.setAttribute('data-manual-skip', mode === 'order-only' ? '1' : '0');
+                });
+            }
             const driverInput = document.getElementById('driver_money_' + trxId);
             if (driverInput) {
                 driverInput.value = amt > 0 ? formatRupiahVal(amt) : '0';
@@ -3368,7 +4608,46 @@ $modalId = 'modalGroup_' . $groupKey;
             return;
         }
 
-        // 7. Tap seluruh baris pada modal Daftar Kasbon (area sentuh luas di tablet)
+        // 7. Toggle Panel Kelebihan Bayar -> Deposit pada modal Daftar Kasbon
+        const bulkDepBtn = e.target.closest('.kd-kasbon-deposit-btn');
+        if (bulkDepBtn) {
+            const gKey = bulkDepBtn.getAttribute('data-group-key');
+            if (gKey) toggleBulkDepositPanel(gKey);
+            return;
+        }
+
+        // 8. Tombol "Selesai" di panel deposit modal Daftar Kasbon
+        const bulkDoneBtn = e.target.closest('.kd-kasbon-dep-done-btn');
+        if (bulkDoneBtn) {
+            const gKey = bulkDoneBtn.getAttribute('data-group-key');
+            const recvInp = document.getElementById('bulk_received_money_' + gKey);
+            if (recvInp) recvInp.blur();
+            updateKeyboardCompactState(null);
+            return;
+        }
+
+        // 9. Tombol Isi Cepat Nominal di modal Daftar Kasbon
+        const bulkQuickBtn = e.target.closest('.kd-kasbon-quick-btn');
+        if (bulkQuickBtn) {
+            const gKey = bulkQuickBtn.getAttribute('data-group-key');
+            const amt = parseFloat(bulkQuickBtn.getAttribute('data-amount') || '0');
+            const recvInp = document.getElementById('bulk_received_money_' + gKey);
+            if (recvInp) {
+                recvInp.value = amt > 0 ? formatRupiahVal(amt) : '0';
+                recvInp.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            return;
+        }
+
+        // 10. Tombol "Pilih Otomatis Sesuai Saldo" (FIFO) pada modal Daftar Kasbon
+        const autoFifoBtn = e.target.closest('.kd-kasbon-auto-fifo-btn');
+        if (autoFifoBtn) {
+            const gKey = autoFifoBtn.getAttribute('data-group-key');
+            if (gKey) autoSelectKasbonByDeposit(gKey);
+            return;
+        }
+
+        // 11. Tap seluruh baris pada modal Daftar Kasbon (area sentuh luas di tablet)
         const kasbonRow = e.target.closest('.kd-kasbon-row');
         if (kasbonRow) {
             if (e.target.closest('input, a, button, label, select, textarea')) return;
@@ -3382,7 +4661,7 @@ $modalId = 'modalGroup_' . $groupKey;
     });
 
     document.addEventListener('keydown', function(e) {
-        if (e.target.classList && e.target.classList.contains('kd-settle-driver-input') && e.key === 'Enter') {
+        if (e.target.classList && (e.target.classList.contains('kd-settle-driver-input') || e.target.classList.contains('kd-kasbon-received-input')) && e.key === 'Enter') {
             e.preventDefault();
             e.target.blur();
             updateKeyboardCompactState(null);
@@ -3417,6 +4696,31 @@ $modalId = 'modalGroup_' . $groupKey;
             return;
         }
 
+        if (e.target.classList.contains('kd-trip-kasbon-chk')) {
+            const cb = e.target;
+            const trxId = cb.getAttribute('data-trx-id');
+            const driverInput = document.getElementById('driver_money_' + trxId);
+            const hasMoneyInput = !!(driverInput && driverInput.value.replace(/[^0-9]/g, '').length > 0);
+
+            if (hasMoneyInput) {
+                cb.setAttribute('data-manual-skip', cb.checked ? '0' : '1');
+            }
+            if (trxId) {
+                calcTripAllocation(trxId);
+                recalcTripModalSummary(cb.closest('.kd-settle-modal'));
+            }
+            return;
+        }
+
+        if (e.target.classList.contains('kd-settle-proof-inp')) {
+            const trxId = e.target.getAttribute('data-trx-id');
+            if (trxId) {
+                syncTripProofUi(trxId);
+                recalcTripModalSummary(e.target.closest('.kd-settle-modal'));
+            }
+            return;
+        }
+
         const kasbonModal = e.target.closest('.kasbon-bulk-modal');
         if (!kasbonModal) return;
 
@@ -3433,6 +4737,11 @@ $modalId = 'modalGroup_' . $groupKey;
             e.target.classList.contains('kd-kasbon-proof-inp')
         ) {
             syncBulkModalState(kasbonModal);
+            if (e.target.classList.contains('kd-kasbon-method-sel') && e.target.value === 'deposit') {
+                const gKey = kasbonModal.getAttribute('data-group-key') || '';
+                const depPanel = gKey ? document.getElementById('bulk_use_deposit_panel_' + gKey) : null;
+                scrollKasbonPanelIntoView(kasbonModal, depPanel);
+            }
         }
     });
 
@@ -3467,6 +4776,36 @@ $modalId = 'modalGroup_' . $groupKey;
                 calcTripDeposit(trxId);
                 recalcTripModalSummary(inputEl.closest('.kd-settle-modal'));
             }
+            return;
+        }
+
+        if (e.target.classList.contains('kd-kasbon-received-input')) {
+            const inputEl = e.target;
+            const rawVal = inputEl.value;
+            const selPos = inputEl.selectionStart !== null ? inputEl.selectionStart : rawVal.length;
+            const digitsBeforeCursor = rawVal.slice(0, selPos).replace(/[^0-9]/g, '').length;
+            const cleanDigits = rawVal.replace(/[^0-9]/g, '');
+            const formatted = cleanDigits ? formatRupiahVal(parseFloat(cleanDigits)) : '';
+
+            if (rawVal !== formatted) {
+                inputEl.value = formatted;
+                if (document.activeElement === inputEl && typeof inputEl.setSelectionRange === 'function') {
+                    let newPos = 0;
+                    let seenDigits = 0;
+                    while (newPos < formatted.length && seenDigits < digitsBeforeCursor) {
+                        if (/[0-9]/.test(formatted.charAt(newPos))) {
+                            seenDigits++;
+                        }
+                        newPos++;
+                    }
+                    try { inputEl.setSelectionRange(newPos, newPos); } catch (_) {}
+                }
+            }
+
+            const modalEl = inputEl.closest('.kasbon-bulk-modal');
+            if (modalEl) {
+                syncBulkModalState(modalEl);
+            }
         }
     });
 
@@ -3480,6 +4819,9 @@ $modalId = 'modalGroup_' . $groupKey;
             }
 
             let firstInvalidCard = null;
+            let firstMissingProofCard = null;
+            let missingProofLabel = '';
+
             settleForm.querySelectorAll('.kd-settle-pay-select').forEach(function(sel) {
                 const trxId = sel.getAttribute('data-trx-id');
                 const card = document.getElementById('settle_card_' + trxId);
@@ -3488,6 +4830,27 @@ $modalId = 'modalGroup_' . $groupKey;
                     if (card) card.classList.add('kd-settle-card--unselected');
                     if (msg) msg.classList.remove('d-none');
                     if (!firstInvalidCard) firstInvalidCard = card;
+                    return;
+                }
+
+                const slug = sel.value.toLowerCase();
+                if (slug !== 'cash' && slug !== 'kasbon' && slug !== 'deposit') {
+                    const orderSettledInp = document.getElementById('order_settled_' + trxId);
+                    const isOrderSettled = !orderSettledInp || orderSettledInp.value === '1';
+                    const depInput = document.getElementById('deposit_val_' + trxId);
+                    const depAmt = depInput ? parseFloat(depInput.value || '0') : 0;
+                    const checkedOld = card ? card.querySelectorAll('.kd-trip-kasbon-chk:checked').length : 0;
+                    const hasMoney = isOrderSettled || checkedOld > 0 || depAmt > 0;
+
+                    if (hasMoney) {
+                        const proofInp = document.getElementById('trip_proof_' + trxId);
+                        if (!proofInp || !proofInp.files || proofInp.files.length === 0) {
+                            if (!firstMissingProofCard) {
+                                firstMissingProofCard = card;
+                                missingProofLabel = slug.toUpperCase();
+                            }
+                        }
+                    }
                 }
             });
 
@@ -3498,6 +4861,17 @@ $modalId = 'modalGroup_' . $groupKey;
                     'warning',
                     'Metode Pembayaran Belum Dipilih',
                     'Silakan pilih metode pembayaran untuk seluruh pesanan sebelum menyimpan.'
+                );
+                return false;
+            }
+
+            if (firstMissingProofCard) {
+                e.preventDefault();
+                firstMissingProofCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                kasirNotify(
+                    'warning',
+                    'Bukti Transfer Wajib Diunggah',
+                    `Pembayaran Non-Tunai (${missingProofLabel}) wajib melampirkan 1 foto/screenshot bukti transfer WhatsApp sebelum menyimpan.`
                 );
                 return false;
             }
@@ -3529,6 +4903,12 @@ $modalId = 'modalGroup_' . $groupKey;
             const method = methodSelect ? methodSelect.value : 'cash';
             const proofInput = modalEl ? modalEl.querySelector('.kd-kasbon-proof-inp') : null;
             const checkedBoxes = bulkForm.querySelectorAll('input[name="transaction_ids[]"]:checked');
+            const depositBalance = modalEl ? parseFloat(modalEl.getAttribute('data-deposit-balance') || '0') : 0;
+
+            let selectedTotal = 0;
+            checkedBoxes.forEach(function(cb) {
+                selectedTotal = Math.round((selectedTotal + parseFloat(cb.getAttribute('data-amount') || '0')) * 100) / 100;
+            });
 
             if (checkedBoxes.length === 0) {
                 e.preventDefault();
@@ -3540,7 +4920,18 @@ $modalId = 'modalGroup_' . $groupKey;
                 return false;
             }
 
-            if (method !== 'cash' && (!proofInput || !proofInput.files || proofInput.files.length === 0)) {
+            if (method === 'deposit' && selectedTotal > depositBalance + 0.001) {
+                e.preventDefault();
+                const shortfall = Math.round((selectedTotal - depositBalance) * 100) / 100;
+                kasirNotify(
+                    'warning',
+                    'Saldo Deposit Tidak Mencukupi',
+                    `Total ${checkedBoxes.length} nota terpilih (Rp ${formatRupiahVal(selectedTotal)}) melebihi saldo deposit (Rp ${formatRupiahVal(depositBalance)}), kurang Rp ${formatRupiahVal(shortfall)}. Kurangi nota yang dicentang atau klik "Pilih Otomatis Sesuai Saldo".`
+                );
+                return false;
+            }
+
+            if (method !== 'cash' && method !== 'deposit' && (!proofInput || !proofInput.files || proofInput.files.length === 0)) {
                 e.preventDefault();
                 kasirNotify(
                     'warning',
@@ -3579,9 +4970,11 @@ $modalId = 'modalGroup_' . $groupKey;
                 const q = this.value.trim().toLowerCase();
                 let visibleCount = 0;
                 rows.forEach(function(row) {
-                    const name = (row.getAttribute('data-customer-name') || '').toLowerCase();
-                    const phone = (row.getAttribute('data-customer-phone') || '').toLowerCase();
-                    const match = !q || name.includes(q) || phone.includes(q);
+                    const haystack = (
+                        row.getAttribute('data-search') ||
+                        ((row.getAttribute('data-customer-name') || '') + ' ' + (row.getAttribute('data-customer-phone') || ''))
+                    ).toLowerCase();
+                    const match = !q || haystack.includes(q);
                     row.classList.toggle('d-none', !match);
                     if (match) visibleCount++;
                 });

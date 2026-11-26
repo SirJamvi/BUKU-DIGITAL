@@ -125,7 +125,10 @@ class DashboardService
                     ->whereColumn('cash_flow.reference_id', 'transactions.id')
                     ->where(function ($sub) {
                         $sub->where('cash_flow.flow_type', 'debt_settlement')
-                            ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                            ->orWhere(function ($legacy) {
+                                $legacy->whereNull('cash_flow.flow_type')
+                                       ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                            });
                     });
             })
             ->sum('total_amount');
@@ -142,7 +145,10 @@ class DashboardService
                     ->whereColumn('cash_flow.reference_id', 'transactions.id')
                     ->where(function ($sub) {
                         $sub->where('cash_flow.flow_type', 'debt_settlement')
-                            ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                            ->orWhere(function ($legacy) {
+                                $legacy->whereNull('cash_flow.flow_type')
+                                       ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                            });
                     });
             })
             ->sum('total_amount');
@@ -154,7 +160,10 @@ class DashboardService
             ->whereDate('date', $targetDate)
             ->where(function ($q) {
                 $q->where('flow_type', 'debt_settlement')
-                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+                  ->orWhere(function ($legacy) {
+                      $legacy->whereNull('flow_type')
+                             ->where('description', 'LIKE', '%Pelunasan%');
+                  });
             })
             ->sum('amount');
 
@@ -164,7 +173,10 @@ class DashboardService
             ->whereDate('date', $targetDate)
             ->where(function ($q) {
                 $q->where('flow_type', 'debt_settlement')
-                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+                  ->orWhere(function ($legacy) {
+                      $legacy->whereNull('flow_type')
+                             ->where('description', 'LIKE', '%Pelunasan%');
+                  });
             })
             ->sum('amount');
 
@@ -174,7 +186,10 @@ class DashboardService
             ->whereDate('date', $targetDate)
             ->where(function ($q) {
                 $q->where('flow_type', 'debt_settlement')
-                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+                  ->orWhere(function ($legacy) {
+                      $legacy->whereNull('flow_type')
+                             ->where('description', 'LIKE', '%Pelunasan%');
+                  });
             })
             ->sum('amount');
 
@@ -519,7 +534,10 @@ class DashboardService
                 ->whereDate('cash_flow.date', $filterDate)
                 ->where(function ($q) {
                     $q->where('cash_flow.flow_type', 'debt_settlement')
-                      ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                      ->orWhere(function ($legacy) {
+                          $legacy->whereNull('cash_flow.flow_type')
+                                 ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                      });
                 })
                 ->sum('amount');
 
@@ -660,7 +678,10 @@ class DashboardService
                         ->whereColumn('cash_flow.reference_id', 'transactions.id')
                         ->where(function ($sub) {
                             $sub->where('cash_flow.flow_type', 'debt_settlement')
-                                ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                                ->orWhere(function ($legacy) {
+                                    $legacy->whereNull('cash_flow.flow_type')
+                                           ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                                });
                         });
                 })
                 ->sum('total_amount');
@@ -678,7 +699,10 @@ class DashboardService
                         ->whereColumn('cash_flow.reference_id', 'transactions.id')
                         ->where(function ($sub) {
                             $sub->where('cash_flow.flow_type', 'debt_settlement')
-                                ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                                ->orWhere(function ($legacy) {
+                                    $legacy->whereNull('cash_flow.flow_type')
+                                           ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                                });
                         });
                 })
                 ->sum('total_amount');
@@ -693,7 +717,10 @@ class DashboardService
                 ->whereDate('cash_flow.date', $filterDate)
                 ->where(function ($q) {
                     $q->where('cash_flow.flow_type', 'debt_settlement')
-                      ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                      ->orWhere(function ($legacy) {
+                          $legacy->whereNull('cash_flow.flow_type')
+                                 ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                      });
                 })
                 ->sum('amount');
 
@@ -704,7 +731,10 @@ class DashboardService
                 ->whereDate('cash_flow.date', $filterDate)
                 ->where(function ($q) {
                     $q->where('cash_flow.flow_type', 'debt_settlement')
-                      ->orWhere('cash_flow.description', 'LIKE', '%Pelunasan%');
+                      ->orWhere(function ($legacy) {
+                          $legacy->whereNull('cash_flow.flow_type')
+                                 ->where('cash_flow.description', 'LIKE', '%Pelunasan%');
+                      });
                 })
                 ->sum('amount');
 
@@ -807,7 +837,10 @@ class DashboardService
             ->where('type', 'income')
             ->where(function ($q) {
                 $q->where('flow_type', 'debt_settlement')
-                  ->orWhere('description', 'LIKE', '%Pelunasan%');
+                  ->orWhere(function ($legacy) {
+                      $legacy->whereNull('flow_type')
+                             ->where('description', 'LIKE', '%Pelunasan%');
+                  });
             })
             ->whereDate('created_at', $filterDate)
             ->orderBy('created_at', 'desc')

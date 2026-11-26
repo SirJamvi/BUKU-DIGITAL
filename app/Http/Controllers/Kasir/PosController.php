@@ -84,8 +84,9 @@ class PosController extends Controller
      */
     public function deliveryReceipt(string $tripCode): View
     {
+        $businessId = Auth::user()->business_id;
         $transactions = Transaction::with(['customer', 'details.product', 'driver', 'createdBy'])
-            ->where('business_id', Auth::user()->business_id)
+            ->where('business_id', $businessId)
             ->where('delivery_trip_code', $tripCode)
             ->get();
 
@@ -93,7 +94,35 @@ class PosController extends Controller
             abort(404, 'Data pengiriman tidak ditemukan.');
         }
 
-        return view('kasir.pos.delivery_receipt', compact('tripCode', 'transactions'));
+        $customerIds = $transactions->pluck('customer_id')->filter()->unique()->values();
+        $tripTxIds = $transactions->pluck('id')->all();
+
+        $previousKasbonsByCustomer = collect();
+        if ($customerIds->isNotEmpty()) {
+            $previousKasbonsByCustomer = Transaction::withoutGlobalScope('branch')
+                ->with('branch')
+                ->where('business_id', $businessId)
+                ->whereIn('customer_id', $customerIds)
+                ->whereNotIn('id', $tripTxIds)
+                ->where('type', 'sale')
+                ->where('status', '!=', 'cancelled')
+                ->whereNull('voided_at')
+                ->where('payment_status', 'pending')
+                ->where(function ($q) {
+                    $q->whereNull('order_status')
+                      ->orWhere('order_status', '!=', 'delivering');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('delivery_status')
+                      ->orWhere('delivery_status', '!=', 'delivering');
+                })
+                ->orderBy('transaction_date', 'asc')
+                ->orderBy('id', 'asc')
+                ->get()
+                ->groupBy('customer_id');
+        }
+
+        return view('kasir.pos.delivery_receipt', compact('tripCode', 'transactions', 'previousKasbonsByCustomer'));
     }
 
     /**
