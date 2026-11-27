@@ -2,10 +2,8 @@
 
 namespace App\Http\Requests\Admin;
 
-use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class StoreAdminDepositRequest extends FormRequest
@@ -54,17 +52,5 @@ class StoreAdminDepositRequest extends FormRequest
             'amount.required'         => 'Nominal deposit wajib diisi.',
             'amount.min'              => 'Nominal deposit minimal Rp 1.',
         ];
-    }
-
-    protected function failedValidation(Validator $validator): void
-    {
-        Log::warning('[DEPOSIT_DEBUG] ADMIN_STORE_VALIDATION_FAILED', [
-            'user_id'     => Auth::id(),
-            'business_id' => Auth::user()?->business_id,
-            'input'       => $this->except(['_token']),
-            'errors'      => $validator->errors()->toArray(),
-        ]);
-
-        parent::failedValidation($validator);
     }
 }

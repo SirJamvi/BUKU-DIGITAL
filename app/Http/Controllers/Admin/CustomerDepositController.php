@@ -17,7 +17,6 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class CustomerDepositController extends Controller
@@ -121,17 +120,6 @@ class CustomerDepositController extends Controller
             ->orderBy('name')
             ->get();
 
-        Log::info('[DEPOSIT_DEBUG] ADMIN_INDEX_VIEW', [
-            'user_id'          => Auth::id(),
-            'business_id'      => $businessId,
-            'branch_id'        => $branchId,
-            'tab'              => $activeTab,
-            'type_filter'      => $typeFilter,
-            'search'           => $search,
-            'logs_total'       => $depositLogs->total(),
-            'active_dep_total' => $totalActiveDepositBalance,
-        ]);
-
         return view('admin.deposits.index', compact(
             'depositLogs',
             'customersWithDeposit',
@@ -162,18 +150,6 @@ class CustomerDepositController extends Controller
         $targetDate = !empty($validated['date']) ? Carbon::parse($validated['date']) : now();
         $notes = $validated['notes'] ?? null;
 
-        Log::info('[DEPOSIT_DEBUG] ADMIN_STORE_REQUEST', [
-            'admin_id'    => Auth::id(),
-            'business_id' => $businessId,
-            'branch_id'   => $branchId,
-            'customer_id' => (int) $validated['customer_id'],
-            'mode'        => $mode,
-            'cashier_id'  => $validated['cashier_id'] ?? null,
-            'amount'      => $amount,
-            'target_date' => $targetDate->toDateString(),
-            'notes'       => $notes,
-        ]);
-
         try {
             if ($mode === 'opening_balance') {
                 $log = CustomerDepositService::addOpeningDeposit(
@@ -185,14 +161,6 @@ class CustomerDepositController extends Controller
                     (int) Auth::id(),
                     $targetDate
                 );
-
-                Log::info('[DEPOSIT_DEBUG] ADMIN_STORE_SUCCESS', [
-                    'mode'           => 'opening_balance',
-                    'deposit_log_id' => $log->id,
-                    'customer_id'    => $log->customer_id,
-                    'amount'         => $amount,
-                    'balance_after'  => (float) $log->balance_after,
-                ]);
 
                 return back()->with(
                     'success',
@@ -221,36 +189,14 @@ class CustomerDepositController extends Controller
                 $affectsDrawer
             );
 
-            Log::info('[DEPOSIT_DEBUG] ADMIN_STORE_SUCCESS', [
-                'mode'              => $mode,
-                'deposit_log_id'    => $log->id,
-                'cash_flow_id'      => $log->cash_flow_id,
-                'customer_id'       => $log->customer_id,
-                'amount'            => $amount,
-                'affects_drawer'    => $affectsDrawer,
-                'cash_flow_creator' => $cashFlowCreator,
-                'balance_after'     => (float) $log->balance_after,
-            ]);
-
             return back()->with(
                 'success',
                 'Setoran deposit #' . $log->id . ' sebesar Rp ' . number_format($amount, 0, ',', '.')
                 . ' berhasil disimpan.'
             );
         } catch (PeriodClosedException $e) {
-            Log::warning('[DEPOSIT_DEBUG] ADMIN_STORE_BLOCKED_PERIOD_CLOSED', [
-                'admin_id' => Auth::id(),
-                'message'  => $e->getMessage(),
-            ]);
             return back()->with('error', $e->getMessage())->withInput();
         } catch (\Throwable $e) {
-            Log::error('[DEPOSIT_DEBUG] ADMIN_STORE_ERROR', [
-                'admin_id'  => Auth::id(),
-                'exception' => get_class($e),
-                'message'   => $e->getMessage(),
-                'location'  => $e->getFile() . ':' . $e->getLine(),
-                'trace'     => array_slice(explode("\n", $e->getTraceAsString()), 0, 8),
-            ]);
             return back()->with('error', 'Gagal menyimpan deposit: ' . $e->getMessage())->withInput();
         }
     }
@@ -260,13 +206,6 @@ class CustomerDepositController extends Controller
         $validated = $request->validated();
         $businessId = (int) Auth::user()->business_id;
 
-        Log::info('[DEPOSIT_DEBUG] ADMIN_REVERSE_REQUEST', [
-            'admin_id'       => Auth::id(),
-            'business_id'    => $businessId,
-            'deposit_log_id' => $depositLog,
-            'reason'         => $validated['reason'],
-        ]);
-
         try {
             $contraLog = CustomerDepositService::reverseDeposit(
                 $businessId,
@@ -275,33 +214,13 @@ class CustomerDepositController extends Controller
                 (int) Auth::id()
             );
 
-            Log::info('[DEPOSIT_DEBUG] ADMIN_REVERSE_SUCCESS', [
-                'original_log_id' => $depositLog,
-                'contra_log_id'   => $contraLog->id,
-                'cash_flow_id'    => $contraLog->cash_flow_id,
-                'amount'          => (float) $contraLog->amount,
-                'balance_after'   => (float) $contraLog->balance_after,
-            ]);
-
             return back()->with(
                 'success',
                 "Setoran deposit #{$depositLog} berhasil dibatalkan (Void) dengan jurnal pembalik #{$contraLog->id}."
             );
         } catch (PeriodClosedException $e) {
-            Log::warning('[DEPOSIT_DEBUG] ADMIN_REVERSE_BLOCKED_PERIOD_CLOSED', [
-                'deposit_log_id' => $depositLog,
-                'message'        => $e->getMessage(),
-            ]);
             return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
-            Log::error('[DEPOSIT_DEBUG] ADMIN_REVERSE_ERROR', [
-                'admin_id'       => Auth::id(),
-                'deposit_log_id' => $depositLog,
-                'exception'      => get_class($e),
-                'message'        => $e->getMessage(),
-                'location'       => $e->getFile() . ':' . $e->getLine(),
-                'trace'          => array_slice(explode("\n", $e->getTraceAsString()), 0, 8),
-            ]);
             return back()->with('error', $e->getMessage());
         }
     }
@@ -310,15 +229,6 @@ class CustomerDepositController extends Controller
     {
         $validated = $request->validated();
         $businessId = (int) Auth::user()->business_id;
-
-        Log::info('[DEPOSIT_DEBUG] ADMIN_CORRECT_REQUEST', [
-            'admin_id'           => Auth::id(),
-            'business_id'        => $businessId,
-            'deposit_log_id'     => $depositLog,
-            'new_amount'         => (float) $validated['new_amount'],
-            'new_payment_method' => $validated['new_payment_method'],
-            'reason'             => $validated['reason'],
-        ]);
 
         try {
             $result = CustomerDepositService::correctDeposit(
@@ -330,14 +240,6 @@ class CustomerDepositController extends Controller
                 (int) Auth::id()
             );
 
-            Log::info('[DEPOSIT_DEBUG] ADMIN_CORRECT_SUCCESS', [
-                'original_log_id' => $depositLog,
-                'reversal_log_id' => $result['reversal_log']->id,
-                'new_log_id'      => $result['new_log']->id,
-                'new_amount'      => (float) $result['new_log']->amount,
-                'balance_after'   => (float) $result['new_log']->balance_after,
-            ]);
-
             return back()->with(
                 'success',
                 "Setoran deposit #{$depositLog} dikoreksi menjadi Rp "
@@ -345,20 +247,8 @@ class CustomerDepositController extends Controller
                 . " (Log Pembatalan #{$result['reversal_log']->id} & Log Baru #{$result['new_log']->id})."
             );
         } catch (PeriodClosedException $e) {
-            Log::warning('[DEPOSIT_DEBUG] ADMIN_CORRECT_BLOCKED_PERIOD_CLOSED', [
-                'deposit_log_id' => $depositLog,
-                'message'        => $e->getMessage(),
-            ]);
             return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
-            Log::error('[DEPOSIT_DEBUG] ADMIN_CORRECT_ERROR', [
-                'admin_id'       => Auth::id(),
-                'deposit_log_id' => $depositLog,
-                'exception'      => get_class($e),
-                'message'        => $e->getMessage(),
-                'location'       => $e->getFile() . ':' . $e->getLine(),
-                'trace'          => array_slice(explode("\n", $e->getTraceAsString()), 0, 8),
-            ]);
             return back()->with('error', $e->getMessage());
         }
     }

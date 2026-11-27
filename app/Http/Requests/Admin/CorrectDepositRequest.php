@@ -2,10 +2,8 @@
 
 namespace App\Http\Requests\Admin;
 
-use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class CorrectDepositRequest extends FormRequest
 {
@@ -33,18 +31,5 @@ class CorrectDepositRequest extends FormRequest
             'reason.required'             => 'Alasan koreksi wajib diisi untuk jejak audit finance.',
             'reason.min'                  => 'Alasan koreksi minimal 3 karakter.',
         ];
-    }
-
-    protected function failedValidation(Validator $validator): void
-    {
-        Log::warning('[DEPOSIT_DEBUG] ADMIN_CORRECT_VALIDATION_FAILED', [
-            'user_id'        => Auth::id(),
-            'business_id'    => Auth::user()?->business_id,
-            'deposit_log_id' => $this->route('depositLog'),
-            'input'          => $this->except(['_token']),
-            'errors'         => $validator->errors()->toArray(),
-        ]);
-
-        parent::failedValidation($validator);
     }
 }

@@ -11,7 +11,6 @@ use App\Models\UserActivityLog;
 use App\Support\BranchCache;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class CustomerDepositService
 {
@@ -117,25 +116,6 @@ class CustomerDepositService
                 'created_by'     => $createdBy,
             ]);
 
-            Log::info('[DEPOSIT_DEBUG] SERVICE_ADD_DEPOSIT', [
-                'log_id'               => $log->id,
-                'business_id'          => $businessId,
-                'branch_id'            => $branchId,
-                'customer_id'          => $customerId,
-                'customer_name'        => $customer->name,
-                'transaction_id'       => $transactionId,
-                'amount'               => $amount,
-                'payment_method'       => $paymentMethod,
-                'balance_before'       => $balanceBefore,
-                'balance_after'        => $balanceAfter,
-                'cash_flow_id'         => $cashFlow->id,
-                'cash_flow_created_by' => $cashFlow->created_by,
-                'affects_drawer'       => $affectsDrawer,
-                'funding_source'       => $cashFlow->funding_source,
-                'date'                 => $settlementDate->toDateString(),
-                'created_by'           => $createdBy,
-            ]);
-
             return $log;
         });
     }
@@ -210,19 +190,6 @@ class CustomerDepositService
 
             BranchCache::flush($businessId);
 
-            Log::info('[DEPOSIT_DEBUG] SERVICE_ADD_OPENING_DEPOSIT', [
-                'log_id'         => $log->id,
-                'business_id'    => $businessId,
-                'branch_id'      => $branchId,
-                'customer_id'    => $customer->id,
-                'customer_name'  => $customer->name,
-                'amount'         => $amount,
-                'balance_before' => $balanceBefore,
-                'balance_after'  => $balanceAfter,
-                'date'           => $targetDate->toDateString(),
-                'created_by'     => $createdBy,
-            ]);
-
             return $log;
         });
     }
@@ -251,22 +218,10 @@ class CustomerDepositService
                 ->firstOrFail();
 
             if ($originalLog->type !== 'credit') {
-                Log::warning('[DEPOSIT_DEBUG] SERVICE_REVERSE_BLOCKED', [
-                    'reason_code' => 'non_credit_type',
-                    'log_id'      => $originalLog->id,
-                    'type'        => $originalLog->type,
-                    'admin_id'    => $adminUserId,
-                ]);
                 throw new \RuntimeException("Hanya mutasi setoran deposit (kredit) yang dapat dibatalkan oleh Admin.");
             }
 
             if ($originalLog->isReversed()) {
-                Log::warning('[DEPOSIT_DEBUG] SERVICE_REVERSE_BLOCKED', [
-                    'reason_code'        => 'already_reversed',
-                    'log_id'             => $originalLog->id,
-                    'reversed_by_log_id' => $originalLog->reversed_by_log_id,
-                    'admin_id'           => $adminUserId,
-                ]);
                 throw new \RuntimeException("Setoran deposit #{$originalLog->id} sudah pernah dibatalkan sebelumnya.");
             }
 
@@ -311,17 +266,6 @@ class CustomerDepositService
                 $txHint = !empty($recentDebits)
                     ? ' Transaksi pemakaian terkait: ' . implode(', ', $recentDebits) . '.'
                     : '';
-
-                Log::warning('[DEPOSIT_DEBUG] SERVICE_REVERSE_BLOCKED', [
-                    'reason_code'     => 'anti_negative_balance',
-                    'log_id'          => $originalLog->id,
-                    'customer_id'     => $customer->id,
-                    'customer_name'   => $customer->name,
-                    'balance_before'  => $balanceBefore,
-                    'reverse_amount'  => $reverseAmount,
-                    'recent_debit_tx' => $recentDebits,
-                    'admin_id'        => $adminUserId,
-                ]);
 
                 throw new \RuntimeException(
                     "Pembatalan ditolak (Anti Saldo Minus): Saldo deposit {$customer->name} saat ini Rp "
@@ -399,24 +343,6 @@ class CustomerDepositService
             }
 
             BranchCache::flush($businessId);
-
-            Log::info('[DEPOSIT_DEBUG] SERVICE_REVERSE_DEPOSIT', [
-                'original_log_id'       => $originalLog->id,
-                'contra_log_id'         => $contraLog->id,
-                'business_id'           => $businessId,
-                'branch_id'             => $originalLog->branch_id,
-                'customer_id'           => $customer->id,
-                'customer_name'         => $customer->name,
-                'reverse_amount'        => $reverseAmount,
-                'balance_before'        => $balanceBefore,
-                'balance_after'         => $balanceAfter,
-                'contra_cash_flow_id'   => $contraCashFlow?->id,
-                'contra_cf_created_by'  => $contraCashFlow?->created_by,
-                'contra_affects_drawer' => $contraCashFlow?->affects_drawer,
-                'contra_date'           => $contraCashFlow?->date?->toDateString(),
-                'reason'                => $cleanReason,
-                'admin_id'              => $adminUserId,
-            ]);
 
             return $contraLog;
         });
@@ -523,19 +449,6 @@ class CustomerDepositService
 
             BranchCache::flush($businessId);
 
-            Log::info('[DEPOSIT_DEBUG] SERVICE_CORRECT_DEPOSIT', [
-                'original_log_id' => $originalLog->id,
-                'reversal_log_id' => $reversalLog->id,
-                'new_log_id'      => $newLog->id,
-                'customer_id'     => $originalLog->customer_id,
-                'old_amount'      => (float) $originalLog->amount,
-                'new_amount'      => $roundedNewAmount,
-                'old_method'      => $origMethod,
-                'new_method'      => $newMethod,
-                'reason'          => $cleanReason,
-                'admin_id'        => $adminUserId,
-            ]);
-
             return [
                 'reversal_log' => $reversalLog,
                 'new_log'      => $newLog,
@@ -582,7 +495,7 @@ class CustomerDepositService
                 'deposit_balance' => $balanceAfter,
             ]);
 
-            $log = CustomerDepositLog::create([
+            CustomerDepositLog::create([
                 'business_id'    => $businessId,
                 'branch_id'      => $branchId,
                 'customer_id'    => $customerId,
@@ -594,19 +507,6 @@ class CustomerDepositService
                 'balance_after'  => $balanceAfter,
                 'payment_method' => 'deposit',
                 'notes'          => $notes ?? ("Penggunaan Deposit Transaksi #" . str_pad($transactionId, 6, '0', STR_PAD_LEFT)),
-                'created_by'     => $createdBy,
-            ]);
-
-            Log::info('[DEPOSIT_DEBUG] SERVICE_USE_DEPOSIT', [
-                'log_id'         => $log->id,
-                'business_id'    => $businessId,
-                'branch_id'      => $branchId,
-                'customer_id'    => $customerId,
-                'transaction_id' => $transactionId,
-                'requested'      => $requestedAmount,
-                'actual_used'    => $actualUsed,
-                'balance_before' => $balanceBefore,
-                'balance_after'  => $balanceAfter,
                 'created_by'     => $createdBy,
             ]);
 
@@ -637,7 +537,7 @@ class CustomerDepositService
                 'deposit_balance' => $balanceAfter,
             ]);
 
-            $log = CustomerDepositLog::create([
+            CustomerDepositLog::create([
                 'business_id'    => $transaction->business_id,
                 'branch_id'      => $transaction->branch_id,
                 'customer_id'    => $customer->id,
@@ -650,16 +550,6 @@ class CustomerDepositService
                 'payment_method' => 'deposit',
                 'notes'          => "Pengembalian Deposit akibat Void Transaksi #" . str_pad($transaction->id, 6, '0', STR_PAD_LEFT),
                 'created_by'     => $voidedBy,
-            ]);
-
-            Log::info('[DEPOSIT_DEBUG] SERVICE_RESTORE_VOID', [
-                'log_id'         => $log->id,
-                'transaction_id' => $transaction->id,
-                'customer_id'    => $customer->id,
-                'restored'       => $depositUsed,
-                'balance_before' => $balanceBefore,
-                'balance_after'  => $balanceAfter,
-                'voided_by'      => $voidedBy,
             ]);
         });
     }
