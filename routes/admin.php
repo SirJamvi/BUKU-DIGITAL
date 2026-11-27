@@ -20,6 +20,8 @@ use App\Http\Controllers\Admin\ProofAuditController;
 // Dashboard
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 Route::get('/dashboard/branch-comparison', [DashboardController::class, 'branchComparisonJson'])->name('dashboard.branch-comparison');
+Route::get('/dashboard/transaction-matrix', [DashboardController::class, 'transactionMatrixJson'])->name('dashboard.transaction-matrix');
+Route::get('/dashboard/transaction-drilldown', [DashboardController::class, 'transactionDrilldownJson'])->name('dashboard.transaction-drilldown');
 Route::get('/', [DashboardController::class, 'index'])->name('index');
 
 // Master Data & Manajemen

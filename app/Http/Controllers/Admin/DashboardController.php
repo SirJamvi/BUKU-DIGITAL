@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\Accounting\DailyTransactionSummaryService;
 use App\Services\Admin\DashboardService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Carbon\Carbon;
+use App\Models\Branch;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -226,6 +229,25 @@ class DashboardController extends Controller
                 $dashboardData['branchComparison'] = [];
             }
 
+            // --- BREAKDOWN MATRIKS TRANSAKSI FULL PER CABANG & PER KASIR + DROPDOWN FILTER ---
+            $summaryService = app(DailyTransactionSummaryService::class);
+            $dashboardData['matrixBreakdown'] = $summaryService->getBreakdownByBranchAndCashier($businessId, $filterDate);
+            $dashboardData['filterBranches'] = Branch::where('business_id', $businessId)
+                ->where('is_active', true)
+                ->orderByDesc('is_main')
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'is_main']);
+            $dashboardData['filterCashiers'] = User::with('branch:id,name')
+                ->where('business_id', $businessId)
+                ->where(function ($q) {
+                    $q->where('role', 'kasir')
+                        ->orWhereJsonContains('secondary_roles', 'kasir')
+                        ->orWhere('role', 'admin');
+                })
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'role', 'branch_id']);
+
             return view('admin.dashboard.index', $dashboardData);
         } catch (\Exception $e) {
             logger()->error('Error fetching dashboard data: ' . $e->getMessage());
@@ -250,6 +272,80 @@ class DashboardController extends Controller
             'status' => 'success',
             'date'   => $date->toDateString(),
             'data'   => $data,
+        ]);
+    }
+
+    /**
+     * Endpoint JSON AJAX untuk memfilter Matriks Rekapitulasi Transaksi Full (Cabang & Kasir).
+     */
+    public function transactionMatrixJson(Request $request, DailyTransactionSummaryService $summaryService): JsonResponse
+    {
+        $validated = $request->validate([
+            'date'       => 'nullable|date',
+            'branch_id'  => 'nullable|integer',
+            'cashier_id' => 'nullable|integer',
+        ]);
+
+        $businessId = (int) Auth::user()->business_id;
+        $date = !empty($validated['date']) ? Carbon::parse($validated['date']) : Carbon::today('Asia/Jakarta');
+        $branchId = !empty($validated['branch_id']) ? (int) $validated['branch_id'] : null;
+        $cashierId = !empty($validated['cashier_id']) ? (int) $validated['cashier_id'] : null;
+
+        // Jika Admin berada di konteks cabang tunggal, paksa branch_id sesuai konteks
+        $context = app(\App\Support\BranchContext::class);
+        if ($context->isBranch() && $context->getBranchId() !== null) {
+            $branchId = (int) $context->getBranchId();
+        }
+
+        $summary = $summaryService->getFilteredSummary($businessId, $date, $branchId, $cashierId);
+        $breakdown = $summaryService->getBreakdownByBranchAndCashier($businessId, $date, $branchId);
+
+        return response()->json([
+            'status'    => 'success',
+            'date'      => $date->toDateString(),
+            'summary'   => $summary,
+            'breakdown' => $breakdown,
+        ]);
+    }
+
+    /**
+     * Endpoint JSON AJAX Drilldown item penyusun Matriks Rekapitulasi Transaksi Full Admin.
+     */
+    public function transactionDrilldownJson(Request $request, DailyTransactionSummaryService $summaryService): JsonResponse
+    {
+        $validated = $request->validate([
+            'category'   => 'required|string|in:sale_direct,debt_settlement,customer_deposit,inflow_gross,refunds,drawer_out,non_drawer_out,kasbon_new,deposit_used',
+            'channel'    => 'nullable|string|in:all,cash,dana,transfer,deposit,other',
+            'date'       => 'nullable|date',
+            'branch_id'  => 'nullable|integer',
+            'cashier_id' => 'nullable|integer',
+        ]);
+
+        $businessId = (int) Auth::user()->business_id;
+        $date = !empty($validated['date']) ? Carbon::parse($validated['date']) : Carbon::today('Asia/Jakarta');
+        $branchId = !empty($validated['branch_id']) ? (int) $validated['branch_id'] : null;
+        $cashierId = !empty($validated['cashier_id']) ? (int) $validated['cashier_id'] : null;
+
+        $context = app(\App\Support\BranchContext::class);
+        if ($context->isBranch() && $context->getBranchId() !== null) {
+            $branchId = (int) $context->getBranchId();
+        }
+
+        $items = $summaryService->getDrilldownItems(
+            $businessId,
+            $date,
+            $validated['category'],
+            $validated['channel'] ?? null,
+            $branchId,
+            $cashierId
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'date'   => $date->toDateString(),
+            'count'  => count($items),
+            'total'  => array_sum(array_column($items, 'amount')),
+            'items'  => $items,
         ]);
     }
 }

@@ -43,7 +43,10 @@
                 <i class="fas fa-chart-line"></i>
             </div>
             <div class="metric-content">
-                <h3 class="metric-title">Penjualan {{ $isToday ? 'Hari Ini' : $formattedDate }}</h3>
+                <h3 class="metric-title">
+                    Total Penjualan {{ $isToday ? 'Hari Ini' : $formattedDate }}
+                    <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Total nilai semua barang yang terjual (gabungan yang sudah lunas + yang masih kasbon). Bayar kasbon lama &amp; titipan deposit tidak dihitung di sini."></i>
+                </h3>
                 <div class="metric-value">Rp {{ number_format($salesToday ?? 0, 0, ',', '.') }}</div>
                 <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
                     <span class="badge bg-primary text-white py-1 px-2 fw-bold">
@@ -77,16 +80,19 @@
                 <i class="fas fa-wallet"></i>
             </div>
             <div class="metric-content">
-                <h3 class="metric-title">Arus Kas Riil {{ $isToday ? 'Hari Ini' : $formattedDate }}</h3>
+                <h3 class="metric-title">
+                    Uang Masuk Bersih {{ $isToday ? 'Hari Ini' : $formattedDate }}
+                    <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Total uang nyata yang benar-benar diterima hari ini (Tunai + DANA + Transfer) dari penjualan, bayar kasbon lama, dan titipan deposit, setelah dikurangi nota batal &amp; koreksi."></i>
+                </h3>
                 <div class="metric-value text-success">Rp {{ number_format($totalAllInflowToday ?? ($cashInToday ?? 0), 0, ',', '.') }}</div>
-                <div class="text-muted small mb-1" style="font-size: 0.72rem;"><em>Kas masuk fisik & bank (termasuk pelunasan kasbon lama; pelunasan tidak menambah omset)</em></div>
+                <div class="text-muted small mb-1" style="font-size: 0.72rem;"><em>Uang tunai &amp; bank yang masuk hari ini (termasuk bayar kasbon lama &amp; titipan deposit)</em></div>
                 <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
                     <span class="badge py-1 px-2" style="background-color: #d1e7dd !important; color: #0f5132 !important; border: 1px solid #badbcc !important; font-size: 0.78rem; font-weight: 600;">
-                        <i class="fas fa-check-circle me-1 text-success"></i>Lunas (Hari Ini): Rp {{ number_format($cashInToday ?? 0, 0, ',', '.') }}
+                        <i class="fas fa-check-circle me-1 text-success"></i>Belanja Lunas: Rp {{ number_format($cashInToday ?? 0, 0, ',', '.') }}
                     </span>
                     @if(($pendingToday ?? 0) > 0)
-                    <span class="badge py-1 px-2" style="background-color: #f8d7da !important; color: #842029 !important; border: 1px solid #f5c2c7 !important; font-size: 0.78rem; font-weight: 600;" title="Total Kasbon / Tempo Baru Hari Ini">
-                        <i class="fas fa-clock me-1 text-danger"></i>Kasbon (Piutang): Rp {{ number_format($pendingToday, 0, ',', '.') }}
+                    <span class="badge py-1 px-2" style="background-color: #f8d7da !important; color: #842029 !important; border: 1px solid #f5c2c7 !important; font-size: 0.78rem; font-weight: 600;" title="Belanja hari ini yang pembelinya belum bayar">
+                        <i class="fas fa-clock me-1 text-danger"></i>Kasbon Baru: Rp {{ number_format($pendingToday, 0, ',', '.') }}
                     </span>
                     @else
                     <span class="badge py-1 px-2" style="background-color: #f8f9fa !important; color: #6c757d !important; border: 1px solid #dee2e6 !important; font-size: 0.78rem; font-weight: 600;">
@@ -95,21 +101,34 @@
                     @endif
                 </div>
 
-                {{-- [BARU] Badge Rincian Saluran Pembayaran (Cash, DANA, Transfer Bank, & Pelunasan Kasbon) --}}
+                {{-- Badge Rincian Cara Bayar --}}
                 <div class="d-flex flex-wrap gap-1 align-items-center mt-2 pt-2 border-top" style="font-size: 0.72rem;">
-                    <span class="badge bg-light text-dark border py-1 px-2" title="Total Uang Masuk Tunai (Penjualan + Pelunasan Kasbon)">
-                        💵 Cash: <strong>Rp {{ number_format($totalInflowCash ?? 0, 0, ',', '.') }}</strong>
+                    <span class="badge bg-light text-dark border py-1 px-2" data-bs-toggle="tooltip" title="Total uang tunai bersih yang diterima hari ini (setelah dikurangi nota batal &amp; koreksi deposit)">
+                        💵 Tunai: <strong>Rp {{ number_format($totalInflowCash ?? 0, 0, ',', '.') }}</strong>
                     </span>
-                    <span class="badge bg-light text-dark border py-1 px-2" title="Total Uang Masuk via DANA (Penjualan + Pelunasan Kasbon)">
+                    <span class="badge bg-light text-dark border py-1 px-2" data-bs-toggle="tooltip" title="Total uang bersih masuk lewat DANA">
                         📱 DANA: <strong>Rp {{ number_format($totalInflowDana ?? 0, 0, ',', '.') }}</strong>
                     </span>
-                    <span class="badge bg-light text-dark border py-1 px-2" title="Total Uang Masuk via Transfer Bank (Penjualan + Pelunasan Kasbon)">
+                    <span class="badge bg-light text-dark border py-1 px-2" data-bs-toggle="tooltip" title="Total uang bersih masuk lewat Transfer Bank">
                         🏦 Transfer: <strong>Rp {{ number_format($totalInflowTransfer ?? 0, 0, ',', '.') }}</strong>
                     </span>
                 </div>
+                @php
+                    $kpiDepIn = (float) ($transactionSummary['deposit']['in_total'] ?? 0);
+                    $kpiDepRef = (float) ($transactionSummary['deposit']['refund_total'] ?? 0);
+                    $kpiDepNet = $kpiDepIn - $kpiDepRef;
+                @endphp
+                @if($kpiDepIn > 0 || $kpiDepRef > 0)
+                <div class="mt-1 small" style="font-size: 0.7rem; color: #0f766e;">
+                    <i class="fas fa-piggy-bank me-1"></i>Titipan Deposit Bersih: <strong>Rp {{ number_format($kpiDepNet, 0, ',', '.') }}</strong>
+                    @if($kpiDepRef > 0)
+                    <span class="text-muted">(Masuk Rp {{ number_format($kpiDepIn, 0, ',', '.') }} &minus; Koreksi Rp {{ number_format($kpiDepRef, 0, ',', '.') }})</span>
+                    @endif
+                </div>
+                @endif
                 @if(($pelunasanCairTotal ?? 0) > 0)
                 <div class="mt-1 small" style="font-size: 0.7rem; color: #475569;">
-                    <i class="fas fa-rotate text-primary me-1"></i>Pelunasan Kasbon Cair: <strong>Rp {{ number_format($pelunasanCairTotal, 0, ',', '.') }}</strong> 
+                    <i class="fas fa-rotate text-primary me-1"></i>Kasbon Lama Dibayar: <strong>Rp {{ number_format($pelunasanCairTotal, 0, ',', '.') }}</strong> 
                     <span class="text-muted">(Tunai: Rp {{ number_format($pelunasanCairCash ?? 0, 0, ',', '.') }} | Non-Tunai: Rp {{ number_format($pelunasanCairNonCash ?? 0, 0, ',', '.') }})</span>
                 </div>
                 @endif
@@ -285,6 +304,457 @@
 </div>
 
 {{-- ================================================================= --}}
+{{-- [SSOT] MATRIKS REKAPITULASI TRANSAKSI FULL (CABANG / BISNIS)      --}}
+{{-- ================================================================= --}}
+<div id="transaction-summary-matrix-container">
+@php
+    $ats = $transactionSummary ?? [];
+    $atsRows = $ats['rows'] ?? [];
+    $atsDrawer = $ats['drawer'] ?? [];
+    $atsDeposit = $ats['deposit'] ?? [];
+    $atsSalesKasbon = $ats['sales_kasbon'] ?? [];
+    $atsHasOther = !empty($ats['has_other_channel']);
+    $isConsolidatedView = app(\App\Support\BranchContext::class)->isConsolidated() || session('active_branch_id') === 'all';
+
+    $aSale = $atsRows['sale_direct'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+    $aSettle = $atsRows['debt_settlement'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+    $aDep = $atsRows['customer_deposit'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+    $aGross = $atsRows['inflow_gross'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+    $aRefunds = $atsRows['refunds'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'total_money' => 0, 'count' => 0];
+    $aRefundVoid = $atsRows['refund_void'] ?? ['total_money' => 0];
+    $aRefundDep = $atsRows['refund_deposit'] ?? ['total_money' => 0];
+    $aNet = $atsRows['inflow_net'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'total_money' => 0];
+    $aDepNetIn = (float) ($atsDeposit['in_total'] ?? 0) - (float) ($atsDeposit['refund_total'] ?? 0);
+    $mbBranches = $matrixBreakdown['by_branch'] ?? [];
+    $mbCashiers = $matrixBreakdown['by_cashier'] ?? [];
+@endphp
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden; border-top: 4px solid #6366f1 !important;">
+            <div class="card-header text-white d-flex justify-content-between align-items-center py-3 flex-wrap gap-2" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%) !important;">
+                <div>
+                    <h5 class="mb-0 fw-bold d-flex align-items-center">
+                        <span class="badge bg-info text-dark me-2 px-2 py-1" style="font-size: 0.72rem; letter-spacing: 0.5px;">REKAP LENGKAP</span>
+                        <i class="fas fa-table-list text-warning me-2"></i> Rincian Uang Masuk &amp; Transaksi ({{ $isToday ? 'Hari Ini' : $formattedDate }})
+                        <i class="fas fa-circle-info text-white-50 info-tip ms-2" tabindex="0" role="button" data-bs-toggle="tooltip" title="Data di tabel ini otomatis sama persis dengan layar Kasir. Arahkan kursor / klik tanda info (i) pada tiap baris untuk membaca penjelasan sederhana."></i>
+                    </h5>
+                    <small class="text-white-50">Pilih Cabang atau Kasir untuk menyaring data, atau klik tombol kaca pembesar (<i class="fas fa-search"></i>) untuk melihat daftar nota &amp; catatannya.</small>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="spinner-border spinner-border-sm text-warning d-none" id="adminMatrixSpinner" role="status"></span>
+                    <span class="badge bg-light text-dark px-3 py-2 fs-6" tabindex="0" data-bs-toggle="tooltip" title="Total nilai barang terjual (lunas + kasbon baru). Tidak termasuk bayar kasbon lama &amp; titipan deposit.">
+                        <i class="fas fa-chart-line text-primary me-1"></i> Penjualan: <strong id="am-badge-omset">Rp {{ number_format($atsSalesKasbon['omset_today'] ?? ($salesToday ?? 0), 0, ',', '.') }}</strong>
+                    </span>
+                    <span class="badge bg-success px-3 py-2 fs-6 fw-bold shadow-sm" tabindex="0" data-bs-toggle="tooltip" title="Total uang nyata (Tunai + DANA + Transfer) yang benar-benar masuk setelah dikurangi nota batal &amp; koreksi deposit.">
+                        <i class="fas fa-wallet me-1"></i> Uang Masuk Bersih: <strong id="am-badge-net">Rp {{ number_format($aNet['total_money'] ?? 0, 0, ',', '.') }}</strong>
+                    </span>
+                </div>
+            </div>
+
+            {{-- Toolbar Tabs + Filter AJAX Cabang & Kasir --}}
+            <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="btn-group btn-group-sm" role="group" id="adminMatrixTabGroup">
+                    <button type="button" class="btn btn-primary active fw-semibold px-3 admin-matrix-tab-btn" data-tab="matrix" onclick="switchAdminMatrixTab('matrix')">
+                        <i class="fas fa-table me-1"></i>Ringkasan Total
+                    </button>
+                    @if($isConsolidatedView)
+                    <button type="button" class="btn btn-outline-secondary fw-semibold px-3 admin-matrix-tab-btn" data-tab="branch" onclick="switchAdminMatrixTab('branch')">
+                        <i class="fas fa-store me-1"></i>Per Cabang <span class="badge bg-secondary ms-1 rounded-pill" id="am-branch-count">{{ count($mbBranches) }}</span>
+                    </button>
+                    @endif
+                    <button type="button" class="btn btn-outline-secondary fw-semibold px-3 admin-matrix-tab-btn" data-tab="cashier" onclick="switchAdminMatrixTab('cashier')">
+                        <i class="fas fa-user-tie me-1"></i>Per Kasir <span class="badge bg-secondary ms-1 rounded-pill" id="am-cashier-count">{{ count($mbCashiers) }}</span>
+                    </button>
+                </div>
+
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                    @if($isConsolidatedView)
+                    <select id="adminMatrixBranchFilter" class="form-select form-select-sm" style="width: auto; min-width: 155px;" onchange="fetchAdminTransactionMatrix()">
+                        <option value="">Semua Cabang</option>
+                        @foreach($filterBranches ?? [] as $fb)
+                        <option value="{{ $fb->id }}">{{ $fb->name }} ({{ $fb->code }})</option>
+                        @endforeach
+                    </select>
+                    @endif
+                    <select id="adminMatrixCashierFilter" class="form-select form-select-sm" style="width: auto; min-width: 155px;" onchange="fetchAdminTransactionMatrix()">
+                        <option value="">Semua Kasir</option>
+                        @foreach($filterCashiers ?? [] as $fc)
+                        <option value="{{ $fc->id }}">{{ $fc->name }}{{ $fc->branch ? ' — ' . $fc->branch->name : '' }}</option>
+                        @endforeach
+                    </select>
+                    <button type="button" id="adminMatrixResetBtn" class="btn btn-sm btn-outline-secondary d-none" onclick="resetAdminMatrixFilters()">
+                        <i class="fas fa-undo me-1"></i>Reset
+                    </button>
+                </div>
+            </div>
+
+            <div class="card-body p-0">
+                {{-- TAB 1: RINGKASAN TOTAL --}}
+                <div id="admin-matrix-pane-matrix">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" style="font-size: 0.86rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3 py-2">Jenis Transaksi</th>
+                                    <th class="text-end py-2 text-nowrap">
+                                        <i class="fas fa-money-bill-wave text-success me-1"></i>Tunai (Laci)
+                                        <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Uang tunai (kertas/koin) yang masuk ke laci kasir."></i>
+                                    </th>
+                                    <th class="text-end py-2 text-nowrap">
+                                        <i class="fas fa-mobile-alt text-info me-1"></i>DANA
+                                        <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Uang masuk lewat DANA ke akun Bos (tidak masuk laci fisik)."></i>
+                                    </th>
+                                    <th class="text-end py-2 text-nowrap">
+                                        <i class="fas fa-university text-primary me-1"></i>Transfer Bank
+                                        <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Uang masuk lewat transfer bank ke rekening Bos (tidak masuk laci fisik)."></i>
+                                    </th>
+                                    @if($atsHasOther)
+                                    <th class="text-end py-2 text-nowrap">Lainnya</th>
+                                    @endif
+                                    <th class="text-end py-2 text-nowrap" style="color: #0f766e;">
+                                        <i class="fas fa-wallet me-1"></i>Pakai Deposit
+                                        <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Pembeli membayar memakai saldo titipan (deposit) sebelumnya. Tidak menambah uang baru di laci/bank hari ini."></i>
+                                    </th>
+                                    <th class="text-end py-2 text-nowrap">Jumlah Total</th>
+                                    <th class="text-center pe-3 py-2" style="width: 72px;">Rincian</th>
+                                </tr>
+                            </thead>
+                            <tbody id="am-matrix-tbody">
+                                <tr>
+                                    <td class="ps-3">
+                                        <div class="fw-bold text-dark">
+                                            1. Pembelian Langsung Lunas
+                                            <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Belanja baru hari ini di meja kasir yang langsung dibayar lunas."></i>
+                                        </div>
+                                        <small class="text-muted">Belanja baru di meja kasir yang langsung dibayar lunas</small>
+                                    </td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-sale-cash">Rp {{ number_format($aSale['cash'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-sale-dana">Rp {{ number_format($aSale['dana'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-sale-transfer">Rp {{ number_format($aSale['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                    @if($atsHasOther)
+                                    <td class="text-end fw-semibold text-nowrap" id="am-sale-other">Rp {{ number_format($aSale['other'] ?? 0, 0, ',', '.') }}</td>
+                                    @endif
+                                    <td class="text-end fw-semibold text-nowrap" style="color: #0f766e;" id="am-sale-dep">Rp {{ number_format($aSale['deposit_used'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end fw-bold text-dark text-nowrap" id="am-sale-total">Rp {{ number_format($aSale['total'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-center pe-3">
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" onclick="openAdminDrilldown('sale_direct', 'all', '1. Pembelian Langsung Lunas')"><i class="fas fa-search"></i></button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-3">
+                                        <div class="fw-bold text-dark">
+                                            2. Bayar Kasbon Lama &amp; Setoran Driver
+                                            <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Pembayaran hutang kasbon nota lama atau hasil antar driver (tidak dihitung sebagai penjualan baru lagi supaya tidak dobel)."></i>
+                                        </div>
+                                        <small class="text-muted">Pelunasan hutang nota lama atau hasil antar driver (bukan penjualan baru)</small>
+                                    </td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-settle-cash">Rp {{ number_format($aSettle['cash'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-settle-dana">Rp {{ number_format($aSettle['dana'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-settle-transfer">Rp {{ number_format($aSettle['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                    @if($atsHasOther)
+                                    <td class="text-end fw-semibold text-nowrap" id="am-settle-other">Rp {{ number_format($aSettle['other'] ?? 0, 0, ',', '.') }}</td>
+                                    @endif
+                                    <td class="text-end fw-semibold text-nowrap" style="color: #0f766e;" id="am-settle-dep">Rp {{ number_format($aSettle['deposit_used'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end fw-bold text-dark text-nowrap" id="am-settle-total">Rp {{ number_format($aSettle['total'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-center pe-3">
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" onclick="openAdminDrilldown('debt_settlement', 'all', '2. Bayar Kasbon Lama &amp; Setoran Driver')"><i class="fas fa-search"></i></button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-3">
+                                        <div class="fw-bold text-dark">
+                                            3. Terima Titipan Deposit Pelanggan
+                                            <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Uang titipan atau kelebihan bayar pelanggan yang disimpan sebagai saldo deposit (uang titipan, bukan penjualan barang)."></i>
+                                        </div>
+                                        <small class="text-muted">Uang titipan / kelebihan bayar pelanggan (uang titipan, bukan penjualan)</small>
+                                    </td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-dep-cash">Rp {{ number_format($aDep['cash'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-dep-dana">Rp {{ number_format($aDep['dana'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end fw-semibold text-nowrap" id="am-dep-transfer">Rp {{ number_format($aDep['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                    @if($atsHasOther)
+                                    <td class="text-end fw-semibold text-nowrap" id="am-dep-other">Rp {{ number_format($aDep['other'] ?? 0, 0, ',', '.') }}</td>
+                                    @endif
+                                    <td class="text-end text-muted">—</td>
+                                    <td class="text-end fw-bold text-dark text-nowrap" id="am-dep-total">Rp {{ number_format($aDep['total_money'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-center pe-3">
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" onclick="openAdminDrilldown('customer_deposit', 'all', '3. Terima Titipan Deposit Pelanggan')"><i class="fas fa-search"></i></button>
+                                    </td>
+                                </tr>
+                                <tr class="table-light fw-bold">
+                                    <td class="ps-3">
+                                        TOTAL UANG MASUK KOTOR (Baris 1 + 2 + 3)
+                                        <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Semua uang masuk (Tunai + DANA + Transfer) sebelum dikurangi nota batal dan koreksi/pengembalian deposit."></i>
+                                    </td>
+                                    <td class="text-end text-success text-nowrap" id="am-gross-cash">Rp {{ number_format($aGross['cash'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end text-info text-nowrap" id="am-gross-dana">Rp {{ number_format($aGross['dana'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end text-primary text-nowrap" id="am-gross-transfer">Rp {{ number_format($aGross['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                    @if($atsHasOther)
+                                    <td class="text-end text-nowrap" id="am-gross-other">Rp {{ number_format($aGross['other'] ?? 0, 0, ',', '.') }}</td>
+                                    @endif
+                                    <td class="text-end text-nowrap" style="color: #0f766e;" id="am-gross-dep">Rp {{ number_format($aGross['deposit_used'] ?? 0, 0, ',', '.') }}*</td>
+                                    <td class="text-end text-success text-nowrap" id="am-gross-total">Rp {{ number_format($aGross['total_money'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-center pe-3">
+                                        <button type="button" class="btn btn-xs btn-outline-success py-0 px-2" onclick="openAdminDrilldown('inflow_gross', 'all', 'Semua Uang Masuk Kotor')"><i class="fas fa-list"></i></button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-3">
+                                        <div class="fw-bold text-danger">
+                                            4. Pengurang: Nota Batal &amp; Koreksi / Kembali Deposit
+                                            <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Uang yang dibatalkan atau dikembalikan karena nota dibatalkan (void) atau koreksi salah input deposit oleh Admin."></i>
+                                        </div>
+                                        <small class="text-muted" id="am-refund-sub">
+                                            Nota Batal: Rp {{ number_format($aRefundVoid['total_money'] ?? 0, 0, ',', '.') }} &middot;
+                                            Koreksi/Kembali Deposit: Rp {{ number_format($aRefundDep['total_money'] ?? 0, 0, ',', '.') }}
+                                        </small>
+                                    </td>
+                                    <td class="text-end fw-semibold text-danger text-nowrap" id="am-ref-cash">{{ ($aRefunds['cash'] ?? 0) > 0 ? '-Rp ' . number_format($aRefunds['cash'], 0, ',', '.') : 'Rp 0' }}</td>
+                                    <td class="text-end fw-semibold text-danger text-nowrap" id="am-ref-dana">{{ ($aRefunds['dana'] ?? 0) > 0 ? '-Rp ' . number_format($aRefunds['dana'], 0, ',', '.') : 'Rp 0' }}</td>
+                                    <td class="text-end fw-semibold text-danger text-nowrap" id="am-ref-transfer">{{ ($aRefunds['transfer'] ?? 0) > 0 ? '-Rp ' . number_format($aRefunds['transfer'], 0, ',', '.') : 'Rp 0' }}</td>
+                                    @if($atsHasOther)
+                                    <td class="text-end fw-semibold text-danger text-nowrap" id="am-ref-other">{{ ($aRefunds['other'] ?? 0) > 0 ? '-Rp ' . number_format($aRefunds['other'], 0, ',', '.') : 'Rp 0' }}</td>
+                                    @endif
+                                    <td class="text-end text-muted">—</td>
+                                    <td class="text-end fw-bold text-danger text-nowrap" id="am-ref-total">{{ ($aRefunds['total_money'] ?? 0) > 0 ? '-Rp ' . number_format($aRefunds['total_money'], 0, ',', '.') : 'Rp 0' }}</td>
+                                    <td class="text-center pe-3">
+                                        <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2" onclick="openAdminDrilldown('refunds', 'all', '4. Nota Batal &amp; Koreksi / Kembali Deposit')"><i class="fas fa-search"></i></button>
+                                    </td>
+                                </tr>
+                                <tr class="fw-bold" style="background-color: #ecfdf5;">
+                                    <td class="ps-3 text-dark">
+                                        TOTAL UANG MASUK BERSIH (Uang Nyata Diterima)
+                                        <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Hasil akhir uang nyata yang benar-benar diterima hari ini (Uang Masuk Kotor dikurangi Nota Batal &amp; Koreksi Deposit)."></i>
+                                    </td>
+                                    <td class="text-end text-success text-nowrap" id="am-net-cash">Rp {{ number_format($aNet['cash'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end text-dark text-nowrap" id="am-net-dana">Rp {{ number_format($aNet['dana'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-end text-dark text-nowrap" id="am-net-transfer">Rp {{ number_format($aNet['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                    @if($atsHasOther)
+                                    <td class="text-end text-dark text-nowrap" id="am-net-other">Rp {{ number_format($aNet['other'] ?? 0, 0, ',', '.') }}</td>
+                                    @endif
+                                    <td class="text-end text-muted">—</td>
+                                    <td class="text-end text-success fs-6 text-nowrap" id="am-net-total">Rp {{ number_format($aNet['total_money'] ?? 0, 0, ',', '.') }}</td>
+                                    <td class="text-center pe-3">—</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {{-- TAB 2: RINCIAN PER CABANG --}}
+                @if($isConsolidatedView)
+                <div id="admin-matrix-pane-branch" class="d-none">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3 py-2">Cabang</th>
+                                    <th class="text-end">Penjualan</th>
+                                    <th class="text-end">Tunai Kotor</th>
+                                    <th class="text-end">DANA</th>
+                                    <th class="text-end">Transfer</th>
+                                    <th class="text-end" style="color: #0f766e;">Deposit / Dipakai</th>
+                                    <th class="text-end text-danger">Batal/Koreksi</th>
+                                    <th class="text-end text-success">Masuk Bersih</th>
+                                    <th class="text-end text-danger">Kasbon Baru</th>
+                                    <th class="text-end">Uang di Laci</th>
+                                    <th class="text-center pe-3">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="am-branch-tbody">
+                                @forelse($mbBranches as $br)
+                                <tr>
+                                    <td class="ps-3 fw-bold text-nowrap">
+                                        {{ $br['branch_name'] }}
+                                        <span class="badge bg-dark font-monospace ms-1" style="font-size: 0.68rem;">{{ $br['branch_code'] }}</span>
+                                    </td>
+                                    <td class="text-end text-nowrap fw-semibold text-primary">Rp {{ number_format($br['omset'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap">Rp {{ number_format($br['cash_in'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap">Rp {{ number_format($br['dana_in'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap">Rp {{ number_format($br['transfer_in'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap" style="color: #0f766e;">Rp {{ number_format($br['deposit_in'], 0, ',', '.') }} <small class="text-muted">/ {{ number_format($br['deposit_used'], 0, ',', '.') }}</small></td>
+                                    <td class="text-end text-nowrap text-danger">{{ $br['refunds'] > 0 ? '-Rp ' . number_format($br['refunds'], 0, ',', '.') : 'Rp 0' }}</td>
+                                    <td class="text-end text-nowrap fw-bold text-success">Rp {{ number_format($br['inflow_net'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap text-danger">Rp {{ number_format($br['kasbon_new'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap fw-bold">Rp {{ number_format($br['drawer_balance'], 0, ',', '.') }}</td>
+                                    <td class="text-center pe-3">
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" onclick="filterMatrixByBranch({{ $br['branch_id'] }})">Lihat Rincian</button>
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr><td colspan="11" class="text-center text-muted py-3">Belum ada cabang aktif.</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                @endif
+
+                {{-- TAB 3: RINCIAN PER KASIR --}}
+                <div id="admin-matrix-pane-cashier" class="d-none">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3 py-2">Kasir / User</th>
+                                    <th>Cabang Tugas</th>
+                                    <th class="text-end">Penjualan</th>
+                                    <th class="text-end">Tunai Kotor</th>
+                                    <th class="text-end">DANA</th>
+                                    <th class="text-end">Transfer</th>
+                                    <th class="text-end" style="color: #0f766e;">Deposit / Dipakai</th>
+                                    <th class="text-end text-danger">Batal/Koreksi</th>
+                                    <th class="text-end text-success">Masuk Bersih</th>
+                                    <th class="text-end text-danger">Kasbon Baru</th>
+                                    <th class="text-end">Uang di Laci</th>
+                                    <th class="text-center pe-3">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="am-cashier-tbody">
+                                @forelse($mbCashiers as $cs)
+                                <tr>
+                                    <td class="ps-3 fw-bold text-nowrap">{{ $cs['name'] }} <span class="badge bg-light text-muted border ms-1" style="font-size: 0.66rem;">{{ strtoupper($cs['role'] ?? 'kasir') }}</span></td>
+                                    <td class="text-muted text-nowrap">{{ $cs['branch_name'] }}</td>
+                                    <td class="text-end text-nowrap fw-semibold text-primary">Rp {{ number_format($cs['omset'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap">Rp {{ number_format($cs['cash_in'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap">Rp {{ number_format($cs['dana_in'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap">Rp {{ number_format($cs['transfer_in'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap" style="color: #0f766e;">Rp {{ number_format($cs['deposit_in'], 0, ',', '.') }} <small class="text-muted">/ {{ number_format($cs['deposit_used'], 0, ',', '.') }}</small></td>
+                                    <td class="text-end text-nowrap text-danger">{{ $cs['refunds'] > 0 ? '-Rp ' . number_format($cs['refunds'], 0, ',', '.') : 'Rp 0' }}</td>
+                                    <td class="text-end text-nowrap fw-bold text-success">Rp {{ number_format($cs['inflow_net'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap text-danger">Rp {{ number_format($cs['kasbon_new'], 0, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap fw-bold">Rp {{ number_format($cs['drawer_balance'], 0, ',', '.') }}</td>
+                                    <td class="text-center pe-3">
+                                        <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" onclick="filterMatrixByCashier({{ $cs['user_id'] }})">Lihat Rincian</button>
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr><td colspan="12" class="text-center text-muted py-3">Belum ada aktivitas kasir pada tanggal ini.</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {{-- Strip Ringkasan Kasbon, Deposit, Pengiriman & Laci --}}
+                <div class="p-3 bg-light border-top">
+                    <div class="row g-2">
+                        <div class="col-6 col-xl">
+                            <div class="bg-white border rounded-3 p-2 h-100">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="small text-muted" style="font-size: 0.74rem;">
+                                        Kasbon Baru ({{ $isToday ? 'Hari Ini' : $formattedDate }})
+                                        <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Belanja pada tanggal ini yang pembelinya belum bayar (hutang baru)."></i>
+                                    </span>
+                                    <button type="button" class="btn btn-xs btn-link text-danger p-0" onclick="openAdminDrilldown('kasbon_new', 'all', 'Daftar Kasbon Baru')" title="Lihat rincian kasbon baru"><i class="fas fa-search"></i></button>
+                                </div>
+                                <div class="fw-bold text-danger" id="am-strip-kasbon">Rp {{ number_format($atsSalesKasbon['kasbon_new_today'] ?? 0, 0, ',', '.') }}</div>
+                                <div class="text-muted" style="font-size: 0.7rem;" id="am-strip-kasbon-sub">{{ number_format($atsSalesKasbon['kasbon_new_count'] ?? 0) }} nota belum dibayar</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-xl">
+                            <div class="bg-white border rounded-3 p-2 h-100">
+                                <div class="small text-muted" style="font-size: 0.74rem;">
+                                    Total Kasbon Belum Dibayar
+                                    <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Semua hutang kasbon pelanggan dari hari-hari lalu sampai sekarang yang belum lunas."></i>
+                                </div>
+                                <div class="fw-bold text-dark">Rp {{ number_format($totalActiveKasbonAmount ?? 0, 0, ',', '.') }}</div>
+                                <div class="text-muted" style="font-size: 0.7rem;">{{ number_format($totalActiveKasbonCount ?? 0) }} nota belum lunas</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-xl">
+                            <div class="bg-white border rounded-3 p-2 h-100">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="small text-muted" style="font-size: 0.74rem;">
+                                        Total Saldo Deposit Pelanggan
+                                        <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Total sisa uang titipan pelanggan saat ini yang masih bisa dipakai belanja di kemudian hari."></i>
+                                    </span>
+                                    <button type="button" class="btn btn-xs btn-link p-0" style="color: #0f766e;" onclick="openAdminDrilldown('deposit_used', 'deposit', 'Rincian Belanja Pakai Saldo Deposit')" title="Lihat pemakaian deposit"><i class="fas fa-search"></i></button>
+                                </div>
+                                <div class="fw-bold" style="color: #0f766e;">Rp {{ number_format($totalActiveDepositBalance ?? 0, 0, ',', '.') }}</div>
+                                <div class="text-muted" style="font-size: 0.7rem;" id="am-strip-dep-sub">
+                                    Masuk Bersih: +Rp {{ number_format($aDepNetIn, 0, ',', '.') }} | Dipakai: -Rp {{ number_format($atsDeposit['used_total'] ?? 0, 0, ',', '.') }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-xl">
+                            <div class="bg-white border rounded-3 p-2 h-100">
+                                <div class="small text-muted" style="font-size: 0.74rem;">
+                                    Pesanan Dibawa Driver
+                                    <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Nilai barang yang masih dalam perjalanan diantar driver dan belum diselesaikan pembayarannya."></i>
+                                </div>
+                                <div class="fw-bold text-primary">Rp {{ number_format($activeDeliveriesAmount ?? 0, 0, ',', '.') }}</div>
+                                <div class="text-muted" style="font-size: 0.7rem;">{{ number_format($activeDeliveriesCount ?? 0) }} pesanan di jalan</div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-xl">
+                            <div class="bg-white border rounded-3 p-2 h-100" style="border-color: #86efac !important;">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="small text-muted" style="font-size: 0.74rem;">
+                                        Total Uang Tunai di Laci
+                                        <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Jumlah fisik uang tunai (kertas &amp; koin) yang wajib ada di seluruh laci kasir sekarang."></i>
+                                    </span>
+                                    <button type="button" class="btn btn-xs btn-link text-danger p-0" onclick="openAdminDrilldown('drawer_out', 'all', 'Rincian Uang Keluar dari Laci')" title="Lihat rincian uang keluar laci"><i class="fas fa-search"></i></button>
+                                </div>
+                                <div class="fw-bold text-success" id="am-strip-drawer">Rp {{ number_format($cashierSummaryTotals['total_drawer'] ?? 0, 0, ',', '.') }}</div>
+                                <div class="text-muted" style="font-size: 0.7rem;">Keluar Laci: <span class="text-danger" id="am-strip-drawer-out">-Rp {{ number_format($atsDrawer['out_total'] ?? ($cashierSummaryTotals['total_expenses'] ?? 0), 0, ',', '.') }}</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2 small text-muted" style="font-size: 0.72rem;" id="am-footnote">
+                        *<strong>Pakai Deposit (Rp {{ number_format($aGross['deposit_used'] ?? 0, 0, ',', '.') }})</strong> adalah pembayaran memakai saldo titipan pelanggan sebelumnya (bukan uang tunai/bank baru yang masuk hari ini).
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+{{-- MODAL AJAX DRILLDOWN ADMIN --}}
+<div class="modal fade" id="modalAdminDrilldown" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 14px; overflow: hidden;">
+            <div class="modal-header bg-dark text-white py-3" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%) !important;">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0" id="adminDrilldownTitle">Rincian Transaksi</h5>
+                    <small class="text-white-50" id="adminDrilldownSub">Memuat data...</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="adminDrilldownLoading" class="text-center py-4">
+                    <div class="spinner-border text-primary spinner-border-sm me-2"></div>
+                    <span class="small text-muted">Mengambil daftar rincian transaksi...</span>
+                </div>
+                <div id="adminDrilldownContent" class="d-none">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Jam</th>
+                                    <th>Kode / Jenis</th>
+                                    <th>Cabang</th>
+                                    <th>Kasir</th>
+                                    <th>Pelanggan</th>
+                                    <th>Metode</th>
+                                    <th>Keterangan</th>
+                                    <th class="text-end pe-3">Nominal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminDrilldownTbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2 d-flex justify-content-between">
+                <div class="small fw-bold" id="adminDrilldownFooterTotal"></div>
+                <button type="button" class="btn btn-sm btn-secondary px-3" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ================================================================= --}}
 {{-- [PRIORITAS] MONITORING CASH ON HAND REAL PER AKUN KASIR           --}}
 {{-- ================================================================= --}}
 <div id="cashier-priority-container">
@@ -295,9 +765,9 @@
                 <div>
                     <h5 class="mb-0 fw-bold d-flex align-items-center">
                         <span class="badge badge-soft-success me-2 px-2 py-1" style="font-size: 0.75rem; letter-spacing: 0.5px; background-color: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important;">PRIORITAS</span>
-                        <i class="fas fa-cash-register text-warning me-2"></i> Rekonsiliasi Kas Laci & Performa Kasir ({{ $isToday ? 'Hari Ini' : $formattedDate }})
+                        <i class="fas fa-cash-register text-warning me-2"></i> Cek Uang Laci &amp; Performa Kasir ({{ $isToday ? 'Hari Ini' : $formattedDate }})
                     </h5>
-                    <small class="text-white-50">Monitoring uang kas fisik di laci kasir (Cash on Hand) dan estimasi laba bersih operasional shift.</small>
+                    <small class="text-white-50">Pantau uang tunai yang wajib ada di laci tiap kasir dan perkiraan untung shiftnya.</small>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <span class="badge bg-secondary px-3 py-2 fs-6">
@@ -448,10 +918,13 @@
                                         <span class="small text-muted"><i class="fas fa-money-bill-wave text-success me-1"></i> Kas Tunai Masuk:</span>
                                         <span class="fw-bold text-success">+ Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</span>
                                     </div>
-                                    @if(($c['pelunasan_cash'] ?? 0) > 0)
-                                    <div class="d-flex justify-content-between align-items-center px-1 pb-1 border-bottom text-muted" style="font-size: 0.7rem; background-color: #f8fafc;">
+                                    @if(($c['pelunasan_cash'] ?? 0) > 0 || ($c['deposit_cash'] ?? 0) > 0)
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 px-1 pb-1 border-bottom text-muted" style="font-size: 0.7rem; background-color: #f8fafc;">
                                         <span>↳ Meja: Rp {{ number_format($c['cash_sales'], 0, ',', '.') }}</span>
                                         <span>Setoran: Rp {{ number_format($c['pelunasan_cash'], 0, ',', '.') }}</span>
+                                        @if(($c['deposit_cash'] ?? 0) > 0)
+                                        <span style="color: #0f766e;">Deposit: Rp {{ number_format($c['deposit_cash'], 0, ',', '.') }}</span>
+                                        @endif
                                     </div>
                                     @endif
                                     <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
@@ -463,28 +936,44 @@
                                         <span class="fw-bold {{ $c['physical_drawer'] >= 0 ? 'text-success' : 'text-danger' }}">Rp {{ number_format($c['physical_drawer'], 0, ',', '.') }}</span>
                                     </div>
                                     <div class="d-flex justify-content-between align-items-center py-1 border-bottom mt-1">
-                                        <span class="small text-muted"><i class="fas fa-boxes-stacked text-info me-1"></i> Modal Es (COGS):</span>
+                                        <span class="small text-muted">
+                                            <i class="fas fa-boxes-stacked text-info me-1"></i> Modal Beli Es (HPP):
+                                            <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Total harga modal es yang terjual oleh kasir ini hari ini."></i>
+                                        </span>
                                         <span class="small text-muted">Rp {{ number_format($c['cogs'], 0, ',', '.') }}</span>
                                     </div>
                                     <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                                        <span class="small text-muted"><i class="fas fa-gas-pump text-warning me-1"></i> Beban Ops Murni:</span>
+                                        <span class="small text-muted">
+                                            <i class="fas fa-gas-pump text-warning me-1"></i> Biaya Harian Murni:
+                                            <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Pengeluaran harian (seperti BBM/plastik) yang memotong untung shift. Tidak termasuk setor ke Bos atau beli stok."></i>
+                                        </span>
                                         <span class="small text-muted">Rp {{ number_format($c['operational_expenses'], 0, ',', '.') }}</span>
                                     </div>
                                     <div class="d-flex justify-content-between align-items-center pt-2">
-                                        <span class="small fw-bold text-dark"><i class="fas fa-chart-line text-primary me-1"></i> Estimasi Laba Bersih:</span>
+                                        <span class="small fw-bold text-dark">
+                                            <i class="fas fa-chart-line text-primary me-1"></i> Perkiraan Untung Shift:
+                                            <i class="fas fa-circle-info text-muted info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Rumus: Total Penjualan − Modal Beli Es (HPP) − Biaya Harian Murni."></i>
+                                        </span>
                                         <span class="fw-bold {{ $c['shift_net_profit'] >= 0 ? 'text-success' : 'text-danger' }}">
                                             {{ $c['shift_net_profit'] >= 0 ? '+' : '' }}Rp {{ number_format($c['shift_net_profit'], 0, ',', '.') }}
                                         </span>
                                     </div>
                                 </div>
 
-                                {{-- Info Tambahan: Non-Tunai & Kasbon --}}
-                                <div class="d-flex justify-content-between align-items-center small text-muted px-1 flex-wrap gap-1">
-                                    <span><i class="fas fa-building-columns me-1"></i>Non-Tunai (Transfer/DANA): <strong>Rp {{ number_format($c['non_cash_sales'], 0, ',', '.') }}</strong></span>
-                                    <span><i class="fas fa-clock text-danger me-1"></i>Kasbon: <strong>Rp {{ number_format($c['kasbon'], 0, ',', '.') }}</strong></span>
-                                    @if(($c['pelunasan_non_cash_total'] ?? 0) > 0)
-                                    <div class="w-100 text-primary small pt-1 border-top" style="font-size: 0.72rem;">
-                                        <i class="fas fa-rotate me-1"></i>Pelunasan Non-Tunai: <strong>Rp {{ number_format($c['pelunasan_non_cash_total'], 0, ',', '.') }}</strong>
+                                {{-- Info Tambahan: Rincian Saluran Non-Tunai, Deposit & Kasbon --}}
+                                @php
+                                    $cTs = $c['transaction_summary'] ?? [];
+                                    $cGross = $cTs['rows']['inflow_gross'] ?? ['dana' => 0, 'transfer' => 0];
+                                    $cDep = $cTs['deposit'] ?? ['in_total' => 0, 'used_total' => 0];
+                                @endphp
+                                <div class="d-flex justify-content-between align-items-center small text-muted px-1 flex-wrap gap-1" style="font-size: 0.76rem;">
+                                    <span><i class="fas fa-mobile-alt text-info me-1"></i>DANA: <strong class="text-dark">Rp {{ number_format($cGross['dana'] ?? 0, 0, ',', '.') }}</strong></span>
+                                    <span><i class="fas fa-university text-primary me-1"></i>Transfer: <strong class="text-dark">Rp {{ number_format($cGross['transfer'] ?? 0, 0, ',', '.') }}</strong></span>
+                                    <span><i class="fas fa-clock text-danger me-1"></i>Kasbon: <strong class="text-danger">Rp {{ number_format($c['kasbon'], 0, ',', '.') }}</strong></span>
+                                    @if(($cDep['in_total'] ?? 0) > 0 || ($cDep['used_total'] ?? 0) > 0)
+                                    <div class="w-100 small pt-1 border-top d-flex justify-content-between flex-wrap gap-1" style="font-size: 0.72rem; color: #0f766e;">
+                                        <span><i class="fas fa-piggy-bank me-1"></i>Deposit Masuk: <strong>Rp {{ number_format($cDep['in_total'] ?? 0, 0, ',', '.') }}</strong></span>
+                                        <span>Potong Deposit: <strong>Rp {{ number_format($cDep['used_total'] ?? 0, 0, ',', '.') }}</strong></span>
                                     </div>
                                     @endif
                                 </div>
@@ -1233,7 +1722,7 @@
 <div id="cashier-modals-wrapper">
 @foreach($cashierMonitoring ?? [] as $c)
 <div class="modal fade" id="modalCashierDetail_{{ $c['user_id'] }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
             <div class="modal-header bg-dark text-white py-3" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;">
                 <div>
@@ -1250,19 +1739,23 @@
                     <div class="col-md-3 col-6">
                         <div class="p-3 bg-white rounded border shadow-sm h-100">
                             <div class="text-muted small fw-semibold text-center">KAS TUNAI MASUK</div>
-                            <h5 class="fw-bold mb-2 text-success text-center">Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</h5>
-                            <div class="border-top pt-2" style="font-size: 0.72rem; line-height: 1.4;">
-                                <div class="d-flex justify-content-between text-muted">
-                                    <span>Penjualan Tunai Meja:</span>
-                                    <strong class="text-dark">Rp {{ number_format($c['cash_sales'], 0, ',', '.') }}</strong>
+                            <h5 class="fw-bold mb-2 text-success text-center text-nowrap">Rp {{ number_format($c['total_cash_in'], 0, ',', '.') }}</h5>
+                            <div class="border-top pt-2 d-flex flex-column gap-1" style="font-size: 0.74rem; line-height: 1.35;">
+                                <div class="d-flex justify-content-between gap-2 text-muted">
+                                    <span>Jual Tunai Meja:</span>
+                                    <strong class="text-dark text-nowrap">Rp {{ number_format($c['cash_sales'], 0, ',', '.') }}</strong>
                                 </div>
-                                <div class="d-flex justify-content-between text-muted">
-                                    <span>Pelunasan & Driver (Tunai):</span>
-                                    <strong class="text-dark">Rp {{ number_format($c['pelunasan_cash'], 0, ',', '.') }}</strong>
+                                <div class="d-flex justify-content-between gap-2 text-muted">
+                                    <span>Pelunasan Tunai:</span>
+                                    <strong class="text-dark text-nowrap">Rp {{ number_format($c['pelunasan_cash'], 0, ',', '.') }}</strong>
                                 </div>
-                                <div class="d-flex justify-content-between text-muted">
+                                <div class="d-flex justify-content-between gap-2 text-muted">
+                                    <span>Deposit Tunai:</span>
+                                    <strong class="text-nowrap" style="color: #0f766e;">Rp {{ number_format($c['deposit_cash'] ?? 0, 0, ',', '.') }}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between gap-2 text-muted">
                                     <span>Modal Awal Laci:</span>
-                                    <strong class="text-dark">Rp {{ number_format($c['opening_cash'] ?? 0, 0, ',', '.') }}</strong>
+                                    <strong class="text-dark text-nowrap">Rp {{ number_format($c['opening_cash'] ?? 0, 0, ',', '.') }}</strong>
                                 </div>
                             </div>
                         </div>
@@ -1288,6 +1781,101 @@
                                 {{ $c['shift_net_profit'] >= 0 ? '+' : '' }}Rp {{ number_format($c['shift_net_profit'], 0, ',', '.') }}
                             </h5>
                             <small class="text-muted" style="font-size: 0.7rem;">Omset - COGS - Ops Murni</small>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- [SSOT] Matriks Detail Transaksi Full Per Kasir (100% Sama dengan Dashboard Kasir) --}}
+                @php
+                    $mTs = $c['transaction_summary'] ?? [];
+                    $mRows = $mTs['rows'] ?? [];
+                    $mDep = $mTs['deposit'] ?? [];
+                    $mSale = $mRows['sale_direct'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'deposit_used' => 0, 'total' => 0];
+                    $mSettle = $mRows['debt_settlement'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'deposit_used' => 0, 'total' => 0];
+                    $mCustDep = $mRows['customer_deposit'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'total_money' => 0];
+                    $mGross = $mRows['inflow_gross'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'deposit_used' => 0, 'total_money' => 0];
+                    $mRefunds = $mRows['refunds'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'total_money' => 0];
+                    $mNet = $mRows['inflow_net'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'total_money' => 0];
+                @endphp
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h6 class="mb-0 fw-bold text-dark">
+                            <i class="fas fa-table-list text-primary me-2"></i> Rincian Uang Masuk Kasir (Sama dengan Layar Kasir)
+                        </h6>
+                        <span class="badge bg-success">Uang Masuk Bersih: Rp {{ number_format($mNet['total_money'] ?? 0, 0, ',', '.') }}</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.78rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Jenis Transaksi</th>
+                                        <th class="text-end">Tunai</th>
+                                        <th class="text-end">DANA</th>
+                                        <th class="text-end">Transfer</th>
+                                        <th class="text-end" style="color: #0f766e;">Pakai Deposit</th>
+                                        <th class="text-end pe-3">Jumlah</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="ps-3 fw-semibold">Pembelian Langsung Lunas</td>
+                                        <td class="text-end">Rp {{ number_format($mSale['cash'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end">Rp {{ number_format($mSale['dana'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end">Rp {{ number_format($mSale['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end" style="color: #0f766e;">Rp {{ number_format($mSale['deposit_used'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end pe-3 fw-bold">Rp {{ number_format($mSale['total'] ?? 0, 0, ',', '.') }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="ps-3 fw-semibold">Bayar Kasbon Lama / Driver</td>
+                                        <td class="text-end">Rp {{ number_format($mSettle['cash'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end">Rp {{ number_format($mSettle['dana'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end">Rp {{ number_format($mSettle['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end" style="color: #0f766e;">Rp {{ number_format($mSettle['deposit_used'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end pe-3 fw-bold">Rp {{ number_format($mSettle['total'] ?? 0, 0, ',', '.') }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="ps-3 fw-semibold">Terima Titipan Deposit</td>
+                                        <td class="text-end">Rp {{ number_format($mCustDep['cash'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end">Rp {{ number_format($mCustDep['dana'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end">Rp {{ number_format($mCustDep['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end text-muted">—</td>
+                                        <td class="text-end pe-3 fw-bold">Rp {{ number_format($mCustDep['total_money'] ?? 0, 0, ',', '.') }}</td>
+                                    </tr>
+                                    <tr class="table-light fw-bold">
+                                        <td class="ps-3">Total Masuk Kotor (Sebelum Potongan)</td>
+                                        <td class="text-end text-success">Rp {{ number_format($mGross['cash'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end text-info">Rp {{ number_format($mGross['dana'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end text-primary">Rp {{ number_format($mGross['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end" style="color: #0f766e;">Rp {{ number_format($mGross['deposit_used'] ?? 0, 0, ',', '.') }}*</td>
+                                        <td class="text-end pe-3 text-success">Rp {{ number_format($mGross['total_money'] ?? 0, 0, ',', '.') }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="ps-3 fw-semibold text-danger">Nota Batal &amp; Koreksi / Kembali Deposit</td>
+                                        <td class="text-end text-danger">{{ ($mRefunds['cash'] ?? 0) > 0 ? '-Rp ' . number_format($mRefunds['cash'], 0, ',', '.') : 'Rp 0' }}</td>
+                                        <td class="text-end text-danger">{{ ($mRefunds['dana'] ?? 0) > 0 ? '-Rp ' . number_format($mRefunds['dana'], 0, ',', '.') : 'Rp 0' }}</td>
+                                        <td class="text-end text-danger">{{ ($mRefunds['transfer'] ?? 0) > 0 ? '-Rp ' . number_format($mRefunds['transfer'], 0, ',', '.') : 'Rp 0' }}</td>
+                                        <td class="text-end text-muted">—</td>
+                                        <td class="text-end pe-3 fw-bold text-danger">{{ ($mRefunds['total_money'] ?? 0) > 0 ? '-Rp ' . number_format($mRefunds['total_money'], 0, ',', '.') : 'Rp 0' }}</td>
+                                    </tr>
+                                    <tr class="fw-bold" style="background-color: #ecfdf5;">
+                                        <td class="ps-3">Total Uang Masuk Bersih</td>
+                                        <td class="text-end text-success">Rp {{ number_format($mNet['cash'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end">Rp {{ number_format($mNet['dana'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end">Rp {{ number_format($mNet['transfer'] ?? 0, 0, ',', '.') }}</td>
+                                        <td class="text-end text-muted">—</td>
+                                        <td class="text-end pe-3 text-success">Rp {{ number_format($mNet['total_money'] ?? 0, 0, ',', '.') }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="px-3 py-2 bg-light border-top d-flex flex-wrap justify-content-between gap-2" style="font-size: 0.72rem;">
+                            <span style="color: #0f766e;">
+                                <strong>Deposit:</strong> Masuk +Rp {{ number_format($mDep['in_total'] ?? 0, 0, ',', '.') }} &middot; Dipakai -Rp {{ number_format($mDep['used_total'] ?? 0, 0, ',', '.') }} &middot; Koreksi/Kembali -Rp {{ number_format($mDep['refund_total'] ?? 0, 0, ',', '.') }}
+                            </span>
+                            <span class="text-danger">
+                                <strong>Kasbon Baru:</strong> Rp {{ number_format($c['kasbon'] ?? 0, 0, ',', '.') }}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -1379,47 +1967,6 @@
                                     @endforelse
                                 </tbody>
                             </table>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- [BARU] Bar Rincian Lengkap: Penjualan Non-Tunai, Pelunasan Non-Tunai & Kasbon Baru --}}
-                <div class="p-3 bg-white rounded border shadow-sm mb-0">
-                    <div class="row g-2 align-items-center">
-                        {{-- 1. Penjualan Non-Tunai Hari Ini --}}
-                        <div class="col-md-4">
-                            <div class="small text-muted fw-bold mb-1"><i class="fas fa-credit-card text-primary me-1"></i>Penjualan Non-Tunai Hari Ini:</div>
-                            <div class="d-flex flex-wrap gap-1">
-                                <span class="badge py-1 px-2" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 0.75rem;">
-                                    📱 DANA: <strong>Rp {{ number_format($c['non_cash_dana'] ?? 0, 0, ',', '.') }}</strong>
-                                </span>
-                                <span class="badge py-1 px-2" style="background-color: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; font-size: 0.75rem;">
-                                    🏦 Transfer: <strong>Rp {{ number_format($c['non_cash_transfer'] ?? 0, 0, ',', '.') }}</strong>
-                                </span>
-                            </div>
-                        </div>
-
-                        {{-- 2. Pelunasan Kasbon via Non-Tunai (Tidak Masuk Laci Kasir) --}}
-                        <div class="col-md-5">
-                            <div class="small text-muted fw-bold mb-1">
-                                <i class="fas fa-rotate text-info me-1"></i>Pelunasan Kasbon (DANA / Transfer):
-                            </div>
-                            <div class="d-flex flex-wrap gap-1 align-items-center">
-                                <span class="badge py-1 px-2" style="background-color: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; font-size: 0.75rem;">
-                                    Total: <strong>Rp {{ number_format($c['pelunasan_non_cash_total'] ?? 0, 0, ',', '.') }}</strong>
-                                </span>
-                                <span class="small text-muted" style="font-size: 0.72rem;">
-                                    (DANA: Rp {{ number_format($c['pelunasan_dana'] ?? 0, 0, ',', '.') }} | TF: Rp {{ number_format($c['pelunasan_transfer'] ?? 0, 0, ',', '.') }})
-                                </span>
-                            </div>
-                        </div>
-
-                        {{-- 3. Kasbon Baru Hari Ini (Belum Bayar) --}}
-                        <div class="col-md-3 text-md-end">
-                            <div class="small text-muted fw-bold mb-1"><i class="fas fa-clock text-danger me-1"></i>Kasbon Baru Hari Ini:</div>
-                            <span class="badge py-1 px-2 {{ ($c['kasbon'] ?? 0) > 0 ? 'badge-soft-danger' : 'bg-light text-muted border' }}" style="font-size: 0.78rem; {{ ($c['kasbon'] ?? 0) > 0 ? 'background-color: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fca5a5 !important;' : '' }}">
-                                <strong>Rp {{ number_format($c['kasbon'] ?? 0, 0, ',', '.') }}</strong>
-                            </span>
                         </div>
                     </div>
                 </div>
@@ -1652,6 +2199,19 @@
 {{-- PEMANGGILAN CSS & JS DENGAN VITE --}}
 @push('styles')
 @vite(['resources/css/admin/dashboard.css'])
+<style>
+    .info-tip {
+        cursor: pointer;
+        font-size: 0.78em;
+        opacity: 0.78;
+        transition: opacity 120ms ease;
+    }
+    .info-tip:hover,
+    .info-tip:focus {
+        opacity: 1;
+        outline: none;
+    }
+</style>
 @endpush
 
 @push('scripts')
@@ -1736,6 +2296,18 @@
                     currKpi.innerHTML = newKpi.innerHTML;
                 }
 
+                // 1b. Perbarui Matriks Rekapitulasi Transaksi Full (SSOT) hanya jika tidak ada filter custom aktif
+                const amBranchSel = document.getElementById('adminMatrixBranchFilter');
+                const amCashierSel = document.getElementById('adminMatrixCashierFilter');
+                const hasCustomMatrixFilter = (amBranchSel && amBranchSel.value !== '') || (amCashierSel && amCashierSel.value !== '');
+                if (!hasCustomMatrixFilter && currentAdminMatrixTab === 'matrix') {
+                    const newMatrix = doc.querySelector('#transaction-summary-matrix-container');
+                    const currMatrix = document.querySelector('#transaction-summary-matrix-container');
+                    if (newMatrix && currMatrix) {
+                        currMatrix.innerHTML = newMatrix.innerHTML;
+                    }
+                }
+
                 // 2. Perbarui Container Prioritas Cash on Hand Real Kasir
                 const newCashier = doc.querySelector('#cashier-priority-container');
                 const currCashier = document.querySelector('#cashier-priority-container');
@@ -1793,6 +2365,10 @@
                     if (typeof applySettlementFilter === 'function') {
                         applySettlementFilter(currentSettlementFilter);
                     }
+                }
+
+                if (typeof initAdminInfoTooltips === 'function') {
+                    initAdminInfoTooltips();
                 }
 
                 // Efek denyut hijau tanda data baru sukses masuk
@@ -2022,6 +2598,23 @@
     document.addEventListener('DOMContentLoaded', () => {
         startReloadCountdown();
 
+        // Inisialisasi Bootstrap Tooltip (hover desktop + tap HP/tablet)
+        window.initAdminInfoTooltips = function() {
+            if (!window.bootstrap || !bootstrap.Tooltip) return;
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+                bootstrap.Tooltip.getOrCreateInstance(el, { trigger: 'hover focus click', container: 'body' });
+            });
+        };
+        initAdminInfoTooltips();
+        document.addEventListener('click', ev => {
+            if (!ev.target.closest('[data-bs-toggle="tooltip"]')) {
+                document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+                    const inst = bootstrap.Tooltip.getInstance(el);
+                    if (inst) inst.hide();
+                });
+            }
+        });
+
         // Inisialisasi tampilan kasir: default kasir aktif, fallback ke 'all' jika belum ada kasir aktif
         const hasActive = document.querySelectorAll('.cashier-card-col[data-status="active"]').length > 0;
         currentCashierFilter = hasActive ? 'active' : 'all';
@@ -2178,6 +2771,235 @@
             }
         }, 1000);
     })();
+
+    // =================================================================
+    // INTERAKTIF MATRIKS TRANSAKSI FULL ADMIN (TABS, FILTER AJAX & DRILLDOWN)
+    // =================================================================
+    let currentAdminMatrixTab = 'matrix';
+    const adminMatrixFilterDate = '{{ $filterDate }}';
+
+    window.switchAdminMatrixTab = function(tab) {
+        currentAdminMatrixTab = tab;
+        const btns = document.querySelectorAll('.admin-matrix-tab-btn');
+        btns.forEach(btn => {
+            const isAct = btn.getAttribute('data-tab') === tab;
+            btn.classList.toggle('btn-primary', isAct);
+            btn.classList.toggle('active', isAct);
+            btn.classList.toggle('btn-outline-secondary', !isAct);
+        });
+        ['matrix', 'branch', 'cashier'].forEach(p => {
+            const el = document.getElementById('admin-matrix-pane-' + p);
+            if (el) el.classList.toggle('d-none', p !== tab);
+        });
+    };
+
+    window.filterMatrixByBranch = function(branchId) {
+        const bSel = document.getElementById('adminMatrixBranchFilter');
+        const cSel = document.getElementById('adminMatrixCashierFilter');
+        if (bSel) bSel.value = String(branchId || '');
+        if (cSel) cSel.value = '';
+        switchAdminMatrixTab('matrix');
+        fetchAdminTransactionMatrix();
+    };
+
+    window.filterMatrixByCashier = function(userId) {
+        const cSel = document.getElementById('adminMatrixCashierFilter');
+        if (cSel) cSel.value = String(userId || '');
+        switchAdminMatrixTab('matrix');
+        fetchAdminTransactionMatrix();
+    };
+
+    window.resetAdminMatrixFilters = function() {
+        const bSel = document.getElementById('adminMatrixBranchFilter');
+        const cSel = document.getElementById('adminMatrixCashierFilter');
+        if (bSel) bSel.value = '';
+        if (cSel) cSel.value = '';
+        fetchAdminTransactionMatrix();
+    };
+
+    window.fetchAdminTransactionMatrix = async function() {
+        const bSel = document.getElementById('adminMatrixBranchFilter');
+        const cSel = document.getElementById('adminMatrixCashierFilter');
+        const resetBtn = document.getElementById('adminMatrixResetBtn');
+        const spinner = document.getElementById('adminMatrixSpinner');
+
+        const branchId = bSel ? bSel.value : '';
+        const cashierId = cSel ? cSel.value : '';
+        if (resetBtn) {
+            resetBtn.classList.toggle('d-none', !branchId && !cashierId);
+        }
+        if (spinner) spinner.classList.remove('d-none');
+
+        try {
+            const params = new URLSearchParams({ date: adminMatrixFilterDate });
+            if (branchId) params.set('branch_id', branchId);
+            if (cashierId) params.set('cashier_id', cashierId);
+
+            const resp = await fetch('{{ route('admin.dashboard.transaction-matrix') }}?' + params.toString(), {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            if (!resp.ok) return;
+            const res = await resp.json();
+            if (res.status !== 'success' || !res.summary) return;
+
+            const fmt = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
+            const rp = (n) => 'Rp ' + fmt(n);
+            const negRp = (n) => (n > 0 ? '-Rp ' + fmt(n) : 'Rp 0');
+            const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+            const s = res.summary;
+            const r = s.rows || {};
+            const d = s.drawer || {};
+            const dep = s.deposit || {};
+            const sk = s.sales_kasbon || {};
+
+            setTxt('am-badge-omset', rp(sk.omset_today));
+            setTxt('am-badge-net', rp(r.inflow_net?.total_money));
+
+            setTxt('am-sale-cash', rp(r.sale_direct?.cash));
+            setTxt('am-sale-dana', rp(r.sale_direct?.dana));
+            setTxt('am-sale-transfer', rp(r.sale_direct?.transfer));
+            setTxt('am-sale-other', rp(r.sale_direct?.other));
+            setTxt('am-sale-dep', rp(r.sale_direct?.deposit_used));
+            setTxt('am-sale-total', rp(r.sale_direct?.total));
+
+            setTxt('am-settle-cash', rp(r.debt_settlement?.cash));
+            setTxt('am-settle-dana', rp(r.debt_settlement?.dana));
+            setTxt('am-settle-transfer', rp(r.debt_settlement?.transfer));
+            setTxt('am-settle-other', rp(r.debt_settlement?.other));
+            setTxt('am-settle-dep', rp(r.debt_settlement?.deposit_used));
+            setTxt('am-settle-total', rp(r.debt_settlement?.total));
+
+            setTxt('am-dep-cash', rp(r.customer_deposit?.cash));
+            setTxt('am-dep-dana', rp(r.customer_deposit?.dana));
+            setTxt('am-dep-transfer', rp(r.customer_deposit?.transfer));
+            setTxt('am-dep-other', rp(r.customer_deposit?.other));
+            setTxt('am-dep-total', rp(r.customer_deposit?.total_money));
+
+            setTxt('am-gross-cash', rp(r.inflow_gross?.cash));
+            setTxt('am-gross-dana', rp(r.inflow_gross?.dana));
+            setTxt('am-gross-transfer', rp(r.inflow_gross?.transfer));
+            setTxt('am-gross-other', rp(r.inflow_gross?.other));
+            setTxt('am-gross-dep', rp(r.inflow_gross?.deposit_used) + '*');
+            setTxt('am-gross-total', rp(r.inflow_gross?.total_money));
+
+            setTxt('am-refund-sub', 'Nota Batal: ' + rp(r.refund_void?.total_money) + ' · Koreksi/Kembali Deposit: ' + rp(r.refund_deposit?.total_money));
+            setTxt('am-ref-cash', negRp(r.refunds?.cash));
+            setTxt('am-ref-dana', negRp(r.refunds?.dana));
+            setTxt('am-ref-transfer', negRp(r.refunds?.transfer));
+            setTxt('am-ref-other', negRp(r.refunds?.other));
+            setTxt('am-ref-total', negRp(r.refunds?.total_money));
+
+            setTxt('am-net-cash', rp(r.inflow_net?.cash));
+            setTxt('am-net-dana', rp(r.inflow_net?.dana));
+            setTxt('am-net-transfer', rp(r.inflow_net?.transfer));
+            setTxt('am-net-other', rp(r.inflow_net?.other));
+            setTxt('am-net-total', rp(r.inflow_net?.total_money));
+
+            setTxt('am-strip-kasbon', rp(sk.kasbon_new_today));
+            setTxt('am-strip-kasbon-sub', fmt(sk.kasbon_new_count) + ' nota belum dibayar');
+            const depNetIn = (dep.in_total || 0) - (dep.refund_total || 0);
+            setTxt('am-strip-dep-sub', 'Masuk Bersih: +' + rp(depNetIn) + ' | Dipakai: -' + rp(dep.used_total));
+            setTxt('am-strip-drawer', rp(d.expected_drawer));
+            setTxt('am-strip-drawer-out', '-' + rp(d.out_total));
+            const fnEl = document.getElementById('am-footnote');
+            if (fnEl) {
+                fnEl.innerHTML = '*<strong>Pakai Deposit (' + rp(r.inflow_gross?.deposit_used) + ')</strong> adalah pembayaran memakai saldo titipan pelanggan sebelumnya (bukan uang tunai/bank baru yang masuk hari ini).';
+            }
+
+            // Update tabel Per Kasir jika filter cabang berubah
+            if (res.breakdown && Array.isArray(res.breakdown.by_cashier)) {
+                setTxt('am-cashier-count', String(res.breakdown.by_cashier.length));
+                const cTbody = document.getElementById('am-cashier-tbody');
+                if (cTbody) {
+                    if (res.breakdown.by_cashier.length === 0) {
+                        cTbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-3">Belum ada aktivitas kasir pada filter ini.</td></tr>';
+                    } else {
+                        cTbody.innerHTML = res.breakdown.by_cashier.map(cs => `
+                            <tr>
+                                <td class="ps-3 fw-bold text-nowrap">${cs.name} <span class="badge bg-light text-muted border ms-1" style="font-size: 0.66rem;">${(cs.role || 'kasir').toUpperCase()}</span></td>
+                                <td class="text-muted text-nowrap">${cs.branch_name || '-'}</td>
+                                <td class="text-end text-nowrap fw-semibold text-primary">${rp(cs.omset)}</td>
+                                <td class="text-end text-nowrap">${rp(cs.cash_in)}</td>
+                                <td class="text-end text-nowrap">${rp(cs.dana_in)}</td>
+                                <td class="text-end text-nowrap">${rp(cs.transfer_in)}</td>
+                                <td class="text-end text-nowrap" style="color: #0f766e;">${rp(cs.deposit_in)} <small class="text-muted">/ ${fmt(cs.deposit_used)}</small></td>
+                                <td class="text-end text-nowrap text-danger">${negRp(cs.refunds)}</td>
+                                <td class="text-end text-nowrap fw-bold text-success">${rp(cs.inflow_net)}</td>
+                                <td class="text-end text-nowrap text-danger">${rp(cs.kasbon_new)}</td>
+                                <td class="text-end text-nowrap fw-bold">${rp(cs.drawer_balance)}</td>
+                                <td class="text-center pe-3"><button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" onclick="filterMatrixByCashier(${cs.user_id})">Lihat Matriks</button></td>
+                            </tr>
+                        `).join('');
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('Matrix filter error:', err);
+        } finally {
+            if (spinner) spinner.classList.add('d-none');
+        }
+    };
+
+    window.openAdminDrilldown = async function(category, channel, title) {
+        const modalEl = document.getElementById('modalAdminDrilldown');
+        if (!modalEl) return;
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+        const bSel = document.getElementById('adminMatrixBranchFilter');
+        const cSel = document.getElementById('adminMatrixCashierFilter');
+        const branchId = bSel ? bSel.value : '';
+        const cashierId = cSel ? cSel.value : '';
+        const bLabel = bSel && bSel.selectedIndex > 0 ? bSel.options[bSel.selectedIndex].text : 'Semua Cabang';
+        const cLabel = cSel && cSel.selectedIndex > 0 ? cSel.options[cSel.selectedIndex].text : 'Semua Kasir';
+
+        document.getElementById('adminDrilldownTitle').textContent = title;
+        document.getElementById('adminDrilldownSub').textContent = 'Tanggal: ' + adminMatrixFilterDate + ' · ' + bLabel + ' · ' + cLabel;
+        document.getElementById('adminDrilldownLoading').classList.remove('d-none');
+        document.getElementById('adminDrilldownContent').classList.add('d-none');
+        document.getElementById('adminDrilldownFooterTotal').textContent = '';
+        modal.show();
+
+        try {
+            const params = new URLSearchParams({ category: category, channel: channel || 'all', date: adminMatrixFilterDate });
+            if (branchId) params.set('branch_id', branchId);
+            if (cashierId) params.set('cashier_id', cashierId);
+
+            const resp = await fetch('{{ route('admin.dashboard.transaction-drilldown') }}?' + params.toString(), {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const res = await resp.json();
+            const tbody = document.getElementById('adminDrilldownTbody');
+            if (!res.items || res.items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Tidak ada rincian item pada kategori &amp; filter ini.</td></tr>';
+                document.getElementById('adminDrilldownFooterTotal').textContent = '0 item';
+            } else {
+                const fmt = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
+                const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+                tbody.innerHTML = res.items.map(it => `
+                    <tr>
+                        <td class="ps-3 text-nowrap text-muted">${esc(it.time || '-')}</td>
+                        <td>
+                            <div class="fw-bold text-dark">${esc(it.code || '-')}</div>
+                            <small class="text-muted">${esc(it.type_label || '-')}</small>
+                        </td>
+                        <td class="text-nowrap">${esc(it.branch_name || '-')}</td>
+                        <td class="text-nowrap">${esc(it.cashier_name || '-')}</td>
+                        <td>${esc(it.customer_name || '-')}</td>
+                        <td><span class="badge bg-light text-dark border">${esc(it.payment_method || '-')}</span></td>
+                        <td class="small text-muted">${esc(it.description || '-')}</td>
+                        <td class="text-end pe-3 fw-bold text-nowrap ${it.sign === '-' ? 'text-danger' : 'text-success'}">${esc(it.sign || '')}Rp ${fmt(it.amount)}</td>
+                    </tr>
+                `).join('');
+                document.getElementById('adminDrilldownFooterTotal').textContent = res.count + ' item • Total: Rp ' + fmt(res.total);
+            }
+        } catch (e) {
+            document.getElementById('adminDrilldownTbody').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Gagal memuat rincian transaksi.</td></tr>';
+        } finally {
+            document.getElementById('adminDrilldownLoading').classList.add('d-none');
+            document.getElementById('adminDrilldownContent').classList.remove('d-none');
+        }
+    };
 
 </script>
 @endpush

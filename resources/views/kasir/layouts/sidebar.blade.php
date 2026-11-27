@@ -144,6 +144,16 @@
                 <span class="divider-text">Keuangan</span>
             </li>
 
+            <li class="nav-item {{ request()->routeIs('kasir.shift_summary') ? 'active' : '' }}">
+                <a href="{{ route('kasir.shift_summary') }}" class="nav-link">
+                    <div class="nav-icon">
+                        <i class="fas fa-table-list"></i>
+                    </div>
+                    <span class="nav-text">Rekap Shift &amp; Kas</span>
+                    <div class="nav-indicator"></div>
+                </a>
+            </li>
+
             <li class="nav-item {{ request()->routeIs('kasir.expenses.*') ? 'active' : '' }}">
                 <a href="{{ route('kasir.expenses.index') }}" class="nav-link">
                     <div class="nav-icon">

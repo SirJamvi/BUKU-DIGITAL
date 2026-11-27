@@ -13,6 +13,8 @@ use App\Http\Controllers\Kasir\InventoryController as KasirInventoryController;
 // Dashboard
 Route::get('/dashboard', [KasirDashboardController::class, 'index'])->name('dashboard');
 Route::get('/', [KasirDashboardController::class, 'index'])->name('index');
+Route::get('/rekap-shift', [KasirDashboardController::class, 'shiftSummary'])->name('shift_summary');
+Route::get('/dashboard/transaction-drilldown', [KasirDashboardController::class, 'transactionDrilldownJson'])->name('dashboard.drilldown');
 Route::post('/opening-balance', [KasirDashboardController::class, 'setOpeningBalance'])->name('set_opening_balance');
 
 // POS System

@@ -997,6 +997,19 @@
             grid-template-columns: 1fr;
         }
     }
+
+    .info-tip {
+        cursor: pointer;
+        font-size: 0.78em;
+        opacity: 0.78;
+        transition: opacity 120ms ease;
+    }
+
+    .info-tip:hover,
+    .info-tip:focus {
+        opacity: 1;
+        outline: none;
+    }
 </style>
 @endpush
 
@@ -1307,11 +1320,29 @@
     @endif
 
     {{-- ================================================================= --}}
-    {{-- SECTION 3: BARIS 3 KARTU KPI                                      --}}
+    {{-- SECTION 3: BARIS 4 KARTU KPI RINGKASAN SHIFT HARI INI             --}}
     {{-- ================================================================= --}}
-    <div class="row g-4">
-        {{-- KPI 1: Saldo Kas Fisik Laci Hari Ini --}}
-        <div class="col-lg-4 col-md-6">
+    @php
+        $ts = $transactionSummary ?? [];
+        $tsRows = $ts['rows'] ?? [];
+        $tsDrawer = $ts['drawer'] ?? [];
+        $tsNonDrawer = $ts['non_drawer'] ?? [];
+        $tsDeposit = $ts['deposit'] ?? [];
+        $tsSalesKasbon = $ts['sales_kasbon'] ?? [];
+        $tsHasOther = !empty($ts['has_other_channel']);
+
+        $rowSale = $tsRows['sale_direct'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+        $rowSettle = $tsRows['debt_settlement'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+        $rowDeposit = $tsRows['customer_deposit'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+        $rowGross = $tsRows['inflow_gross'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+        $rowRefunds = $tsRows['refunds'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'deposit_used' => 0, 'total_money' => 0, 'total' => 0, 'count' => 0];
+        $rowRefundVoid = $tsRows['refund_void'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'total_money' => 0, 'count' => 0];
+        $rowRefundDeposit = $tsRows['refund_deposit'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'total_money' => 0, 'count' => 0];
+        $rowNet = $tsRows['inflow_net'] ?? ['cash' => 0, 'dana' => 0, 'transfer' => 0, 'other' => 0, 'total_money' => 0, 'total' => 0];
+    @endphp
+    <div class="row g-3 g-lg-4">
+        {{-- KPI 1: Uang Tunai di Laci Hari Ini --}}
+        <div class="col-xl-3 col-md-6">
             <div class="kasir-card kasir-kpi">
                 <div class="card-body d-flex flex-column justify-content-between">
                     <div>
@@ -1320,69 +1351,128 @@
                                 <i class="fas fa-wallet"></i>
                             </div>
                             <div class="flex-grow-1 min-w-0">
-                                <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
-                                    <h6 class="text-muted mb-0 fw-semibold small">Saldo Kas Fisik Laci (Hari Ini)</h6>
-                                    <button type="button" class="btn btn-xs btn-outline-success fw-bold" data-bs-toggle="modal" data-bs-target="#modalOpeningBalance" title="Atur Modal Awal Laci (Kas Kemarin)">
-                                        <i class="fas fa-vault"></i>
-                                        <span>Modal Awal</span>
+                                <div class="d-flex justify-content-between align-items-center gap-1 mb-1">
+                                    <h6 class="text-muted mb-0 fw-semibold small">
+                                        Uang Tunai di Laci
+                                        <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Jumlah uang tunai (kertas &amp; koin) yang wajib ada di laci kasir sekarang. Rumus: Modal Awal + Tunai Masuk − Tunai Keluar."></i>
+                                    </h6>
+                                    <button type="button" class="btn btn-xs btn-outline-success fw-bold py-0 px-2" data-bs-toggle="modal" data-bs-target="#modalOpeningBalance" title="Atur Modal Awal Laci (Kas Kemarin)">
+                                        <i class="fas fa-vault"></i> Modal
                                     </button>
                                 </div>
-                                <div class="kasir-kpi-value" style="color: var(--kasir-success);">
+                                <div class="kasir-kpi-value kasir-num" style="color: var(--kasir-success);">
                                     Rp {{ number_format($myNetCashToday ?? 0, 0, ',', '.') }}
                                 </div>
-                                <small class="text-muted d-block mt-1" style="font-size: 0.76rem;">
-                                    @if(isset($myOpeningCash) && $myOpeningCash > 0)
-                                        <span class="text-dark fw-bold">Modal Awal: Rp {{ number_format($myOpeningCash, 0, ',', '.') }}</span> &middot;
-                                    @endif
-                                    Masuk Tunai: <strong style="color: var(--kasir-success);">+Rp {{ number_format($totalCashInToday ?? $mySalesToday ?? 0, 0, ',', '.') }}</strong>
-                                    @if(isset($depositCashAmount) && $depositCashAmount > 0)
-                                        <span class="fw-bold" style="color: var(--kasir-info);" title="Penerimaan titipan deposit pelanggan tunai">(Inc. Deposit: +Rp {{ number_format($depositCashAmount, 0, ',', '.') }})</span>
-                                    @endif
-                                    &middot; Keluar: <strong style="color: var(--kasir-danger);">-Rp {{ number_format($myExpensesToday ?? 0, 0, ',', '.') }}</strong>
-                                </small>
+                            </div>
+                        </div>
+                        <div class="small pt-2 mt-2 border-top d-flex flex-column gap-1" style="font-size: 0.78rem;">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Modal Awal Laci:</span>
+                                <strong class="text-dark kasir-num">Rp {{ number_format($myOpeningCash ?? 0, 0, ',', '.') }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Tunai Masuk Laci:</span>
+                                <strong class="kasir-num" style="color: var(--kasir-success);">+Rp {{ number_format($totalCashInToday ?? 0, 0, ',', '.') }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Tunai Keluar / Koreksi:</span>
+                                <strong class="kasir-num" style="color: var(--kasir-danger);">-Rp {{ number_format($myExpensesToday ?? 0, 0, ',', '.') }}</strong>
                             </div>
                         </div>
                     </div>
-                    <div class="pt-2 mt-2 border-top d-flex gap-2 flex-wrap">
-                        <span class="kasir-badge-info kasir-num" title="Penerimaan Transfer Bank langsung ke Rekening Owner (Tidak masuk laci fisik)">
-                            <i class="fas fa-university"></i>
-                            <span>Transfer: Rp {{ number_format($nonCashTransfer ?? 0, 0, ',', '.') }}</span>
-                        </span>
-                        <span class="kasir-badge-muted kasir-num" title="Penerimaan DANA langsung ke E-Wallet Owner (Tidak masuk laci fisik)">
-                            <i class="fas fa-mobile-alt"></i>
-                            <span>DANA: Rp {{ number_format($nonCashDana ?? 0, 0, ',', '.') }}</span>
-                        </span>
+                    <div class="pt-2 mt-2 border-top small text-muted" style="font-size: 0.72rem;">
+                        Uang tunai fisik yang wajib ada di laci saat ini
                     </div>
                 </div>
             </div>
         </div>
 
-        {{-- KPI 2: Transaksi Lunas --}}
-        <div class="col-lg-4 col-md-6">
+        {{-- KPI 2: Total Uang Masuk (Semua Cara Bayar) --}}
+        <div class="col-xl-3 col-md-6">
             <div class="kasir-card kasir-kpi">
                 <div class="card-body d-flex flex-column justify-content-between">
-                    <div class="d-flex align-items-start gap-3 mb-2">
-                        <div class="kasir-kpi-icon kasir-kpi-icon--primary">
-                            <i class="fas fa-receipt"></i>
+                    <div>
+                        <div class="d-flex align-items-start gap-3 mb-2">
+                            <div class="kasir-kpi-icon kasir-kpi-icon--primary">
+                                <i class="fas fa-money-bill-trend-up"></i>
+                            </div>
+                            <div class="flex-grow-1 min-w-0">
+                                <h6 class="text-muted mb-1 fw-semibold small">
+                                    Uang Masuk Bersih
+                                    <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Total semua uang nyata yang benar-benar diterima hari ini (Tunai + DANA + Transfer) setelah dikurangi nota batal &amp; koreksi deposit."></i>
+                                </h6>
+                                <div class="kasir-kpi-value kasir-num">
+                                    Rp {{ number_format($rowNet['total_money'] ?? 0, 0, ',', '.') }}
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex-grow-1">
-                            <h6 class="text-muted mb-1 fw-semibold small">Transaksi Lunas</h6>
-                            <div class="kasir-kpi-value">{{ number_format($myTransactionsToday ?? 0, 0, ',', '.') }}</div>
-                            <small class="text-muted d-block mt-1" style="font-size: 0.78rem;">
-                                Penerimaan arus kas masuk tercatat hari ini
-                            </small>
+                        <div class="small pt-2 mt-2 border-top d-flex flex-column gap-1" style="font-size: 0.78rem;">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted"><i class="fas fa-money-bill-wave text-success me-1"></i>Tunai (Laci):</span>
+                                <strong class="text-dark kasir-num">Rp {{ number_format($rowNet['cash'] ?? 0, 0, ',', '.') }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted"><i class="fas fa-mobile-alt text-info me-1"></i>DANA (Bos):</span>
+                                <strong class="text-dark kasir-num">Rp {{ number_format($rowNet['dana'] ?? 0, 0, ',', '.') }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted"><i class="fas fa-university text-primary me-1"></i>Transfer Bank:</span>
+                                <strong class="text-dark kasir-num">Rp {{ number_format($rowNet['transfer'] ?? 0, 0, ',', '.') }}</strong>
+                            </div>
                         </div>
                     </div>
-                    <div class="pt-2 mt-2 border-top d-flex flex-wrap justify-content-between gap-2 small text-muted">
-                        <span>Tunai langsung: <strong class="text-dark kasir-num">Rp {{ number_format($cashSalesAmount ?? 0, 0, ',', '.') }}</strong></span>
-                        <span>Non-tunai: <strong class="text-dark kasir-num">Rp {{ number_format($nonCashTotal ?? 0, 0, ',', '.') }}</strong></span>
+                    <div class="pt-2 mt-2 border-top d-flex justify-content-between align-items-center small" style="font-size: 0.76rem;">
+                        <span class="text-muted">Sebelum potongan:</span>
+                        <strong class="kasir-num text-dark">Rp {{ number_format($rowGross['total_money'] ?? 0, 0, ',', '.') }}</strong>
                     </div>
                 </div>
             </div>
         </div>
 
-        {{-- KPI 3: Produk Keluar Hari Ini --}}
-        <div class="col-lg-4 col-md-12">
+        {{-- KPI 3: Total Penjualan Hari Ini --}}
+        <div class="col-xl-3 col-md-6">
+            <div class="kasir-card kasir-kpi">
+                <div class="card-body d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex align-items-start gap-3 mb-2">
+                            <div class="kasir-kpi-icon" style="background: #f0fdfa; color: #0f766e;">
+                                <i class="fas fa-receipt"></i>
+                            </div>
+                            <div class="flex-grow-1 min-w-0">
+                                <h6 class="text-muted mb-1 fw-semibold small">
+                                    Total Penjualan Hari Ini
+                                    <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Total nilai barang terjual hari ini (gabungan yang sudah lunas + yang masih kasbon). Bayar kasbon lama &amp; setoran deposit tidak dihitung di sini."></i>
+                                </h6>
+                                <div class="kasir-kpi-value kasir-num" style="color: var(--kasir-primary);">
+                                    Rp {{ number_format($tsSalesKasbon['omset_today'] ?? 0, 0, ',', '.') }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="small pt-2 mt-2 border-top d-flex flex-column gap-1" style="font-size: 0.78rem;">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Sudah Lunas:</span>
+                                <strong class="kasir-num" style="color: var(--kasir-success);">Rp {{ number_format($tsSalesKasbon['omset_paid_today'] ?? 0, 0, ',', '.') }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">↳ Pakai Saldo Deposit:</span>
+                                <strong class="kasir-num" style="color: #0f766e;">Rp {{ number_format($tsDeposit['used_total'] ?? 0, 0, ',', '.') }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Kasbon Baru Hari Ini:</span>
+                                <strong class="kasir-num" style="color: var(--kasir-danger);">Rp {{ number_format($tsSalesKasbon['kasbon_new_today'] ?? 0, 0, ',', '.') }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pt-2 mt-2 border-top d-flex justify-content-between align-items-center small text-muted" style="font-size: 0.74rem;">
+                        <span>{{ number_format($tsSalesKasbon['omset_count'] ?? 0) }} nota belanja</span>
+                        <span>{{ number_format($myTransactionsToday ?? 0) }} catatan uang masuk</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- KPI 4: Produk Keluar Hari Ini --}}
+        <div class="col-xl-3 col-md-6">
             <div class="kasir-card kasir-kpi">
                 <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-3 mb-3">
@@ -1390,8 +1480,11 @@
                             <i class="fas fa-box-open"></i>
                         </div>
                         <div class="flex-grow-1">
-                            <h6 class="text-muted mb-0 fw-semibold small">Produk Keluar Hari Ini</h6>
-                            <small class="text-muted" style="font-size: 0.75rem;">Top 5 produk terjual</small>
+                            <h6 class="text-muted mb-0 fw-semibold small">
+                                Barang Keluar Hari Ini
+                                <i class="fas fa-circle-info info-tip ms-1" tabindex="0" role="button" data-bs-toggle="tooltip" title="Daftar 5 produk paling banyak terjual dari shift Anda hari ini."></i>
+                            </h6>
+                            <small class="text-muted" style="font-size: 0.75rem;">5 produk terbanyak terjual</small>
                         </div>
                     </div>
 
@@ -1411,96 +1504,125 @@
     </div>
 
     {{-- ================================================================= --}}
-    {{-- SECTION 4: SALDO KAS AKTUAL HARI INI PER METODE PEMBAYARAN        --}}
+    {{-- SECTION 4: RINGKASAN CEPAT + AKSI BUKA RINCIAN LENGKAP            --}}
     {{-- ================================================================= --}}
     <div class="row mt-4">
         <div class="col-12">
             <div class="kasir-card">
-                <div class="kasir-section-header">
-                    <h5 class="kasir-section-title mb-0">
-                        <i class="fas fa-coins" style="color: var(--kasir-primary);"></i>
-                        <span>Saldo Kas Aktual Hari Ini per Metode Pembayaran</span>
-                    </h5>
-                </div>
-                <div class="card-body p-0">
-                    @if(isset($balancesByMethod) && $balancesByMethod->isNotEmpty())
-                    <div class="table-responsive">
-                        <table class="table kasir-table table-hover align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th class="ps-3">Metode Pembayaran</th>
-                                    <th class="text-end">Uang Masuk (Penjualan/Kasbon)</th>
-                                    <th class="text-end">Uang Keluar (Expenses)</th>
-                                    <th class="text-end pe-3">Saldo Akhir Aktual</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($balancesByMethod as $method => $data)
-                                @php
-                                    $mLower = strtolower($method);
-                                    $mIcon = $mLower === 'cash' ? 'fa-money-bill-wave' : ($mLower === 'dana' ? 'fa-mobile-alt' : 'fa-university');
-                                @endphp
-                                <tr>
-                                    <td class="ps-3 fw-bold">
-                                        <i class="fas {{ $mIcon }} me-2" style="color: var(--kasir-primary);"></i>{{ strtoupper(str_replace('-', ' ', $method)) }}
-                                    </td>
-                                    <td class="text-end fw-semibold kasir-num" style="color: var(--kasir-success);">
-                                        + Rp {{ number_format($data['income'], 0, ',', '.') }}
-                                    </td>
-                                    <td class="text-end fw-semibold kasir-num" style="color: var(--kasir-danger);">
-                                        - Rp {{ number_format($data['expense'], 0, ',', '.') }}
-                                    </td>
-                                    <td class="text-end pe-3">
-                                        <span class="{{ $data['balance'] >= 0 ? 'kasir-badge-success' : 'kasir-badge-danger' }} kasir-num">
-                                            Rp {{ number_format($data['balance'], 0, ',', '.') }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                <div class="kasir-section-header kasir-section-header--brand">
+                    <div>
+                        <h5 class="kasir-section-title mb-0">
+                            <i class="fas fa-table-list" style="color: var(--kasir-primary);"></i>
+                            <span>Rincian Lengkap Transaksi &amp; Hitungan Shift Hari Ini</span>
+                            <i class="fas fa-circle-info text-muted info-tip" tabindex="0" role="button" data-bs-toggle="tooltip" title="Klik tombol Lihat Rincian Lengkap untuk mengecek semua uang masuk, deposit, nota batal/koreksi, dan uang keluar laci secara rinci."></i>
+                        </h5>
+                        <p class="kasir-section-subtitle">
+                            Cek rincian belanja lunas, bayar kasbon, titipan deposit, nota batal/koreksi, dan uang keluar laci dalam 1 klik.
+                        </p>
                     </div>
-                    @else
-                    <p class="text-muted text-center my-4">Belum ada arus kas (masuk maupun keluar) hari ini.</p>
-                    @endif
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" class="btn btn-primary btn-sm fw-semibold px-3" data-bs-toggle="modal" data-bs-target="#modalKasirFullSummary">
+                            <i class="fas fa-expand-alt me-1"></i>Lihat Rincian Lengkap
+                        </button>
+                        <a href="{{ route('kasir.shift_summary') }}" class="btn btn-outline-secondary btn-sm fw-semibold px-3">
+                            <i class="fas fa-file-invoice-dollar me-1"></i>Halaman Rekap Shift &amp; Cetak
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body py-3">
+                    <div class="d-flex flex-wrap align-items-center gap-2 small">
+                        <span class="kasir-badge-success kasir-num" tabindex="0" data-bs-toggle="tooltip" title="Uang tunai bersih yang masuk hari ini setelah dikurangi nota batal &amp; koreksi deposit.">
+                            <i class="fas fa-money-bill-wave"></i>
+                            <span>Tunai Bersih: Rp {{ number_format($rowNet['cash'] ?? 0, 0, ',', '.') }}</span>
+                        </span>
+                        <span class="kasir-badge-info kasir-num" tabindex="0" data-bs-toggle="tooltip" title="Uang bersih yang masuk lewat DANA ke akun Bos.">
+                            <i class="fas fa-mobile-alt"></i>
+                            <span>DANA Bersih: Rp {{ number_format($rowNet['dana'] ?? 0, 0, ',', '.') }}</span>
+                        </span>
+                        <span class="kasir-badge-info kasir-num" tabindex="0" data-bs-toggle="tooltip" title="Uang bersih yang masuk lewat Transfer Bank ke rekening Bos.">
+                            <i class="fas fa-university"></i>
+                            <span>Transfer Bersih: Rp {{ number_format($rowNet['transfer'] ?? 0, 0, ',', '.') }}</span>
+                        </span>
+                        <span class="kd-deposit-badge kasir-num" tabindex="0" data-bs-toggle="tooltip" title="Uang titipan deposit bersih yang masuk hari ini &amp; jumlah saldo deposit yang dipakai belanja pelanggan.">
+                            <i class="fas fa-piggy-bank"></i>
+                            <span>Deposit Masuk Bersih: Rp {{ number_format(($tsDeposit['in_total'] ?? 0) - ($tsDeposit['refund_total'] ?? 0), 0, ',', '.') }} &middot; Dipakai Belanja: Rp {{ number_format($tsDeposit['used_total'] ?? 0, 0, ',', '.') }}</span>
+                        </span>
+                        @if(($rowRefunds['total_money'] ?? 0) > 0)
+                        <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2 kasir-num fw-semibold"
+                            data-bs-toggle="tooltip" title="Klik untuk melihat nota yang dibatalkan atau deposit yang dikoreksi/dikembalikan hari ini."
+                            onclick="openKasirDrilldown('refunds', 'all', 'Nota Batal &amp; Koreksi / Kembali Deposit', '{{ \Carbon\Carbon::today('Asia/Jakarta')->toDateString() }}')">
+                            <i class="fas fa-rotate-left me-1"></i>Nota Batal/Koreksi: -Rp {{ number_format($rowRefunds['total_money'], 0, ',', '.') }}
+                        </button>
+                        @endif
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    {{-- ================================================================= --}}
-    {{-- SECTION 5: RINCIAN PENJUALAN HARI INI PER METODE PEMBAYARAN       --}}
-    {{-- ================================================================= --}}
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="kasir-card">
-                <div class="kasir-section-header">
-                    <h5 class="kasir-section-title mb-0">
-                        <i class="fas fa-chart-pie" style="color: var(--kasir-primary);"></i>
-                        <span>Rincian Penjualan Hari Ini per Metode Pembayaran</span>
-                    </h5>
-                </div>
-                <div class="card-body">
-                    @if(isset($salesByPaymentMethod) && $salesByPaymentMethod->isNotEmpty())
-                    <div class="list-group list-group-flush">
-                        @foreach($salesByPaymentMethod as $method => $total)
-                        @php
-                            $smLower = strtolower($method);
-                            $smIcon = $smLower === 'cash' ? 'fa-money-bill-wave' : ($smLower === 'dana' ? 'fa-mobile-alt' : 'fa-university');
-                        @endphp
-                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="fw-bold">
-                                <i class="fas {{ $smIcon }} me-2" style="color: var(--kasir-primary);"></i>{{ strtoupper(str_replace('-', ' ', $method)) }}
-                            </span>
-                            <span class="kasir-badge-info kasir-num fs-6">
-                                Rp {{ number_format($total, 0, ',', '.') }}
-                            </span>
-                        </div>
-                        @endforeach
+    {{-- MODAL POPUP CEPAT: RINCIAN LENGKAP TRANSAKSI KASIR --}}
+    <div class="modal fade" id="modalKasirFullSummary" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+                <div class="modal-header text-white py-3" style="background: var(--kasir-gradient);">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0">
+                            <i class="fas fa-table-list me-2"></i>Rincian Lengkap Transaksi &amp; Hitungan Shift Hari Ini
+                        </h5>
+                        <small class="opacity-90">Kasir: <strong>{{ Auth::user()->name ?? 'Kasir' }}</strong> &middot; Uang di Laci: <strong>Rp {{ number_format($myNetCashToday ?? 0, 0, ',', '.') }}</strong> &middot; Uang Masuk Bersih: <strong>Rp {{ number_format($rowNet['total_money'] ?? 0, 0, ',', '.') }}</strong></small>
                     </div>
-                    @else
-                    <p class="text-muted text-center mb-0 py-2">Belum ada penjualan hari ini.</p>
-                    @endif
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3 p-md-4" style="background: var(--kasir-bg-dominant);">
+                    @include('kasir.dashboard._transaction_summary_content')
+                </div>
+                <div class="modal-footer bg-white py-2 d-flex justify-content-between">
+                    <a href="{{ route('kasir.shift_summary') }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-external-link-alt me-1"></i>Buka Halaman Rekap Shift (Filter Tanggal &amp; Cetak)
+                    </a>
+                    <button type="button" class="btn btn-sm btn-secondary px-3" data-bs-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- MODAL AJAX DRILLDOWN RINCIAN TRANSAKSI KASIR --}}
+    <div class="modal fade" id="modalKasirDrilldown" tabindex="-1" aria-hidden="true" style="z-index: 1065;">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 14px; overflow: hidden;">
+                <div class="modal-header text-white py-3" style="background: #1e293b;">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="kasirDrilldownTitle">Rincian Transaksi</h5>
+                        <small class="text-white-50" id="kasirDrilldownSub">Memuat data...</small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="kasirDrilldownLoading" class="text-center py-4">
+                        <div class="spinner-border text-primary spinner-border-sm me-2"></div>
+                        <span class="small text-muted">Mengambil daftar rincian transaksi...</span>
+                    </div>
+                    <div id="kasirDrilldownContent" class="d-none">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.82rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Jam</th>
+                                        <th>Kode / Jenis</th>
+                                        <th>Pelanggan</th>
+                                        <th>Metode</th>
+                                        <th>Keterangan</th>
+                                        <th class="text-end pe-3">Nominal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kasirDrilldownTbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 d-flex justify-content-between">
+                    <div class="small fw-bold" id="kasirDrilldownFooterTotal"></div>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Tutup</button>
                 </div>
             </div>
         </div>
@@ -4962,6 +5084,21 @@ $modalId = 'modalGroup_' . $groupKey;
     }, true);
 
     document.addEventListener('DOMContentLoaded', function() {
+        // Inisialisasi Bootstrap Tooltip (hover desktop + tap HP/tablet)
+        if (window.bootstrap && bootstrap.Tooltip) {
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+                bootstrap.Tooltip.getOrCreateInstance(el, { trigger: 'hover focus click', container: 'body' });
+            });
+            document.addEventListener('click', function(ev) {
+                if (!ev.target.closest('[data-bs-toggle="tooltip"]')) {
+                    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+                        const inst = bootstrap.Tooltip.getInstance(el);
+                        if (inst) inst.hide();
+                    });
+                }
+            });
+        }
+
         const searchInput = document.getElementById('kasbonCustomerSearch');
         if (searchInput) {
             const rows = document.querySelectorAll('.kasbon-customer-row');
@@ -4984,5 +5121,53 @@ $modalId = 'modalGroup_' . $groupKey;
             });
         }
     });
+
+    window.openKasirDrilldown = async function(category, channel, title, dateStr) {
+        const modalEl = document.getElementById('modalKasirDrilldown');
+        if (!modalEl) return;
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        const todayStr = '{{ \Carbon\Carbon::today('Asia/Jakarta')->toDateString() }}';
+        document.getElementById('kasirDrilldownTitle').textContent = title;
+        document.getElementById('kasirDrilldownSub').textContent = 'Tanggal: ' + (dateStr || todayStr);
+        document.getElementById('kasirDrilldownLoading').classList.remove('d-none');
+        document.getElementById('kasirDrilldownContent').classList.add('d-none');
+        document.getElementById('kasirDrilldownFooterTotal').textContent = '';
+        modal.show();
+
+        try {
+            const params = new URLSearchParams({ category: category, channel: channel || 'all', date: dateStr || todayStr });
+            const resp = await fetch('{{ route('kasir.dashboard.drilldown') }}?' + params.toString(), {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const res = await resp.json();
+            const tbody = document.getElementById('kasirDrilldownTbody');
+            if (!res.items || res.items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Tidak ada rincian item pada kategori ini.</td></tr>';
+                document.getElementById('kasirDrilldownFooterTotal').textContent = '0 item';
+            } else {
+                const fmt = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
+            const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+            tbody.innerHTML = res.items.map(it => `
+                    <tr>
+                        <td class="ps-3 text-nowrap text-muted">${esc(it.time || '-')}</td>
+                        <td>
+                            <div class="fw-bold text-dark">${esc(it.code || '-')}</div>
+                            <small class="text-muted">${esc(it.type_label || '-')}</small>
+                        </td>
+                        <td>${esc(it.customer_name || '-')}</td>
+                        <td><span class="badge bg-light text-dark border">${esc(it.payment_method || '-')}</span></td>
+                        <td class="small text-muted">${esc(it.description || '-')}</td>
+                        <td class="text-end pe-3 fw-bold text-nowrap ${it.sign === '-' ? 'text-danger' : 'text-success'}">${esc(it.sign || '')}Rp ${fmt(it.amount)}</td>
+                    </tr>
+                `).join('');
+                document.getElementById('kasirDrilldownFooterTotal').textContent = res.count + ' item • Total: Rp ' + fmt(res.total);
+            }
+        } catch (e) {
+            document.getElementById('kasirDrilldownTbody').innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Gagal memuat rincian transaksi.</td></tr>';
+        } finally {
+            document.getElementById('kasirDrilldownLoading').classList.add('d-none');
+            document.getElementById('kasirDrilldownContent').classList.remove('d-none');
+        }
+    };
 </script>
 @endpush

@@ -11,9 +11,12 @@ use App\Models\UserActivityLog;
 use App\Models\FundAllocationSetting;
 use App\Models\CashFlow;
 use App\Models\CashierOpeningBalance;
+use App\Models\Customer;
+use App\Models\CustomerDepositLog;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use App\Services\Admin\FinancialService;
+use App\Services\Accounting\DailyTransactionSummaryService;
 use App\Support\BranchCache;
 use App\Support\BranchContext;
 use Illuminate\Support\Facades\Cache;
@@ -23,13 +26,17 @@ use App\Services\Accounting\CogsCalculator;
 class DashboardService
 {
     protected FinancialService $financialService;
+    protected DailyTransactionSummaryService $summaryService;
 
     /**
-     * Injeksi Service FinancialService ke dalam Constructor
+     * Injeksi Service FinancialService & DailyTransactionSummaryService ke dalam Constructor
      */
-    public function __construct(FinancialService $financialService)
-    {
+    public function __construct(
+        FinancialService $financialService,
+        ?DailyTransactionSummaryService $summaryService = null
+    ) {
         $this->financialService = $financialService;
+        $this->summaryService = $summaryService ?? app(DailyTransactionSummaryService::class);
     }
 
     /**
@@ -269,6 +276,47 @@ class DashboardService
         $pelunasanCairCash = $pelunasanCashToday;
         $pelunasanCairNonCash = $pelunasanDanaToday + $pelunasanTransferToday;
 
+        // [SSOT] Matriks Ringkasan Transaksi Full (Penjualan, Pelunasan, Deposit, Potong Deposit, Refund/Void, Kasbon)
+        $transactionSummary = $this->summaryService->getForBusinessScope($businessId, $targetDate, 0.0);
+
+        // Snapshot Piutang Kasbon Aktif & Saldo Deposit Pelanggan Aktif & Pengiriman Berjalan
+        $activeKasbonRows = Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', '!=', 'cancelled')
+            ->whereNull('voided_at')
+            ->where('payment_status', 'pending')
+            ->where(function ($q) {
+                $q->whereNull('order_status')
+                  ->orWhere('order_status', '!=', 'delivering');
+            })
+            ->where(function ($q) {
+                $q->whereNull('delivery_status')
+                  ->orWhere('delivery_status', '!=', 'delivering');
+            })
+            ->get(['id', 'total_amount', 'deposit_used', 'net_payable_amount']);
+
+        $totalActiveKasbonCount = $activeKasbonRows->count();
+        $totalActiveKasbonAmount = (float) $activeKasbonRows->sum(fn ($tx) => (float) $tx->effective_payable_amount);
+
+        $totalActiveDepositBalance = (float) Customer::where('business_id', $businessId)
+            ->where('deposit_balance', '>', 0)
+            ->sum('deposit_balance');
+
+        $activeDeliveriesRows = Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', '!=', 'cancelled')
+            ->whereNull('voided_at')
+            ->whereNotIn('order_status', ['cancelled', 'delivered'])
+            ->whereNotIn('delivery_status', ['cancelled', 'delivered'])
+            ->where(function ($q) {
+                $q->where('order_status', 'delivering')
+                  ->orWhere('delivery_status', 'delivering');
+            })
+            ->get(['id', 'total_amount', 'deposit_used', 'net_payable_amount']);
+
+        $activeDeliveriesCount = $activeDeliveriesRows->count();
+        $activeDeliveriesAmount = (float) $activeDeliveriesRows->sum(fn ($tx) => (float) $tx->effective_payable_amount);
+
         // Sisa Stok Cold Storage Hanya untuk Produk Fisik Es Kristal (Abaikan Ongkos Kirim)
         $totalReadyStock = (int) Inventory::where('business_id', $businessId)
             ->whereHas('product', function ($q) {
@@ -341,6 +389,12 @@ class DashboardService
             'pelunasanCairTotal' => $pelunasanCairTotal,
             'pelunasanCairCash' => $pelunasanCairCash,
             'pelunasanCairNonCash' => $pelunasanCairNonCash,
+            'transactionSummary' => $transactionSummary,
+            'totalActiveKasbonCount' => $totalActiveKasbonCount,
+            'totalActiveKasbonAmount' => $totalActiveKasbonAmount,
+            'totalActiveDepositBalance' => $totalActiveDepositBalance,
+            'activeDeliveriesCount' => $activeDeliveriesCount,
+            'activeDeliveriesAmount' => $activeDeliveriesAmount,
             'totalReadyStock' => $totalReadyStock,
             'readyStockItems' => $readyStockItems,
             'netProfitThisMonth' => $netProfitThisMonth,
@@ -499,6 +553,36 @@ class DashboardService
             ->get();
 
         $cashierData = [];
+        $dateStr = $filterDate->toDateString();
+
+        // Batch-fetch untuk mencegah N+1 saat membangun Matriks Transaksi Full per kasir
+        $allCashFlowsForDate = CashFlow::where('business_id', $businessId)
+            ->whereIn('type', ['income', 'expense'])
+            ->whereDate('date', $dateStr)
+            ->get()
+            ->groupBy('created_by');
+
+        $depositDebitsQuery = CustomerDepositLog::where('business_id', $businessId)
+            ->where('type', 'debit')
+            ->whereDate('created_at', $dateStr)
+            ->where(function ($q) {
+                $q->whereNull('transaction_id')
+                    ->orWhereHas('transaction', function ($tq) {
+                        $tq->withoutGlobalScopes()
+                            ->where('status', '!=', 'cancelled')
+                            ->whereNull('voided_at');
+                    });
+            });
+        app(BranchContext::class)->applyTo($depositDebitsQuery, 'customer_deposit_logs', 'branch_id');
+        $allDepositDebitsForDate = $depositDebitsQuery->get()->groupBy('created_by');
+
+        $allActiveSalesForDate = Transaction::where('business_id', $businessId)
+            ->where('type', 'sale')
+            ->where('status', '!=', 'cancelled')
+            ->whereNull('voided_at')
+            ->whereDate('transaction_date', $dateStr)
+            ->get()
+            ->groupBy('created_by');
 
         foreach ($users as $user) {
             // Validasi ketat: Abaikan akun non-kasir
@@ -749,7 +833,38 @@ class DashboardService
                 ->whereDate('transaction_date', $filterDate)
                 ->sum('total_amount');
 
-            $hasActivity = ($openingCash > 0 || $totalCashIn > 0 || $allCashExpensesAmount > 0 || $cogsAmount > 0 || $nonCashDana > 0 || $nonCashTransfer > 0 || $pelunasanNonCashTotal > 0 || $kasbonAmount > 0 || $cashOrdersCount > 0 || $expensesList->isNotEmpty());
+            // 10. [SSOT] Matriks Transaksi Full Per Kasir (100% identik dengan Dashboard Kasir)
+            $userCashFlows = $allCashFlowsForDate->get($user->id, collect());
+            $userDepositDebits = $allDepositDebitsForDate->get($user->id, collect());
+            $userActiveSales = $allActiveSalesForDate->get($user->id, collect());
+            $txSummary = $this->summaryService->buildFromCollections(
+                $userCashFlows,
+                $userDepositDebits,
+                $userActiveSales,
+                $openingCash
+            );
+
+            $depositDanaAmount = (float) $txSummary['deposit']['in_dana'];
+            $depositTransferAmount = (float) $txSummary['deposit']['in_transfer'];
+            $depositTotalAmount = (float) $txSummary['deposit']['in_total'];
+            $depositUsedTotal = (float) $txSummary['deposit']['used_total'];
+            $depositRefundTotal = (float) $txSummary['deposit']['refund_total'];
+            $cashRefundTotal = (float) $txSummary['rows']['refund_void']['total_money'];
+
+            $hasActivity = (
+                $openingCash > 0
+                || $totalCashIn > 0
+                || $allCashExpensesAmount > 0
+                || $cogsAmount > 0
+                || $nonCashDana > 0
+                || $nonCashTransfer > 0
+                || $pelunasanNonCashTotal > 0
+                || $depositTotalAmount > 0
+                || $depositUsedTotal > 0
+                || $kasbonAmount > 0
+                || $cashOrdersCount > 0
+                || $expensesList->isNotEmpty()
+            );
 
             // Jika kasir tidak aktif dan sama sekali tidak ada aktivitas di tanggal filter, jangan tampilkan
             if (!$user->is_active && !$hasActivity) {
@@ -767,6 +882,12 @@ class DashboardService
                 'cash_sales'               => $cashSalesAmount,
                 'pelunasan_cash'           => $pelunasanCashAmount,
                 'deposit_cash'             => $depositCashAmount,
+                'deposit_dana'             => $depositDanaAmount,
+                'deposit_transfer'         => $depositTransferAmount,
+                'deposit_total'            => $depositTotalAmount,
+                'deposit_used_total'       => $depositUsedTotal,
+                'deposit_refund_total'     => $depositRefundTotal,
+                'cash_refund_total'        => $cashRefundTotal,
                 'cash_orders_count'        => $cashOrdersCount,
                 'sales_revenue'            => $totalSalesRevenue,
                 'cogs'                     => $cogsAmount,
@@ -788,6 +909,7 @@ class DashboardService
                 'has_activity'             => $hasActivity,
                 'missing_cogs_count'       => $cogsResult['missing_cogs_count'],
                 'missing_cogs_revenue'     => $cogsResult['missing_cogs_revenue'],
+                'transaction_summary'      => $txSummary,
             ];
         }
 
