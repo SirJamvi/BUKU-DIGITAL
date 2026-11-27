@@ -14,6 +14,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Carbon\Carbon;
 
@@ -269,11 +270,35 @@ class TransactionController extends Controller
             : null;
 
         if ($isDepositPayment && !$singleCustomerId) {
+            Log::warning('[DEPOSIT_DEBUG] KASIR_BULK_DEPOSIT_BLOCKED', [
+                'kasir_id'        => Auth::id(),
+                'reason'          => 'walkin_or_multi_customer',
+                'transaction_ids' => $transactionIds,
+            ]);
             return back()->with('error', 'Pelunasan menggunakan Saldo Deposit hanya berlaku untuk satu pelanggan terdaftar yang sama.');
         }
 
         if ($depositOverpayment > 0 && !$singleCustomerId) {
+            Log::warning('[DEPOSIT_DEBUG] KASIR_BULK_DEPOSIT_BLOCKED', [
+                'kasir_id'            => Auth::id(),
+                'reason'              => 'overpay_walkin_or_multi_customer',
+                'deposit_overpayment' => $depositOverpayment,
+                'transaction_ids'     => $transactionIds,
+            ]);
             return back()->with('error', 'Kelebihan bayar tidak dapat disimpan ke Saldo Deposit untuk Pelanggan Umum atau gabungan lintas pelanggan.');
+        }
+
+        if ($isDepositPayment || $depositOverpayment > 0) {
+            Log::info('[DEPOSIT_DEBUG] KASIR_BULK_DEPOSIT_REQUEST', [
+                'kasir_id'            => Auth::id(),
+                'business_id'         => $businessId,
+                'branch_id'           => $activeBranchId,
+                'customer_id'         => $singleCustomerId,
+                'payment_method'      => $paymentMethod,
+                'is_deposit_payment'  => $isDepositPayment,
+                'deposit_overpayment' => $depositOverpayment,
+                'transaction_ids'     => $transactionIds,
+            ]);
         }
 
         try {
@@ -293,6 +318,15 @@ class TransactionController extends Controller
 
                 if ($totalPayable > $availableBalance + 0.001) {
                     DB::rollBack();
+
+                    Log::warning('[DEPOSIT_DEBUG] KASIR_BULK_DEPOSIT_BLOCKED', [
+                        'kasir_id'          => Auth::id(),
+                        'reason'            => 'insufficient_balance',
+                        'customer_id'       => $singleCustomerId,
+                        'total_payable'     => $totalPayable,
+                        'available_balance' => $availableBalance,
+                        'transaction_ids'   => $transactionIds,
+                    ]);
 
                     return back()->with(
                         'error',
@@ -513,6 +547,17 @@ class TransactionController extends Controller
 
             \App\Support\BranchCache::flush($businessId);
 
+            if ($isDepositPayment || $depositOverpayment > 0) {
+                Log::info('[DEPOSIT_DEBUG] KASIR_BULK_DEPOSIT_SUCCESS', [
+                    'kasir_id'            => Auth::id(),
+                    'customer_id'         => $singleCustomerId,
+                    'payment_method'      => $paymentMethod,
+                    'is_deposit_payment'  => $isDepositPayment,
+                    'deposit_overpayment' => $depositOverpayment,
+                    'transaction_count'   => $transactions->count(),
+                ]);
+            }
+
             if ($depositOverpayment > 0) {
                 return back()->with(
                     'success',
@@ -525,6 +570,15 @@ class TransactionController extends Controller
             return back()->with('success', count($transactions) . ' Transaksi berhasil dilunasi secara bersamaan.');
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('[DEPOSIT_DEBUG] KASIR_BULK_DEPOSIT_ERROR', [
+                'kasir_id'        => Auth::id(),
+                'payment_method'  => $paymentMethod,
+                'transaction_ids' => $transactionIds,
+                'exception'       => get_class($e),
+                'message'         => $e->getMessage(),
+                'location'        => $e->getFile() . ':' . $e->getLine(),
+                'trace'           => array_slice(explode("\n", $e->getTraceAsString()), 0, 8),
+            ]);
             return back()->with('error', 'Gagal memproses pelunasan massal: ' . $e->getMessage());
         }
     }
@@ -856,6 +910,16 @@ class TransactionController extends Controller
 
             \App\Support\BranchCache::flush($businessId);
 
+            Log::info('[DEPOSIT_DEBUG] KASIR_TRIP_DEPOSIT_SUMMARY', [
+                'kasir_id'                 => Auth::id(),
+                'trip_code'                => $tripCode,
+                'paid_count'               => $paidCount,
+                'kasbon_count'             => $kasbonCount,
+                'old_kasbon_settled_count' => $oldKasbonSettledCount,
+                'old_kasbon_settled_amt'   => $oldKasbonSettledAmount,
+                'new_deposit_total'        => $newDepositTotal,
+            ]);
+
             $msg = "Pengiriman #{$tripCode} berhasil diselesaikan! ";
             if ($paidCount > 0) {
                 $msg .= "{$paidCount} transaksi trip lunas. ";
@@ -876,7 +940,14 @@ class TransactionController extends Controller
             foreach ($uploadedProofPaths as $p) {
                 \App\Services\ProofUploadService::deleteProof($p);
             }
-            logger()->error('completeDeliveryTrip error: ' . $e->getMessage());
+            Log::error('[DEPOSIT_DEBUG] KASIR_TRIP_ERROR', [
+                'kasir_id'  => Auth::id(),
+                'trip_code' => $tripCode,
+                'exception' => get_class($e),
+                'message'   => $e->getMessage(),
+                'location'  => $e->getFile() . ':' . $e->getLine(),
+                'trace'     => array_slice(explode("\n", $e->getTraceAsString()), 0, 8),
+            ]);
             return back()->with('error', 'Gagal menyelesaikan pengiriman driver: ' . $e->getMessage());
         }
     }
@@ -897,7 +968,17 @@ class TransactionController extends Controller
             $businessId = Auth::user()->business_id;
             $branchId = app(\App\Support\BranchContext::class)->requireBranchId();
 
-            CustomerDepositService::addDeposit(
+            Log::info('[DEPOSIT_DEBUG] KASIR_STORE_DEPOSIT_REQUEST', [
+                'kasir_id'       => Auth::id(),
+                'business_id'    => $businessId,
+                'branch_id'      => $branchId,
+                'customer_id'    => (int) $request->customer_id,
+                'amount'         => (float) $request->amount,
+                'payment_method' => $request->payment_method,
+                'notes'          => $request->notes,
+            ]);
+
+            $log = CustomerDepositService::addDeposit(
                 $businessId,
                 $branchId,
                 (int) $request->customer_id,
@@ -910,9 +991,26 @@ class TransactionController extends Controller
 
             \App\Support\BranchCache::flush($businessId);
 
+            Log::info('[DEPOSIT_DEBUG] KASIR_STORE_DEPOSIT_SUCCESS', [
+                'kasir_id'       => Auth::id(),
+                'deposit_log_id' => $log->id,
+                'cash_flow_id'   => $log->cash_flow_id,
+                'customer_id'    => $log->customer_id,
+                'amount'         => (float) $log->amount,
+                'balance_after'  => (float) $log->balance_after,
+            ]);
+
             return back()->with('success', 'Deposit pelanggan sebesar Rp ' . number_format($request->amount, 0, ',', '.') . ' berhasil disimpan.');
         } catch (\Exception $e) {
-            logger()->error('storeCustomerDeposit error: ' . $e->getMessage());
+            Log::error('[DEPOSIT_DEBUG] KASIR_STORE_DEPOSIT_ERROR', [
+                'kasir_id'    => Auth::id(),
+                'customer_id' => $request->customer_id,
+                'amount'      => $request->amount,
+                'exception'   => get_class($e),
+                'message'     => $e->getMessage(),
+                'location'    => $e->getFile() . ':' . $e->getLine(),
+                'trace'       => array_slice(explode("\n", $e->getTraceAsString()), 0, 8),
+            ]);
             return back()->with('error', 'Gagal mencatat deposit pelanggan: ' . $e->getMessage());
         }
     }

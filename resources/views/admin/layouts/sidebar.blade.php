@@ -63,6 +63,13 @@
             @endpermission
 
             @permission('financial.view_all')
+            <a href="{{ route('admin.deposits.index') }}" class="sidebar-item {{ request()->routeIs('admin.deposits.*') ? 'active' : '' }}">
+                <i class="fas fa-wallet"></i>
+                <span>Deposit Pelanggan</span>
+            </a>
+            @endpermission
+
+            @permission('financial.view_all')
             <a href="{{ route('admin.financial.expenses') }}" class="sidebar-item {{ request()->routeIs('admin.financial.expenses*') ? 'active' : '' }}">
                 <i class="fas fa-receipt"></i>
                 <span>Pengeluaran</span>

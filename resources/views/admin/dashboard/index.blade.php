@@ -1615,9 +1615,14 @@
                                 <span class="activity-module">{{ $log->module }}</span>
                             </div>
                             @if($log->details)
+                            @php
+                                $activityDetailsText = is_array($log->details)
+                                    ? json_encode($log->details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                                    : (string) $log->details;
+                            @endphp
                             <div class="activity-details">
                                 <i class="fas fa-info-circle"></i>
-                                {{ \Illuminate\Support\Str::limit($log->details, 60) }}
+                                {{ \Illuminate\Support\Str::limit($activityDetailsText, 60) }}
                             </div>
                             @endif
                         </div>

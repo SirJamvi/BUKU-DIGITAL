@@ -2,13 +2,16 @@
 
 namespace App\Services\Accounting;
 
+use App\Models\CashFlow;
 use App\Models\Customer;
 use App\Models\CustomerDepositLog;
-use App\Models\CashFlow;
-use App\Models\Transaction;
 use App\Models\ExpenseCategory;
-use Illuminate\Support\Facades\DB;
+use App\Models\Transaction;
+use App\Models\UserActivityLog;
+use App\Support\BranchCache;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CustomerDepositService
 {
@@ -24,7 +27,9 @@ class CustomerDepositService
         ?int $transactionId,
         ?string $notes,
         int $createdBy,
-        ?Carbon $date = null
+        ?Carbon $date = null,
+        ?int $cashFlowCreatedBy = null,
+        ?bool $affectsDrawerOverride = null
     ): CustomerDepositLog {
         if ($amount <= 0) {
             throw new \InvalidArgumentException("Nominal deposit harus lebih dari 0.");
@@ -35,18 +40,37 @@ class CustomerDepositService
         // Validasi periode akuntansi
         AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, $settlementDate);
 
-        return DB::transaction(function () use ($businessId, $branchId, $customerId, $amount, $paymentMethod, $transactionId, $notes, $createdBy, $settlementDate) {
+        return DB::transaction(function () use (
+            $businessId,
+            $branchId,
+            $customerId,
+            $amount,
+            $paymentMethod,
+            $transactionId,
+            $notes,
+            $createdBy,
+            $settlementDate,
+            $cashFlowCreatedBy,
+            $affectsDrawerOverride
+        ) {
             // Lock customer row untuk mencegah race condition double-spend
-            $customer = Customer::where('id', $customerId)->lockForUpdate()->firstOrFail();
+            $customer = Customer::withoutGlobalScopes()
+                ->where('id', $customerId)
+                ->where('business_id', $businessId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
             $balanceBefore = (float) ($customer->deposit_balance ?? 0.0);
             $balanceAfter = round($balanceBefore + $amount, 2);
 
             $customer->update([
-                'deposit_balance' => $balanceAfter
+                'deposit_balance' => $balanceAfter,
             ]);
 
             $isCash = strtolower($paymentMethod) === 'cash';
+            $affectsDrawer = $affectsDrawerOverride !== null
+                ? ($affectsDrawerOverride ? 1 : 0)
+                : ($isCash ? 1 : 0);
 
             // Dapatkan kategori pendapatan
             $incomeCat = ExpenseCategory::where('business_id', $businessId)
@@ -68,16 +92,17 @@ class CustomerDepositService
                 'reference_type' => 'customer_deposit',
                 'reference_id'   => $transactionId,
                 'category_id'    => $categoryId,
+                'is_cogs'        => false,
                 'payment_method' => $paymentMethod,
-                'funding_source' => $isCash ? 'drawer' : 'owner',
-                'affects_drawer' => $isCash ? 1 : 0,
+                'funding_source' => $affectsDrawer ? 'drawer' : 'owner',
+                'affects_drawer' => $affectsDrawer,
                 'amount'         => $amount,
                 'description'    => $desc,
                 'date'           => $settlementDate,
-                'created_by'     => $createdBy,
+                'created_by'     => $cashFlowCreatedBy ?? $createdBy,
             ]);
 
-            return CustomerDepositLog::create([
+            $log = CustomerDepositLog::create([
                 'business_id'    => $businessId,
                 'branch_id'      => $branchId,
                 'customer_id'    => $customerId,
@@ -91,6 +116,430 @@ class CustomerDepositService
                 'notes'          => $notes,
                 'created_by'     => $createdBy,
             ]);
+
+            Log::info('[DEPOSIT_DEBUG] SERVICE_ADD_DEPOSIT', [
+                'log_id'               => $log->id,
+                'business_id'          => $businessId,
+                'branch_id'            => $branchId,
+                'customer_id'          => $customerId,
+                'customer_name'        => $customer->name,
+                'transaction_id'       => $transactionId,
+                'amount'               => $amount,
+                'payment_method'       => $paymentMethod,
+                'balance_before'       => $balanceBefore,
+                'balance_after'        => $balanceAfter,
+                'cash_flow_id'         => $cashFlow->id,
+                'cash_flow_created_by' => $cashFlow->created_by,
+                'affects_drawer'       => $affectsDrawer,
+                'funding_source'       => $cashFlow->funding_source,
+                'date'                 => $settlementDate->toDateString(),
+                'created_by'           => $createdBy,
+            ]);
+
+            return $log;
+        });
+    }
+
+    /**
+     * Menambah Saldo Awal / Migrasi Titipan Lama pelanggan oleh Admin
+     * tanpa mencatat CashFlow baru agar tidak mengganggu kas laci / mutasi hari ini.
+     */
+    public static function addOpeningDeposit(
+        int $businessId,
+        ?int $branchId,
+        int $customerId,
+        float $amount,
+        ?string $notes,
+        int $createdBy,
+        ?Carbon $date = null
+    ): CustomerDepositLog {
+        if ($amount <= 0) {
+            throw new \InvalidArgumentException("Nominal saldo awal deposit harus lebih dari 0.");
+        }
+
+        $targetDate = $date ?? now();
+        AccountingPeriodGuard::ensurePeriodOpen($businessId, $branchId, $targetDate);
+
+        return DB::transaction(function () use ($businessId, $branchId, $customerId, $amount, $notes, $createdBy, $targetDate) {
+            $customer = Customer::withoutGlobalScopes()
+                ->where('id', $customerId)
+                ->where('business_id', $businessId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $balanceBefore = (float) ($customer->deposit_balance ?? 0.0);
+            $balanceAfter = round($balanceBefore + $amount, 2);
+
+            $customer->update([
+                'deposit_balance' => $balanceAfter,
+            ]);
+
+            $fullNotes = '[Saldo Awal / Titipan Lama]' . (!empty($notes) ? ' ' . trim($notes) : '');
+
+            $log = CustomerDepositLog::create([
+                'business_id'    => $businessId,
+                'branch_id'      => $branchId,
+                'customer_id'    => $customerId,
+                'transaction_id' => null,
+                'cash_flow_id'   => null,
+                'type'           => 'credit',
+                'amount'         => $amount,
+                'balance_before' => $balanceBefore,
+                'balance_after'  => $balanceAfter,
+                'payment_method' => 'opening_balance',
+                'notes'          => $fullNotes,
+                'created_by'     => $createdBy,
+            ]);
+
+            if ($targetDate->format('Y-m-d') !== now()->format('Y-m-d')) {
+                $log->timestamps = false;
+                $log->created_at = $targetDate;
+                $log->updated_at = $targetDate;
+                $log->save();
+            }
+
+            UserActivityLog::create([
+                'business_id' => $businessId,
+                'branch_id'   => $branchId,
+                'user_id'     => $createdBy,
+                'action'      => 'add_opening_deposit',
+                'module'      => 'customer_deposit',
+                'details'     => "Saldo Awal Deposit #{$log->id} ({$customer->name}) +Rp " . number_format($amount, 0, ',', '.') . " | {$fullNotes}",
+                'ip_address'  => request()?->ip(),
+            ]);
+
+            BranchCache::flush($businessId);
+
+            Log::info('[DEPOSIT_DEBUG] SERVICE_ADD_OPENING_DEPOSIT', [
+                'log_id'         => $log->id,
+                'business_id'    => $businessId,
+                'branch_id'      => $branchId,
+                'customer_id'    => $customer->id,
+                'customer_name'  => $customer->name,
+                'amount'         => $amount,
+                'balance_before' => $balanceBefore,
+                'balance_after'  => $balanceAfter,
+                'date'           => $targetDate->toDateString(),
+                'created_by'     => $createdBy,
+            ]);
+
+            return $log;
+        });
+    }
+
+    /**
+     * Membatalkan (Void) setoran deposit yang salah input oleh kasir/admin menggunakan jurnal pembalik (Contra-Entry)
+     * sesuai pedoman finance FMCG (Zero Hard-Delete, audit trail utuh, anti-saldo minus, dan kunci periode tutup buku).
+     */
+    public static function reverseDeposit(
+        int $businessId,
+        int $depositLogId,
+        string $reason,
+        int $adminUserId,
+        bool $logActivity = true
+    ): CustomerDepositLog {
+        $cleanReason = trim($reason);
+        if ($cleanReason === '') {
+            throw new \InvalidArgumentException("Alasan pembatalan deposit wajib diisi.");
+        }
+
+        return DB::transaction(function () use ($businessId, $depositLogId, $cleanReason, $adminUserId, $logActivity) {
+            $originalLog = CustomerDepositLog::withoutGlobalScopes()
+                ->where('id', $depositLogId)
+                ->where('business_id', $businessId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($originalLog->type !== 'credit') {
+                Log::warning('[DEPOSIT_DEBUG] SERVICE_REVERSE_BLOCKED', [
+                    'reason_code' => 'non_credit_type',
+                    'log_id'      => $originalLog->id,
+                    'type'        => $originalLog->type,
+                    'admin_id'    => $adminUserId,
+                ]);
+                throw new \RuntimeException("Hanya mutasi setoran deposit (kredit) yang dapat dibatalkan oleh Admin.");
+            }
+
+            if ($originalLog->isReversed()) {
+                Log::warning('[DEPOSIT_DEBUG] SERVICE_REVERSE_BLOCKED', [
+                    'reason_code'        => 'already_reversed',
+                    'log_id'             => $originalLog->id,
+                    'reversed_by_log_id' => $originalLog->reversed_by_log_id,
+                    'admin_id'           => $adminUserId,
+                ]);
+                throw new \RuntimeException("Setoran deposit #{$originalLog->id} sudah pernah dibatalkan sebelumnya.");
+            }
+
+            $originalCashFlow = $originalLog->cash_flow_id
+                ? CashFlow::withoutGlobalScopes()->lockForUpdate()->find($originalLog->cash_flow_id)
+                : null;
+
+            $periodDate = ($originalCashFlow && $originalCashFlow->date)
+                ? Carbon::parse($originalCashFlow->date)
+                : ($originalLog->created_at ?? now());
+
+            AccountingPeriodGuard::ensurePeriodOpen(
+                $businessId,
+                $originalLog->branch_id ? (int) $originalLog->branch_id : null,
+                $periodDate
+            );
+
+            $customer = Customer::withoutGlobalScopes()
+                ->where('id', $originalLog->customer_id)
+                ->where('business_id', $businessId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $balanceBefore = round((float) ($customer->deposit_balance ?? 0.0), 2);
+            $reverseAmount = round((float) $originalLog->amount, 2);
+
+            if ($balanceBefore + 0.001 < $reverseAmount) {
+                $recentDebits = CustomerDepositLog::withoutGlobalScopes()
+                    ->where('business_id', $businessId)
+                    ->where('customer_id', $customer->id)
+                    ->where('type', 'debit')
+                    ->where('id', '>', $originalLog->id)
+                    ->whereNotNull('transaction_id')
+                    ->orderBy('id', 'desc')
+                    ->limit(5)
+                    ->pluck('transaction_id')
+                    ->map(fn ($txId) => '#' . str_pad((string) $txId, 6, '0', STR_PAD_LEFT))
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                $txHint = !empty($recentDebits)
+                    ? ' Transaksi pemakaian terkait: ' . implode(', ', $recentDebits) . '.'
+                    : '';
+
+                Log::warning('[DEPOSIT_DEBUG] SERVICE_REVERSE_BLOCKED', [
+                    'reason_code'     => 'anti_negative_balance',
+                    'log_id'          => $originalLog->id,
+                    'customer_id'     => $customer->id,
+                    'customer_name'   => $customer->name,
+                    'balance_before'  => $balanceBefore,
+                    'reverse_amount'  => $reverseAmount,
+                    'recent_debit_tx' => $recentDebits,
+                    'admin_id'        => $adminUserId,
+                ]);
+
+                throw new \RuntimeException(
+                    "Pembatalan ditolak (Anti Saldo Minus): Saldo deposit {$customer->name} saat ini Rp "
+                    . number_format($balanceBefore, 0, ',', '.')
+                    . " lebih kecil dari nominal setoran yang akan dibatalkan (Rp "
+                    . number_format($reverseAmount, 0, ',', '.')
+                    . "). Deposit ini sudah terpakai untuk belanja/kasbon — void transaksi pemakaiannya terlebih dahulu."
+                    . $txHint
+                );
+            }
+
+            $balanceAfter = round(max(0.0, $balanceBefore - $reverseAmount), 2);
+            $customer->update([
+                'deposit_balance' => $balanceAfter,
+            ]);
+
+            $contraCashFlow = null;
+            if ($originalCashFlow) {
+                $origMethod = $originalCashFlow->payment_method ?: ($originalLog->payment_method ?: 'cash');
+                $origAffectsDrawer = $originalCashFlow->affects_drawer ? 1 : 0;
+
+                $contraCashFlow = CashFlow::create([
+                    'business_id'    => (int) $originalCashFlow->business_id,
+                    'branch_id'      => $originalCashFlow->branch_id ?? $originalLog->branch_id,
+                    'type'           => 'expense',
+                    'flow_type'      => 'deposit_refund',
+                    'reference_type' => 'customer_deposit_reversal',
+                    'reference_id'   => (string) $originalLog->id,
+                    'category_id'    => $originalCashFlow->category_id ?: 1,
+                    'is_cogs'        => false,
+                    'payment_method' => $origMethod,
+                    'funding_source' => $originalCashFlow->funding_source ?: ($origAffectsDrawer ? 'drawer' : 'owner'),
+                    'affects_drawer' => $origAffectsDrawer,
+                    'amount'         => $reverseAmount,
+                    'description'    => "Pembatalan / Void Deposit #{$originalLog->id} ({$customer->name}) oleh Admin: {$cleanReason}",
+                    'date'           => $originalCashFlow->date,
+                    // Atribusikan ke kasir pembuat setoran asal agar saldo laci kasir & shift closing kembali impas (Rp 0)
+                    'created_by'     => $originalCashFlow->created_by ?: ($originalLog->created_by ?: $adminUserId),
+                ]);
+            }
+
+            $contraLog = CustomerDepositLog::create([
+                'business_id'     => $businessId,
+                'branch_id'       => $originalLog->branch_id,
+                'customer_id'     => $customer->id,
+                'transaction_id'  => $originalLog->transaction_id,
+                'cash_flow_id'    => $contraCashFlow?->id,
+                'type'            => 'refund',
+                'amount'          => $reverseAmount,
+                'balance_before'  => $balanceBefore,
+                'balance_after'   => $balanceAfter,
+                'payment_method'  => $originalLog->payment_method,
+                'notes'           => "[VOID Deposit #{$originalLog->id}] {$cleanReason}",
+                'reverses_log_id' => $originalLog->id,
+                'created_by'      => $adminUserId,
+            ]);
+
+            $originalLog->update([
+                'reversed_at'        => now(),
+                'reversed_by'        => $adminUserId,
+                'reversal_reason'    => $cleanReason,
+                'reversed_by_log_id' => $contraLog->id,
+            ]);
+
+            if ($logActivity) {
+                UserActivityLog::create([
+                    'business_id' => $businessId,
+                    'branch_id'   => $originalLog->branch_id,
+                    'user_id'     => $adminUserId,
+                    'action'      => 'void_customer_deposit',
+                    'module'      => 'customer_deposit',
+                    'details'     => "Void Deposit #{$originalLog->id} -> #{$contraLog->id} ({$customer->name}) Rp " . number_format($reverseAmount, 0, ',', '.') . " | Alasan: {$cleanReason}",
+                    'ip_address'  => request()?->ip(),
+                ]);
+            }
+
+            BranchCache::flush($businessId);
+
+            Log::info('[DEPOSIT_DEBUG] SERVICE_REVERSE_DEPOSIT', [
+                'original_log_id'       => $originalLog->id,
+                'contra_log_id'         => $contraLog->id,
+                'business_id'           => $businessId,
+                'branch_id'             => $originalLog->branch_id,
+                'customer_id'           => $customer->id,
+                'customer_name'         => $customer->name,
+                'reverse_amount'        => $reverseAmount,
+                'balance_before'        => $balanceBefore,
+                'balance_after'         => $balanceAfter,
+                'contra_cash_flow_id'   => $contraCashFlow?->id,
+                'contra_cf_created_by'  => $contraCashFlow?->created_by,
+                'contra_affects_drawer' => $contraCashFlow?->affects_drawer,
+                'contra_date'           => $contraCashFlow?->date?->toDateString(),
+                'reason'                => $cleanReason,
+                'admin_id'              => $adminUserId,
+            ]);
+
+            return $contraLog;
+        });
+    }
+
+    /**
+     * Koreksi 1 langkah atomik: membatalkan setoran deposit yang salah lalu membuat setoran pengganti yang benar
+     * sambil mempertahankan cabang, tanggal buku, dan atribusi laci kasir asalnya.
+     *
+     * @return array{reversal_log: CustomerDepositLog, new_log: CustomerDepositLog}
+     */
+    public static function correctDeposit(
+        int $businessId,
+        int $depositLogId,
+        float $newAmount,
+        string $newPaymentMethod,
+        string $reason,
+        int $adminUserId
+    ): array {
+        $cleanReason = trim($reason);
+        if ($newAmount <= 0) {
+            throw new \InvalidArgumentException("Nominal deposit koreksi harus lebih dari 0.");
+        }
+        if ($cleanReason === '') {
+            throw new \InvalidArgumentException("Alasan koreksi deposit wajib diisi.");
+        }
+
+        return DB::transaction(function () use ($businessId, $depositLogId, $newAmount, $newPaymentMethod, $cleanReason, $adminUserId) {
+            $originalLog = CustomerDepositLog::withoutGlobalScopes()
+                ->where('id', $depositLogId)
+                ->where('business_id', $businessId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $originalCashFlow = $originalLog->cash_flow_id
+                ? CashFlow::withoutGlobalScopes()->find($originalLog->cash_flow_id)
+                : null;
+
+            $newMethod = strtolower(trim($newPaymentMethod));
+            $origMethod = strtolower((string) ($originalLog->payment_method ?? ''));
+            $roundedNewAmount = round($newAmount, 2);
+
+            if (abs($roundedNewAmount - (float) $originalLog->amount) < 0.01 && $newMethod === $origMethod) {
+                throw new \InvalidArgumentException("Nominal dan metode pembayaran koreksi sama dengan data asal.");
+            }
+
+            $periodDate = ($originalCashFlow && $originalCashFlow->date)
+                ? Carbon::parse($originalCashFlow->date)
+                : ($originalLog->created_at ?? now());
+
+            $reversalLog = self::reverseDeposit(
+                $businessId,
+                $depositLogId,
+                "Koreksi menjadi Rp " . number_format($roundedNewAmount, 0, ',', '.') . ": {$cleanReason}",
+                $adminUserId,
+                false
+            );
+
+            $replacementNote = "[Koreksi dari Deposit #{$originalLog->id}] {$cleanReason}";
+
+            if ($newMethod === 'opening_balance') {
+                $newLog = self::addOpeningDeposit(
+                    $businessId,
+                    $originalLog->branch_id ? (int) $originalLog->branch_id : null,
+                    (int) $originalLog->customer_id,
+                    $roundedNewAmount,
+                    $replacementNote,
+                    $adminUserId,
+                    $periodDate
+                );
+            } else {
+                // Pertahankan atribusi kasir & status laci agar selisih kas laci kasir tetap sinkron
+                $origCashFlowCreator = $originalCashFlow?->created_by ?: ($originalLog->created_by ?: $adminUserId);
+                $wasCashOwnerOnly = $originalCashFlow
+                    && strtolower((string) $originalCashFlow->payment_method) === 'cash'
+                    && !(bool) $originalCashFlow->affects_drawer;
+
+                $newAffectsDrawer = ($newMethod === 'cash') && !$wasCashOwnerOnly;
+
+                $newLog = self::addDeposit(
+                    $businessId,
+                    $originalLog->branch_id ? (int) $originalLog->branch_id : null,
+                    (int) $originalLog->customer_id,
+                    $roundedNewAmount,
+                    $newMethod,
+                    $originalLog->transaction_id ? (int) $originalLog->transaction_id : null,
+                    $replacementNote,
+                    $adminUserId,
+                    $periodDate,
+                    (int) $origCashFlowCreator,
+                    $newAffectsDrawer
+                );
+            }
+
+            UserActivityLog::create([
+                'business_id' => $businessId,
+                'branch_id'   => $originalLog->branch_id,
+                'user_id'     => $adminUserId,
+                'action'      => 'correct_customer_deposit',
+                'module'      => 'customer_deposit',
+                'details'     => "Koreksi Deposit #{$originalLog->id} -> #{$newLog->id} Rp " . number_format((float) $originalLog->amount, 0, ',', '.') . ' menjadi Rp ' . number_format($roundedNewAmount, 0, ',', '.') . " | Alasan: {$cleanReason}",
+                'ip_address'  => request()?->ip(),
+            ]);
+
+            BranchCache::flush($businessId);
+
+            Log::info('[DEPOSIT_DEBUG] SERVICE_CORRECT_DEPOSIT', [
+                'original_log_id' => $originalLog->id,
+                'reversal_log_id' => $reversalLog->id,
+                'new_log_id'      => $newLog->id,
+                'customer_id'     => $originalLog->customer_id,
+                'old_amount'      => (float) $originalLog->amount,
+                'new_amount'      => $roundedNewAmount,
+                'old_method'      => $origMethod,
+                'new_method'      => $newMethod,
+                'reason'          => $cleanReason,
+                'admin_id'        => $adminUserId,
+            ]);
+
+            return [
+                'reversal_log' => $reversalLog,
+                'new_log'      => $newLog,
+            ];
         });
     }
 
@@ -113,7 +562,11 @@ class CustomerDepositService
         }
 
         return DB::transaction(function () use ($businessId, $branchId, $customerId, $requestedAmount, $transactionId, $createdBy, $notes) {
-            $customer = Customer::where('id', $customerId)->lockForUpdate()->firstOrFail();
+            $customer = Customer::withoutGlobalScopes()
+                ->where('id', $customerId)
+                ->where('business_id', $businessId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
             $balanceBefore = (float) ($customer->deposit_balance ?? 0.0);
             $actualUsed = min($balanceBefore, $requestedAmount);
@@ -126,10 +579,10 @@ class CustomerDepositService
             $balanceAfter = round($balanceBefore - $actualUsed, 2);
 
             $customer->update([
-                'deposit_balance' => $balanceAfter
+                'deposit_balance' => $balanceAfter,
             ]);
 
-            CustomerDepositLog::create([
+            $log = CustomerDepositLog::create([
                 'business_id'    => $businessId,
                 'branch_id'      => $branchId,
                 'customer_id'    => $customerId,
@@ -141,6 +594,19 @@ class CustomerDepositService
                 'balance_after'  => $balanceAfter,
                 'payment_method' => 'deposit',
                 'notes'          => $notes ?? ("Penggunaan Deposit Transaksi #" . str_pad($transactionId, 6, '0', STR_PAD_LEFT)),
+                'created_by'     => $createdBy,
+            ]);
+
+            Log::info('[DEPOSIT_DEBUG] SERVICE_USE_DEPOSIT', [
+                'log_id'         => $log->id,
+                'business_id'    => $businessId,
+                'branch_id'      => $branchId,
+                'customer_id'    => $customerId,
+                'transaction_id' => $transactionId,
+                'requested'      => $requestedAmount,
+                'actual_used'    => $actualUsed,
+                'balance_before' => $balanceBefore,
+                'balance_after'  => $balanceAfter,
                 'created_by'     => $createdBy,
             ]);
 
@@ -159,7 +625,7 @@ class CustomerDepositService
         }
 
         DB::transaction(function () use ($transaction, $depositUsed, $voidedBy) {
-            $customer = Customer::where('id', $transaction->customer_id)->lockForUpdate()->first();
+            $customer = Customer::withoutGlobalScopes()->where('id', $transaction->customer_id)->lockForUpdate()->first();
             if (!$customer) {
                 return;
             }
@@ -168,10 +634,10 @@ class CustomerDepositService
             $balanceAfter = round($balanceBefore + $depositUsed, 2);
 
             $customer->update([
-                'deposit_balance' => $balanceAfter
+                'deposit_balance' => $balanceAfter,
             ]);
 
-            CustomerDepositLog::create([
+            $log = CustomerDepositLog::create([
                 'business_id'    => $transaction->business_id,
                 'branch_id'      => $transaction->branch_id,
                 'customer_id'    => $customer->id,
@@ -184,6 +650,16 @@ class CustomerDepositService
                 'payment_method' => 'deposit',
                 'notes'          => "Pengembalian Deposit akibat Void Transaksi #" . str_pad($transaction->id, 6, '0', STR_PAD_LEFT),
                 'created_by'     => $voidedBy,
+            ]);
+
+            Log::info('[DEPOSIT_DEBUG] SERVICE_RESTORE_VOID', [
+                'log_id'         => $log->id,
+                'transaction_id' => $transaction->id,
+                'customer_id'    => $customer->id,
+                'restored'       => $depositUsed,
+                'balance_before' => $balanceBefore,
+                'balance_after'  => $balanceAfter,
+                'voided_by'      => $voidedBy,
             ]);
         });
     }

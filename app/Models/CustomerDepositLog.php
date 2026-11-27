@@ -25,6 +25,11 @@ class CustomerDepositLog extends Model
         'balance_after',
         'payment_method',
         'notes',
+        'reversed_at',
+        'reversed_by',
+        'reversal_reason',
+        'reversed_by_log_id',
+        'reverses_log_id',
         'created_by',
     ];
 
@@ -32,6 +37,7 @@ class CustomerDepositLog extends Model
         'amount'         => 'decimal:2',
         'balance_before' => 'decimal:2',
         'balance_after'  => 'decimal:2',
+        'reversed_at'    => 'datetime',
     ];
 
     public function business(): BelongsTo
@@ -46,21 +52,46 @@ class CustomerDepositLog extends Model
 
     public function customer(): BelongsTo
     {
-        return $this->belongsTo(Customer::class);
+        return $this->belongsTo(Customer::class)->withoutGlobalScopes();
     }
 
     public function transaction(): BelongsTo
     {
-        return $this->belongsTo(Transaction::class);
+        return $this->belongsTo(Transaction::class)->withoutGlobalScopes();
     }
 
     public function cashFlow(): BelongsTo
     {
-        return $this->belongsTo(CashFlow::class);
+        return $this->belongsTo(CashFlow::class)->withoutGlobalScopes();
     }
 
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function reversedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reversed_by');
+    }
+
+    public function reversedByLog(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reversed_by_log_id');
+    }
+
+    public function reversesLog(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reverses_log_id');
+    }
+
+    public function isReversed(): bool
+    {
+        return !empty($this->reversed_at) || !empty($this->reversed_by_log_id);
+    }
+
+    public function isReversibleCredit(): bool
+    {
+        return $this->type === 'credit' && !$this->isReversed();
     }
 }

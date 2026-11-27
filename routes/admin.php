@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\CustomerController; // Pastikan ini ada
+use App\Http\Controllers\Admin\CustomerDepositController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FinancialController;
@@ -50,6 +51,14 @@ Route::patch('customers/{customer}/toggle-status', [CustomerController::class, '
 
 Route::resource('customers', CustomerController::class)
     ->except(['create', 'store', 'destroy']);
+
+// Deposit Pelanggan (Input Admin / Saldo Awal, Void Contra-Entry & Koreksi 1 Langkah)
+Route::prefix('deposits')->name('deposits.')->group(function () {
+    Route::get('/', [CustomerDepositController::class, 'index'])->name('index');
+    Route::post('/', [CustomerDepositController::class, 'store'])->name('store');
+    Route::post('/{depositLog}/reverse', [CustomerDepositController::class, 'reverse'])->name('reverse');
+    Route::post('/{depositLog}/correct', [CustomerDepositController::class, 'correct'])->name('correct');
+});
 // ------------------------------
 
 Route::resource('expense-categories', \App\Http\Controllers\Admin\ExpenseCategoryController::class)->only(['store']);

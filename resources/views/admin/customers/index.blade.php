@@ -74,6 +74,7 @@
                     <th>ID</th>
                     <th>Nama</th>
                     <th>Kontak</th>
+                    <th class="text-end">Saldo Deposit</th>
                     <th>Status</th> {{-- Kolom Status --}}
                     <th>Tanggal Bergabung</th>
                     <th class="text-center">Aksi</th>
@@ -84,6 +85,16 @@
                     <td>{{ $customer->id }}</td>
                     <td>{{ $customer->name }}</td>
                     <td>{{ $customer->phone ?? $customer->email }}</td>
+                    <td class="text-end">
+                        @php $custDep = (float) ($customer->deposit_balance ?? 0); @endphp
+                        @if($custDep > 0)
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1 fw-bold">
+                                <i class="fas fa-wallet me-1"></i>Rp {{ number_format($custDep, 0, ',', '.') }}
+                            </span>
+                        @else
+                            <span class="text-muted small">Rp 0</span>
+                        @endif
+                    </td>
                     
                     {{-- [BARU] Tombol Toggle Status --}}
                     <td>
@@ -121,7 +132,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="text-center">Tidak ada data pelanggan.</td></tr>
+                <tr><td colspan="7" class="text-center">Tidak ada data pelanggan.</td></tr>
             @endforelse
         </x-table>
         @if ($customers->hasPages())
