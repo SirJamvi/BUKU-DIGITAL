@@ -384,4 +384,85 @@ class AdminCustomerDepositTest extends TestCase
         $this->assertEquals(30000.0, (float) $this->customer->deposit_balance);
         $this->assertNull($log->reversed_at);
     }
+
+    public function test_one_step_correction_allowed_when_partially_consumed_if_net_balance_non_negative(): void
+    {
+        $log = CustomerDepositService::addDeposit(
+            $this->business->id,
+            $this->branch->id,
+            $this->customer->id,
+            30000,
+            'cash',
+            null,
+            'Kasir terinput ganda menjadi Rp 30.000',
+            $this->kasir->id
+        );
+
+        $tx = Transaction::create([
+            'business_id'        => $this->business->id,
+            'branch_id'          => $this->branch->id,
+            'type'               => 'sale',
+            'customer_id'        => $this->customer->id,
+            'total_amount'       => 15000,
+            'deposit_used'       => 15000,
+            'net_payable_amount' => 0,
+            'payment_method'     => 'deposit',
+            'payment_status'     => 'paid',
+            'status'             => 'completed',
+            'transaction_date'   => now(),
+            'created_by'         => $this->kasir->id,
+        ]);
+
+        CustomerDepositService::useDeposit(
+            $this->business->id,
+            $this->branch->id,
+            $this->customer->id,
+            15000,
+            $tx->id,
+            $this->kasir->id
+        );
+
+        // Nominal koreksi yang membuat saldo akhir minus (< Rp 15.000) wajib ditolak
+        $this->actingAs($this->admin)
+            ->withSession(['active_branch_id' => $this->branch->id])
+            ->post(route('admin.deposits.correct', $log->id), [
+                'new_amount'         => 10000,
+                'new_payment_method' => 'cash',
+                'reason'             => 'Coba turun dibawah terpakai',
+            ])
+            ->assertSessionHas('error');
+
+        $this->customer->refresh();
+        $this->assertEquals(15000.0, (float) $this->customer->deposit_balance);
+
+        // Koreksi menjadi Rp 15.000 (saldo akhir = 0) harus berhasil
+        $this->actingAs($this->admin)
+            ->withSession(['active_branch_id' => $this->branch->id])
+            ->post(route('admin.deposits.correct', $log->id), [
+                'new_amount'         => 15000,
+                'new_payment_method' => 'cash',
+                'reason'             => 'Kasir double input 30rb seharusnya 15rb',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->customer->refresh();
+        $log->refresh();
+
+        $this->assertEquals(0.0, (float) $this->customer->deposit_balance);
+        $this->assertNotNull($log->reversed_at);
+
+        $logs = CustomerDepositLog::withoutGlobalScopes()
+            ->where('business_id', $this->business->id)
+            ->where('customer_id', $this->customer->id)
+            ->get();
+        foreach ($logs as $item) {
+            $this->assertGreaterThanOrEqual(0.0, (float) $item->balance_before);
+            $this->assertGreaterThanOrEqual(0.0, (float) $item->balance_after);
+        }
+
+        app(BranchContext::class)->setBranchId($this->branch->id);
+        $kasirDash = app(KasirDashboardService::class)->getDashboardData($this->kasir->id);
+        $this->assertEquals(15000.0, (float) $kasirDash['myNetCashToday']);
+    }
 }

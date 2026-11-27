@@ -338,6 +338,71 @@ class VerifyAdminDepositCommand extends Command
             return 'View admin.deposits.index, customers.show & dashboard.index ter-render valid';
         });
 
+        $this->runScenario('D09', 'Koreksi Nominal saat Deposit Terpakai Sebagian (30rb -> pakai 15rb -> koreksi jadi 15rb = saldo 0; tolak 10rb)', function (array $ctx) {
+            $log = CustomerDepositService::addDeposit(
+                $ctx['business']->id,
+                $ctx['branch']->id,
+                $ctx['customer']->id,
+                30000,
+                'cash',
+                null,
+                'Kasir double input menjadi Rp 30.000',
+                $ctx['kasir']->id
+            );
+
+            $tx = Transaction::create([
+                'business_id'        => $ctx['business']->id,
+                'branch_id'          => $ctx['branch']->id,
+                'type'               => 'sale',
+                'customer_id'        => $ctx['customer']->id,
+                'total_amount'       => 15000,
+                'deposit_used'       => 15000,
+                'net_payable_amount' => 0,
+                'payment_method'     => 'deposit',
+                'payment_status'     => 'paid',
+                'status'             => 'completed',
+                'transaction_date'   => now(),
+                'created_by'         => $ctx['kasir']->id,
+            ]);
+
+            CustomerDepositService::useDeposit(
+                $ctx['business']->id,
+                $ctx['branch']->id,
+                $ctx['customer']->id,
+                15000,
+                $tx->id,
+                $ctx['kasir']->id
+            );
+
+            $resTooLow = $this->submitCorrect($ctx, $log->id, 10000, 'cash', 'Coba turun dibawah terpakai');
+            $this->assertTrue($resTooLow['session']->has('error'), 'Koreksi 30rb -> 10rb saat terpakai 15rb harus ditolak (Anti Saldo Minus).');
+
+            $ctx['customer']->refresh();
+            $this->assertFloatEquals(15000.0, (float) $ctx['customer']->deposit_balance, 'Saldo setelah koreksi ditolak harus tetap 15.000.');
+
+            $resValid = $this->submitCorrect($ctx, $log->id, 15000, 'cash', 'Kasir double input 30rb seharusnya 15rb');
+            $this->assertTrue($resValid['session']->has('success'), 'Koreksi 30rb -> 15rb saat terpakai 15rb harus sukses.');
+
+            $ctx['customer']->refresh();
+            $log->refresh();
+            $this->assertFloatEquals(0.0, (float) $ctx['customer']->deposit_balance, 'Saldo akhir harus Rp 0.');
+            $this->assertTrue(!empty($log->reversed_at), 'Log asal harus tertanda reversed.');
+
+            $logs = CustomerDepositLog::withoutGlobalScopes()
+                ->where('business_id', $ctx['business']->id)
+                ->where('customer_id', $ctx['customer']->id)
+                ->get();
+            foreach ($logs as $item) {
+                $this->assertTrue((float) $item->balance_before >= 0.0, 'balance_before tidak boleh minus.');
+                $this->assertTrue((float) $item->balance_after >= 0.0, 'balance_after tidak boleh minus.');
+            }
+
+            $kasirDash = app(KasirDashboardService::class)->getDashboardData($ctx['kasir']->id);
+            $this->assertFloatEquals(15000.0, (float) $kasirDash['myNetCashToday'], 'Laci kasir harus menjadi Rp 15.000.');
+
+            return 'Koreksi 10rb ditolak; koreksi 15rb sukses, saldo Rp 0, laci kasir Rp 15.000';
+        });
+
         $this->newLine();
         $this->table(['Kode', 'Skenario Pengujian', 'Status', 'Detail'], $this->rows);
         $this->info(sprintf('Ringkasan: %d PASS | %d FAIL (Total %d skenario, 100%% DB rollback)', $this->passed, $this->failed, $this->passed + $this->failed));

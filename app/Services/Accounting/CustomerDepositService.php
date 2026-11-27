@@ -267,12 +267,16 @@ class CustomerDepositService
                     ? ' Transaksi pemakaian terkait: ' . implode(', ', $recentDebits) . '.'
                     : '';
 
+                $minCorrectAmount = round(max(0.0, $reverseAmount - $balanceBefore), 2);
+
                 throw new \RuntimeException(
                     "Pembatalan ditolak (Anti Saldo Minus): Saldo deposit {$customer->name} saat ini Rp "
                     . number_format($balanceBefore, 0, ',', '.')
                     . " lebih kecil dari nominal setoran yang akan dibatalkan (Rp "
                     . number_format($reverseAmount, 0, ',', '.')
-                    . "). Deposit ini sudah terpakai untuk belanja/kasbon — void transaksi pemakaiannya terlebih dahulu."
+                    . "). Jika hanya kelebihan/salah input nominal, gunakan tombol Koreksi (nominal baru minimal Rp "
+                    . number_format($minCorrectAmount, 0, ',', '.')
+                    . "). Jika memang tidak ada deposit sama sekali, void transaksi pemakaiannya terlebih dahulu."
                     . $txHint
                 );
             }
@@ -377,6 +381,14 @@ class CustomerDepositService
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            if ($originalLog->type !== 'credit') {
+                throw new \RuntimeException("Hanya mutasi setoran deposit (kredit) yang dapat dikoreksi oleh Admin.");
+            }
+
+            if ($originalLog->isReversed()) {
+                throw new \RuntimeException("Setoran deposit #{$originalLog->id} sudah pernah dibatalkan sebelumnya.");
+            }
+
             $originalCashFlow = $originalLog->cash_flow_id
                 ? CashFlow::withoutGlobalScopes()->find($originalLog->cash_flow_id)
                 : null;
@@ -393,27 +405,80 @@ class CustomerDepositService
                 ? Carbon::parse($originalCashFlow->date)
                 : ($originalLog->created_at ?? now());
 
-            $reversalLog = self::reverseDeposit(
+            AccountingPeriodGuard::ensurePeriodOpen(
                 $businessId,
-                $depositLogId,
-                "Koreksi menjadi Rp " . number_format($roundedNewAmount, 0, ',', '.') . ": {$cleanReason}",
-                $adminUserId,
-                false
+                $originalLog->branch_id ? (int) $originalLog->branch_id : null,
+                $periodDate
             );
+
+            $customer = Customer::withoutGlobalScopes()
+                ->where('id', $originalLog->customer_id)
+                ->where('business_id', $businessId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $balanceBefore = round((float) ($customer->deposit_balance ?? 0.0), 2);
+            $oldAmount = round((float) $originalLog->amount, 2);
+            $projectedBalance = round($balanceBefore - $oldAmount + $roundedNewAmount, 2);
+
+            if ($projectedBalance < -0.001) {
+                $minAllowedNewAmount = round(max(0.0, $oldAmount - $balanceBefore), 2);
+                $recentDebits = CustomerDepositLog::withoutGlobalScopes()
+                    ->where('business_id', $businessId)
+                    ->where('customer_id', $customer->id)
+                    ->where('type', 'debit')
+                    ->where('id', '>', $originalLog->id)
+                    ->whereNotNull('transaction_id')
+                    ->orderBy('id', 'desc')
+                    ->limit(5)
+                    ->pluck('transaction_id')
+                    ->map(fn ($txId) => '#' . str_pad((string) $txId, 6, '0', STR_PAD_LEFT))
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                $txHint = !empty($recentDebits)
+                    ? ' Transaksi pemakaian terkait: ' . implode(', ', $recentDebits) . '.'
+                    : '';
+
+                throw new \RuntimeException(
+                    "Koreksi ditolak (Anti Saldo Minus): Saldo deposit {$customer->name} saat ini Rp "
+                    . number_format($balanceBefore, 0, ',', '.')
+                    . ". Jika setoran Rp "
+                    . number_format($oldAmount, 0, ',', '.')
+                    . " dikoreksi menjadi Rp "
+                    . number_format($roundedNewAmount, 0, ',', '.')
+                    . ", saldo akan minus. Nominal koreksi minimal adalah Rp "
+                    . number_format($minAllowedNewAmount, 0, ',', '.')
+                    . " (atau void transaksi pemakaiannya terlebih dahulu)."
+                    . $txHint
+                );
+            }
 
             $replacementNote = "[Koreksi dari Deposit #{$originalLog->id}] {$cleanReason}";
 
-            if ($newMethod === 'opening_balance') {
-                $newLog = self::addOpeningDeposit(
-                    $businessId,
-                    $originalLog->branch_id ? (int) $originalLog->branch_id : null,
-                    (int) $originalLog->customer_id,
-                    $roundedNewAmount,
-                    $replacementNote,
-                    $adminUserId,
-                    $periodDate
-                );
-            } else {
+            $createReplacementLog = function () use (
+                $businessId,
+                $originalLog,
+                $originalCashFlow,
+                $roundedNewAmount,
+                $newMethod,
+                $replacementNote,
+                $adminUserId,
+                $periodDate
+            ): CustomerDepositLog {
+                if ($newMethod === 'opening_balance') {
+                    return self::addOpeningDeposit(
+                        $businessId,
+                        $originalLog->branch_id ? (int) $originalLog->branch_id : null,
+                        (int) $originalLog->customer_id,
+                        $roundedNewAmount,
+                        $replacementNote,
+                        $adminUserId,
+                        $periodDate
+                    );
+                }
+
                 // Pertahankan atribusi kasir & status laci agar selisih kas laci kasir tetap sinkron
                 $origCashFlowCreator = $originalCashFlow?->created_by ?: ($originalLog->created_by ?: $adminUserId);
                 $wasCashOwnerOnly = $originalCashFlow
@@ -422,7 +487,7 @@ class CustomerDepositService
 
                 $newAffectsDrawer = ($newMethod === 'cash') && !$wasCashOwnerOnly;
 
-                $newLog = self::addDeposit(
+                return self::addDeposit(
                     $businessId,
                     $originalLog->branch_id ? (int) $originalLog->branch_id : null,
                     (int) $originalLog->customer_id,
@@ -435,6 +500,30 @@ class CustomerDepositService
                     (int) $origCashFlowCreator,
                     $newAffectsDrawer
                 );
+            };
+
+            $reverseReason = "Koreksi menjadi Rp " . number_format($roundedNewAmount, 0, ',', '.') . ": {$cleanReason}";
+
+            // Jika saldo saat ini < setoran lama (karena sudah terpakai sebagian), catat setoran pengganti dulu
+            // dalam transaksi DB atomik agar urutan saldo di buku besar tidak pernah menyentuh angka minus.
+            if ($balanceBefore + 0.001 < $oldAmount) {
+                $newLog = $createReplacementLog();
+                $reversalLog = self::reverseDeposit(
+                    $businessId,
+                    $depositLogId,
+                    $reverseReason,
+                    $adminUserId,
+                    false
+                );
+            } else {
+                $reversalLog = self::reverseDeposit(
+                    $businessId,
+                    $depositLogId,
+                    $reverseReason,
+                    $adminUserId,
+                    false
+                );
+                $newLog = $createReplacementLog();
             }
 
             UserActivityLog::create([
